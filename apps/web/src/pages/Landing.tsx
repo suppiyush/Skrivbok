@@ -206,8 +206,8 @@ const FAQS = [
 
 export default function Landing() {
   return (
-    <div className="min-h-screen bg-canvas-alt">
-      <MarketingNav />
+    <div className="theme-sticky min-h-screen bg-canvas-alt">
+      <MarketingNav ctaClassName="!bg-[color:var(--color-brand-deep)] hover:!brightness-110" />
       <main>
         <Hero />
         <Features />
@@ -234,7 +234,11 @@ function GetOrganised() {
 
           <div className="mt-8 flex flex-wrap items-center justify-center gap-3">
             <Link to="/register">
-              <Button variant="primary" size="lg" className="!rounded-xl">
+              <Button
+                variant="primary"
+                size="lg"
+                className="!rounded-xl !bg-[color:var(--color-brand-deep)] hover:!brightness-110"
+              >
                 Get Started
               </Button>
             </Link>
@@ -258,7 +262,7 @@ function Hero() {
           A place where your{' '}
           <span className="relative inline-block italic">
             ideas
-            <Underline color="#3fbf7f" />
+            <Underline color="var(--color-brand)" />
           </span>{' '}
           and goals stay organised.
         </h1>
@@ -275,7 +279,12 @@ function Hero() {
           style={{ animationDelay: '180ms' }}
         >
           <Link to="/register">
-            <Button variant="accent" size="lg" iconAfter="arrow_forward">
+            <Button
+              variant="accent"
+              size="lg"
+              iconAfter="arrow_forward"
+              className="!bg-[color:var(--color-brand-deep)] !text-white hover:!brightness-110"
+            >
               Create free account
             </Button>
           </Link>
@@ -309,6 +318,7 @@ function Features() {
           lead="Everything you need to"
           accent="stay organised."
           size="text-[clamp(32px,4.6vw,46px)]"
+          underline="var(--color-ink)"
         />
         <p className="mt-3 max-w-[56ch] text-[15px] text-ink-3">
           Tools designed to help you stay organized, and productive.
@@ -485,7 +495,7 @@ function Testimonials() {
           What researchers{' '}
           <span className="relative inline-block text-brand">
             say
-            <Underline />
+            <Underline color="var(--color-ink)" />
           </span>
         </h2>
 
@@ -556,7 +566,12 @@ function Faq() {
   return (
     <Section id="faq" className="py-16">
       <Reveal>
-        <SectionHeading lead="Frequently Asked" accent="Questions" center />
+        <SectionHeading
+          lead="Frequently Asked"
+          accent="Questions"
+          center
+          underline="var(--color-ink)"
+        />
         <p className="mt-3 text-center text-[15px] text-ink-3">
           Everything you need to know about the platform.
         </p>

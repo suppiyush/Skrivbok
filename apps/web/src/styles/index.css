@@ -80,6 +80,41 @@
   --shadow-lift: 0 18px 40px -24px rgb(11 15 25 / 0.35);
 }
 
+/* ── Sticky-notes theme (landing page only) ───────────────────────────────
+   A pastel palette scoped to `.theme-sticky` rather than redefined in
+   `@theme` above, so the app shell keeps its existing colors and only the
+   marketing page picks this up. Every color utility (bg-brand, text-accent,
+   etc.) resolves through these same custom properties, so overriding them
+   here is enough — no component classes need to change.
+   Primary: coral #FF7F50. Secondary: #FFD166 (yellow), #06D6A0 (mint),
+   #118AB2 (teal-blue). Pastel tints are the primaries lightened toward
+   paper, the way a highlighter looks on a sticky note rather than on glass. */
+.theme-sticky {
+  --color-brand: #ff7f50;
+  --color-brand-ink: #e35f34;
+  --color-brand-ink-2: #d1552c;
+  --color-brand-deep: #a83f20;
+  --color-brand-tint: #ffe7db;
+  --color-brand-tint-2: #fff3ec;
+  --color-brand-avatar: #ffd9c4;
+  --color-brand-avatar-ink: #a83f20;
+
+  --color-accent: #ffd166;
+  --color-accent-ink: #8a5a00;
+  --color-accent-tint: #fff6e0;
+
+  --color-canvas-alt: #fffaf3;
+  --color-surface: #ffffff;
+  --color-surface-5: #fffcf7;
+
+  /* Not used by any existing utility, held here so components can reach the
+     rest of the palette by name instead of a hardcoded hex. */
+  --color-mint: #06d6a0;
+  --color-mint-tint: #dcf9f0;
+  --color-teal: #118ab2;
+  --color-teal-tint: #dcf0f7;
+}
+
 @layer base {
   /* ── Base ─────────────────────────────────────────────────────────────────── */
 
@@ -204,7 +239,7 @@
   background-color: var(--color-brand-tint);
   background-image: repeating-linear-gradient(
     45deg,
-    rgb(47 107 250 / 0.09) 0 10px,
+    color-mix(in srgb, var(--color-brand) 12%, transparent) 0 10px,
     transparent 10px 20px
   );
   color: var(--color-brand-deep);

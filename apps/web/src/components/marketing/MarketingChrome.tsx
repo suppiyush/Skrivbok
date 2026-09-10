@@ -89,7 +89,16 @@ export function SectionHeading({
   );
 }
 
-export function MarketingNav({ isSignedIn = false }: { isSignedIn?: boolean }) {
+export function MarketingNav({
+  isSignedIn = false,
+  ctaClassName = '',
+}: {
+  isSignedIn?: boolean;
+  /** Extra classes for the primary CTA button, so a page on its own theme
+   *  (the landing page's pastel palette) can recolor it without affecting
+   *  every other page that renders this nav. */
+  ctaClassName?: string;
+}) {
   const [scrolled, setScrolled] = useState(false);
 
   useEffect(() => {
@@ -129,7 +138,7 @@ export function MarketingNav({ isSignedIn = false }: { isSignedIn?: boolean }) {
         <div className="ml-auto flex items-center gap-2 lg:ml-0">
           {isSignedIn ? (
             <Link to="/dashboard">
-              <Button variant="primary" size="sm" className="!rounded-full !px-5">
+              <Button variant="primary" size="sm" className={`!rounded-full !px-5 ${ctaClassName}`}>
                 Open Skrivbok
               </Button>
             </Link>
@@ -142,7 +151,7 @@ export function MarketingNav({ isSignedIn = false }: { isSignedIn?: boolean }) {
                 Log In
               </Link>
               <Link to="/register">
-                <Button variant="primary" size="sm" className="!rounded-full !px-5">
+                <Button variant="primary" size="sm" className={`!rounded-full !px-5 ${ctaClassName}`}>
                   Get Started
                 </Button>
               </Link>
