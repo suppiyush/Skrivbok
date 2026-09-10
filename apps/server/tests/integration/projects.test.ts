@@ -4,7 +4,7 @@
  * The two places where authorization is more than "is it yours".
  */
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { app, disconnect, registerUser, request, resetDatabase, type TestUser } from './helpers.js';
+import { app, createUser, disconnect, request, resetDatabase, type TestUser } from './helpers.js';
 
 let owner: TestUser;
 let editor: TestUser;
@@ -14,10 +14,10 @@ let projectId: string;
 
 beforeAll(async () => {
   await resetDatabase();
-  owner = await registerUser('owner@example.com');
-  editor = await registerUser('editor@example.com');
-  viewer = await registerUser('viewer@example.com');
-  outsider = await registerUser('outsider@example.com');
+  owner = await createUser('owner@example.com');
+  editor = await createUser('editor@example.com');
+  viewer = await createUser('viewer@example.com');
+  outsider = await createUser('outsider@example.com');
 
   const response = await request(app)
     .post('/api/v1/projects')
@@ -85,7 +85,7 @@ describe('membership', () => {
     expect(members.find((m) => m.email === owner.email)?.role).toBe('OWNER');
   });
 
-  it('holds an invite for someone with no account, and links it on registration', async () => {
+  it('holds an invite for someone with no account, and links it when they sign up', async () => {
     const before = await request(app)
       .get(`/api/v1/projects/${projectId}/members`)
       .set('Cookie', owner.cookie)
@@ -96,7 +96,7 @@ describe('membership', () => {
     );
     expect(pending?.user).toBeNull();
 
-    const claimed = await registerUser('notyet@example.com');
+    const claimed = await createUser('notyet@example.com');
 
     const projects = await request(app)
       .get('/api/v1/projects')
@@ -147,7 +147,7 @@ describe('membership', () => {
 
 describe('free-tier limits', () => {
   it('stops at five owned projects and reports the quota', async () => {
-    const user = await registerUser('quota@example.com');
+    const user = await createUser('quota@example.com');
 
     for (let i = 0; i < 5; i += 1) {
       await request(app)
@@ -174,7 +174,7 @@ describe('free-tier limits', () => {
   });
 
   it('does not count projects someone else invited you to', async () => {
-    const guest = await registerUser('guest@example.com');
+    const guest = await createUser('guest@example.com');
 
     await request(app)
       .post(`/api/v1/projects/${projectId}/members`)

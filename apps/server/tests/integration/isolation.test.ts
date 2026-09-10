@@ -10,15 +10,15 @@
  * attacker holding the victim's exact record id.
  */
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { app, disconnect, registerUser, request, resetDatabase, type TestUser } from './helpers.js';
+import { app, createUser, disconnect, request, resetDatabase, type TestUser } from './helpers.js';
 
 let victim: TestUser;
 let attacker: TestUser;
 
 beforeAll(async () => {
   await resetDatabase();
-  victim = await registerUser('victim@example.com');
-  attacker = await registerUser('attacker@example.com');
+  victim = await createUser('victim@example.com');
+  attacker = await createUser('attacker@example.com');
 });
 
 afterAll(disconnect);

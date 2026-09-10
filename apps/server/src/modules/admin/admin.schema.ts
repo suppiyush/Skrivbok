@@ -16,9 +16,10 @@ export const listUsersSchema = paginationSchema.extend({
 /**
  * What an admin may change about a user.
  *
- * Notably absent: `email` and `password`. Letting an admin rewrite either would
- * be a complete account takeover with no trace, and neither is needed for
- * support. A user changes their own email and password through auth.
+ * Notably absent: `email`. It is the address the Google identity is matched
+ * against, so letting an admin rewrite it would be a complete account takeover
+ * with no trace — and it is not needed for support. There is no password field
+ * to guard: sign-in is delegated to Google entirely.
  */
 export const updateUserSchema = z
   .object({

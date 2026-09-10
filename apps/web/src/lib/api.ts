@@ -139,7 +139,7 @@ export interface User {
 }
 
 export interface MeResponse extends User {
-  hasPassword: boolean;
+  /** Linked identity providers. Always `['GOOGLE']` for accounts created here. */
   providers: string[];
 }
 
@@ -399,23 +399,18 @@ export interface Report {
 
 /* ── Auth ─────────────────────────────────────────────────────────────────── */
 
+/**
+ * Google is the only sign-in method, so there is nothing here to sign in with:
+ * the browser leaves for `/api/v1/auth/google` and comes back holding a session
+ * cookie. Everything below operates on a session that already exists.
+ */
 export const auth = {
   config: () => api.get<{ googleEnabled: boolean }>('/auth/config'),
   me: () => api.get<{ user: MeResponse }>('/auth/me'),
-  login: (email: string, password: string) =>
-    api.post<{ user: User }>('/auth/login', { email, password }),
-  register: (input: { name: string; email: string; password: string; timezone?: string }) =>
-    api.post<{ user: User }>('/auth/register', input),
   logout: () => api.post<void>('/auth/logout'),
-  logoutAll: () => api.post<{ revoked: number }>('/auth/logout-all'),
+  logoutAll: () => api.post<{ revokedSessions: number }>('/auth/logout-all'),
   updateMe: (input: { name?: string; timezone?: string }) =>
     api.patch<{ user: MeResponse }>('/auth/me', input),
-  /** Changing an existing password. Revokes every other session server-side. */
-  changePassword: (input: { currentPassword: string; newPassword: string }) =>
-    api.put<{ revoked: number }>('/auth/password', input),
-  /** Setting a first password on an account created through Google. */
-  setPassword: (input: { newPassword: string }) =>
-    api.post<{ revoked: number }>('/auth/password', input),
 };
 
 /* ── Generic CRUD resource ────────────────────────────────────────────────── */

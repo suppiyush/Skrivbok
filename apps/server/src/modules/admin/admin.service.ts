@@ -11,7 +11,8 @@
  *
  *   1. An admin cannot delete their own account here.
  *   2. The last remaining admin cannot be demoted or deleted.
- *   3. `email` and `password` are not editable by an admin at all.
+ *   3. `email` is not editable by an admin at all — it is what the Google
+ *      identity is matched against.
  *
  * Every mutation is logged with the acting admin's id.
  */
@@ -31,7 +32,7 @@ import type {
 
 const log = createLogger('admin');
 
-/** Never includes `passwordHash`, even for an admin. */
+/** An explicit allowlist, so a new column is never exposed by accident. */
 const adminUserSelect = {
   id: true,
   email: true,

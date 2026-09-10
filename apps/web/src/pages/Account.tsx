@@ -1155,7 +1155,6 @@ export function Settings() {
   const { user, refresh } = useAuth();
   const { density, setDensity } = useDensity();
   const [savingAccount, setSavingAccount] = useState(false);
-  const [savingPassword, setSavingPassword] = useState(false);
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
 
   async function onSaveAccount(event: FormEvent<HTMLFormElement>) {
@@ -1176,30 +1175,6 @@ export function Settings() {
       else toast.error(error instanceof ApiError ? error.message : 'Could not save your account.');
     } finally {
       setSavingAccount(false);
-    }
-  }
-
-  async function onChangePassword(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    setFieldErrors({});
-    setSavingPassword(true);
-    const form = event.currentTarget;
-    const data = new FormData(form);
-
-    try {
-      // A separate endpoint from PATCH /me: changing a password revokes the
-      // other sessions, which is not something a profile edit should do.
-      await auth.changePassword({
-        currentPassword: String(data.get('currentPassword') ?? ''),
-        newPassword: String(data.get('newPassword') ?? ''),
-      });
-      form.reset();
-      toast.success('Password changed — other devices have been signed out');
-    } catch (error) {
-      if (error instanceof ApiError && error.details.length > 0) setFieldErrors(error.fieldErrors);
-      else toast.error(error instanceof ApiError ? error.message : 'Could not change your password.');
-    } finally {
-      setSavingPassword(false);
     }
   }
 
@@ -1248,52 +1223,30 @@ export function Settings() {
         <Reveal delay={80}>
           <Card>
             <h2 className="text-[15px] font-bold">Security</h2>
-            {user?.hasPassword === false ? (
-              <p className="mt-3 text-[13.5px] leading-relaxed text-ink-3">
-                You sign in with {user.providers.join(', ') || 'Google'}. There is no password on
-                this account to change.
-              </p>
-            ) : (
-              <form onSubmit={onChangePassword} className="mt-4 flex flex-col gap-4" noValidate>
-                <Field
-                  label="Current password"
-                  name="currentPassword"
-                  type="password"
-                  autoComplete="current-password"
-                  required
-                  error={fieldErrors['currentPassword']}
-                />
-                <Field
-                  label="New password"
-                  name="newPassword"
-                  type="password"
-                  autoComplete="new-password"
-                  required
-                  hint="At least 8 characters. Length matters more than symbols."
-                  error={fieldErrors['newPassword']}
-                />
-                <Alert tone="info" title="Changing your password signs you out elsewhere">
-                  Your other devices are signed out immediately. This device stays signed in.
-                </Alert>
-                <div className="flex flex-wrap gap-2">
-                  <Button type="submit" variant="primary" loading={savingPassword}>
-                    Change password
-                  </Button>
-                  <Button
-                    variant="secondary"
-                    icon="logout"
-                    onClick={() =>
-                      void auth
-                        .logoutAll()
-                        .then((r) => toast.success(`${r.revoked} other sessions signed out`))
-                        .catch(() => toast.error('Could not sign out the other sessions.'))
-                    }
-                  >
-                    Sign out everywhere
-                  </Button>
-                </div>
-              </form>
-            )}
+            <p className="mt-2 text-[13.5px] leading-relaxed text-ink-3">
+              You sign in with {user?.providers.join(', ').toLowerCase() || 'Google'}. Skrivbok
+              stores no password of its own, so there is nothing here to change or leak — manage
+              this account's security from your Google account.
+            </p>
+            <div className="mt-4">
+              <Alert tone="info" title="Signing out everywhere ends every session">
+                Every device is signed out immediately, including this one. Do this if you have used
+                Skrivbok on a machine you no longer trust.
+              </Alert>
+            </div>
+            <Button
+              variant="secondary"
+              icon="logout"
+              className="mt-4"
+              onClick={() =>
+                void auth
+                  .logoutAll()
+                  .then((r) => toast.success(`${r.revokedSessions} sessions signed out`))
+                  .catch(() => toast.error('Could not sign out your sessions.'))
+              }
+            >
+              Sign out everywhere
+            </Button>
           </Card>
         </Reveal>
 
@@ -1328,14 +1281,8 @@ export function Settings() {
               <Row label="Role" value={user ? humanise(user.role) : '—'} />
               <Row label="Member since" value={user ? longDate(user.createdAt) : '—'} />
               <Row
-                label="Sign-in methods"
-                value={
-                  user
-                    ? [user.hasPassword ? 'Password' : null, ...user.providers]
-                        .filter(Boolean)
-                        .join(', ') || '—'
-                    : '—'
-                }
+                label="Sign-in method"
+                value={user ? humanise(user.providers.join(', ')) || '—' : '—'}
               />
               {user?.subscriptionEndsAt ? (
                 <Row label="Renews" value={dateTime(user.subscriptionEndsAt)} />

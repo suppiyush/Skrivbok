@@ -6,8 +6,9 @@
  *
  * Three buckets:
  *   • `generalLimiter`  — every API route, generous.
- *   • `authLimiter`     — login/register/password reset, strict, counts only
- *                         failures so a working client is never punished.
+ *   • `authLimiter`     — the entry point of the Google sign-in flow, strict,
+ *                         counts only failures so a working client is never
+ *                         punished.
  *   • `expensiveLimiter`— routes that send mail or call a third party.
  *
  * Limits are enforced per IP. Note that this is in-process memory: with more

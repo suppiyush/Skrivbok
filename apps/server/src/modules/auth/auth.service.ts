@@ -1,27 +1,23 @@
 /**
  * Auth business rules.
  *
+ * Google is the only way in. There is no password to register with, verify or
+ * change, so the only identity this file resolves is the one Google asserts.
+ *
  * No function here reads `req` or writes `res`, and none of them accepts an
  * identity from the caller: `userId` always originates from a resolved session.
  */
 import { prisma } from '../../db/prisma.js';
 import { createLogger } from '../../config/logger.js';
-import {
-  BadRequestError,
-  ConflictError,
-  ErrorCode,
-  NotFoundError,
-  UnauthorizedError,
-} from '../../utils/errors.js';
-import { fakeVerify, hashPassword, verifyPassword } from '../../utils/password.js';
+import { BadRequestError, NotFoundError } from '../../utils/errors.js';
 import { sendWelcome } from '../../emails/index.js';
 import { claimPendingInvites } from '../projects/index.js';
-import { revokeAllSessions, type SessionUser } from './session.service.js';
-import type { ChangePasswordInput, RegisterInput, UpdateMeInput } from './auth.schema.js';
+import type { SessionUser } from './session.service.js';
+import type { UpdateMeInput } from './auth.schema.js';
 
 const log = createLogger('auth');
 
-/** Columns safe to return to a client. Deliberately excludes `passwordHash`. */
+/** An explicit allowlist of columns safe to return to a client. */
 const publicUserSelect = {
   id: true,
   email: true,
@@ -46,74 +42,8 @@ export type PublicUser = {
 
 /** Additional flags the frontend needs but which are not stored columns. */
 export interface MeResponse extends PublicUser {
-  /** False for accounts created through Google that never set one. */
-  hasPassword: boolean;
-  /** Linked identity providers, so the UI can offer "set a password". */
+  /** Linked identity providers, so the UI can name how this account signs in. */
   providers: string[];
-}
-
-// ── Registration ──────────────────────────────────────────────────────────────
-
-export async function register(input: RegisterInput): Promise<PublicUser> {
-  const existing = await prisma.user.findUnique({
-    where: { email: input.email },
-    select: { id: true, passwordHash: true },
-  });
-
-  if (existing) {
-    // Deliberate trade-off: this confirms an email is registered. The
-    // alternative — a generic "check your inbox" — needs email verification to
-    // be honest, and would break the immediate-login flow the app relies on.
-    throw new ConflictError('An account with that email already exists', ErrorCode.EMAIL_TAKEN);
-  }
-
-  const user = await prisma.user.create({
-    data: {
-      email: input.email,
-      name: input.name,
-      passwordHash: await hashPassword(input.password),
-      timezone: input.timezone ?? 'UTC',
-      // Every user gets notification preferences up front, so the reminder
-      // worker never has to cope with a missing row.
-      emailPreference: { create: {} },
-    },
-    select: publicUserSelect,
-  });
-
-  // Someone may have been invited to a project before they had an account.
-  await claimPendingInvites(user.id, user.email);
-
-  sendWelcome(user.email, user.name ?? user.email);
-
-  log.info({ userId: user.id }, 'User registered');
-  return user;
-}
-
-// ── Login ─────────────────────────────────────────────────────────────────────
-
-export async function login(email: string, password: string): Promise<PublicUser> {
-  const user = await prisma.user.findUnique({
-    where: { email },
-    select: { ...publicUserSelect, passwordHash: true },
-  });
-
-  // Both failure branches below burn the same CPU time as a real comparison and
-  // return the same message, so neither timing nor wording reveals whether an
-  // account exists.
-  if (!user?.passwordHash) {
-    await fakeVerify();
-    throw new UnauthorizedError('Incorrect email or password', ErrorCode.INVALID_CREDENTIALS);
-  }
-
-  if (!(await verifyPassword(password, user.passwordHash))) {
-    throw new UnauthorizedError('Incorrect email or password', ErrorCode.INVALID_CREDENTIALS);
-  }
-
-  await prisma.user.update({ where: { id: user.id }, data: { lastLoginAt: new Date() } });
-
-  const { passwordHash: _passwordHash, ...publicUser } = user;
-  log.info({ userId: user.id }, 'User signed in');
-  return publicUser;
 }
 
 // ── Google OAuth ──────────────────────────────────────────────────────────────
@@ -134,8 +64,10 @@ export interface GoogleIdentity {
  *   2. No link, but the email matches an account → link the provider to it.
  *      Only done when Google reports the address as verified; otherwise anyone
  *      able to create a Google account with an unverified address could take
- *      over the matching Skrivbok account.
- *   3. Neither → create a new user with no password.
+ *      over the matching Skrivbok account. This is also how an account created
+ *      before Google became the only sign-in method is adopted.
+ *   3. Neither → create the account. This is the sign-up path: there is no
+ *      separate registration endpoint.
  */
 export async function findOrCreateGoogleUser(identity: GoogleIdentity): Promise<PublicUser> {
   const linked = await prisma.oAuthAccount.findUnique({
@@ -198,10 +130,10 @@ export async function findOrCreateGoogleUser(identity: GoogleIdentity): Promise<
     data: {
       email: identity.email,
       name: identity.name,
-      // No password: the account is OAuth-only until the user sets one.
-      passwordHash: null,
       emailVerifiedAt: identity.emailVerified ? new Date() : null,
       lastLoginAt: new Date(),
+      // Every user gets notification preferences up front, so the reminder
+      // worker never has to cope with a missing row.
       emailPreference: { create: {} },
       accounts: {
         create: { provider: 'GOOGLE', providerAccountId: identity.providerAccountId },
@@ -210,7 +142,12 @@ export async function findOrCreateGoogleUser(identity: GoogleIdentity): Promise<
     select: publicUserSelect,
   });
 
+  // Someone may have been invited to a project before they had an account.
   await claimPendingInvites(created.id, created.email);
+
+  // This is now the only moment an account comes into existence, so the welcome
+  // email is sent from here rather than from a registration handler.
+  sendWelcome(created.email, created.name ?? created.email);
 
   log.info({ userId: created.id }, 'User registered via Google');
   return created;
@@ -223,19 +160,14 @@ export async function getMe(userId: string): Promise<MeResponse> {
     where: { id: userId },
     select: {
       ...publicUserSelect,
-      passwordHash: true,
       accounts: { select: { provider: true } },
     },
   });
 
   if (!user) throw new NotFoundError('User');
 
-  const { passwordHash, accounts, ...rest } = user;
-  return {
-    ...rest,
-    hasPassword: passwordHash !== null,
-    providers: accounts.map((a) => a.provider),
-  };
+  const { accounts, ...rest } = user;
+  return { ...rest, providers: accounts.map((a) => a.provider) };
 }
 
 export async function updateMe(userId: string, input: UpdateMeInput): Promise<PublicUser> {
@@ -247,78 +179,6 @@ export async function updateMe(userId: string, input: UpdateMeInput): Promise<Pu
     },
     select: publicUserSelect,
   });
-}
-
-/**
- * Change a password, then revoke every other session.
- *
- * The revocation is the point: if someone changes their password because they
- * suspect their account is compromised, any cookie the attacker holds must stop
- * working immediately. The caller's own session is kept so they are not signed
- * out of the device they are using.
- */
-export async function changePassword(
-  userId: string,
-  input: ChangePasswordInput,
-  currentSessionId: string,
-): Promise<{ revokedSessions: number }> {
-  const user = await prisma.user.findUnique({
-    where: { id: userId },
-    select: { passwordHash: true },
-  });
-
-  if (!user) throw new NotFoundError('User');
-
-  if (!user.passwordHash) {
-    throw new BadRequestError(
-      'This account signs in with Google and has no password yet. Set one instead.',
-    );
-  }
-
-  if (!(await verifyPassword(input.currentPassword, user.passwordHash))) {
-    throw new UnauthorizedError(
-      'Your current password is incorrect',
-      ErrorCode.INVALID_CREDENTIALS,
-    );
-  }
-
-  await prisma.user.update({
-    where: { id: userId },
-    data: { passwordHash: await hashPassword(input.newPassword) },
-  });
-
-  const revokedSessions = await revokeAllSessions(userId, currentSessionId);
-  log.info({ userId, revokedSessions }, 'Password changed');
-  return { revokedSessions };
-}
-
-/** Set a first password on an OAuth-only account. */
-export async function setPassword(
-  userId: string,
-  newPassword: string,
-  currentSessionId: string,
-): Promise<{ revokedSessions: number }> {
-  const user = await prisma.user.findUnique({
-    where: { id: userId },
-    select: { passwordHash: true },
-  });
-
-  if (!user) throw new NotFoundError('User');
-
-  if (user.passwordHash) {
-    throw new ConflictError(
-      'This account already has a password. Use the change-password endpoint instead.',
-    );
-  }
-
-  await prisma.user.update({
-    where: { id: userId },
-    data: { passwordHash: await hashPassword(newPassword) },
-  });
-
-  const revokedSessions = await revokeAllSessions(userId, currentSessionId);
-  log.info({ userId }, 'Password set on OAuth account');
-  return { revokedSessions };
 }
 
 /** Map a full user record down to what a session carries. */

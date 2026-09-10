@@ -8,7 +8,7 @@
  * Two properties matter:
  *   • `statusCode` — the HTTP status to send.
  *   • `code` — a stable, machine-readable string the frontend can branch on
- *     (`FREE_LIMIT_REACHED`, `EMAIL_TAKEN`), so UI behaviour never depends on
+ *     (`FREE_LIMIT_REACHED`, `SESSION_EXPIRED`), so UI behaviour never depends on
  *     matching a human-readable message.
  *
  * `isOperational` separates *expected* failures (bad input, missing record)
@@ -24,7 +24,6 @@ export const ErrorCode = {
   VALIDATION_FAILED: 'VALIDATION_FAILED',
   // 401
   UNAUTHENTICATED: 'UNAUTHENTICATED',
-  INVALID_CREDENTIALS: 'INVALID_CREDENTIALS',
   SESSION_EXPIRED: 'SESSION_EXPIRED',
   // 403
   FORBIDDEN: 'FORBIDDEN',
@@ -34,7 +33,6 @@ export const ErrorCode = {
   NOT_FOUND: 'NOT_FOUND',
   // 409
   CONFLICT: 'CONFLICT',
-  EMAIL_TAKEN: 'EMAIL_TAKEN',
   ALREADY_EXISTS: 'ALREADY_EXISTS',
   // 413 / 415
   PAYLOAD_TOO_LARGE: 'PAYLOAD_TOO_LARGE',

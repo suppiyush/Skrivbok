@@ -1,6 +1,10 @@
 /**
  * Auth controllers: HTTP in, HTTP out.
  *
+ * Google is the only sign-in method, so `googleCallback` is the one handler
+ * here that issues a session. Everything else operates on a session that
+ * already exists.
+ *
  * No SQL and no authorization decisions here — those belong to the service.
  * Input arrives already validated by `validate()`, so nothing is re-checked.
  */
@@ -8,15 +12,8 @@ import type { Request, RequestHandler, Response } from 'express';
 import { env } from '../../config/env.js';
 import { createLogger } from '../../config/logger.js';
 import { currentUser } from '../../middleware/auth.js';
-import { BadRequestError, UnauthorizedError } from '../../utils/errors.js';
-import type {
-  ChangePasswordInput,
-  GoogleCallbackQuery,
-  LoginInput,
-  RegisterInput,
-  SetPasswordInput,
-  UpdateMeInput,
-} from './auth.schema.js';
+import { BadRequestError } from '../../utils/errors.js';
+import type { GoogleCallbackQuery, UpdateMeInput } from './auth.schema.js';
 import * as authService from './auth.service.js';
 import * as google from './google.service.js';
 import {
@@ -37,26 +34,13 @@ function sessionContext(req: Request): {
   return { ipAddress: req.ip, userAgent: req.get('user-agent') };
 }
 
-/** Issue a session and attach the cookie. Used by register, login and OAuth. */
+/** Issue a session and attach the cookie. The Google callback is the only caller. */
 async function startSession(req: Request, res: Response, userId: string): Promise<void> {
   const token = await createSession(userId, sessionContext(req));
   setSessionCookie(res, token);
 }
 
-// ── Password auth ─────────────────────────────────────────────────────────────
-
-export const register: RequestHandler = async (req, res) => {
-  const user = await authService.register(req.body as RegisterInput);
-  await startSession(req, res, user.id);
-  res.status(201).json({ user });
-};
-
-export const login: RequestHandler = async (req, res) => {
-  const { email, password } = req.body as LoginInput;
-  const user = await authService.login(email, password);
-  await startSession(req, res, user.id);
-  res.json({ user });
-};
+// ── Sessions ──────────────────────────────────────────────────────────────────
 
 export const logout: RequestHandler = async (req, res) => {
   if (req.sessionId) {
@@ -84,27 +68,6 @@ export const me: RequestHandler = async (req, res) => {
 export const updateMe: RequestHandler = async (req, res) => {
   const user = currentUser(req);
   res.json({ user: await authService.updateMe(user.id, req.body as UpdateMeInput) });
-};
-
-export const changePassword: RequestHandler = async (req, res) => {
-  const user = currentUser(req);
-  if (!req.sessionId) throw new UnauthorizedError('You must be signed in to do that');
-
-  const result = await authService.changePassword(
-    user.id,
-    req.body as ChangePasswordInput,
-    req.sessionId,
-  );
-  res.json(result);
-};
-
-export const setPassword: RequestHandler = async (req, res) => {
-  const user = currentUser(req);
-  if (!req.sessionId) throw new UnauthorizedError('You must be signed in to do that');
-
-  const { newPassword } = req.body as SetPasswordInput;
-  const result = await authService.setPassword(user.id, newPassword, req.sessionId);
-  res.json(result);
 };
 
 // ── Google OAuth ──────────────────────────────────────────────────────────────
@@ -177,7 +140,12 @@ export const googleCallback: RequestHandler = async (req, res) => {
   }
 };
 
-/** Lets the login page hide the Google button when the server has no keys. */
+/**
+ * Lets the login page say something useful when the server has no Google keys.
+ * Since Google is the only sign-in method, `googleEnabled: false` means nobody
+ * can sign in at all — the page states that outright rather than showing a
+ * button that cannot work.
+ */
 export const authConfig: RequestHandler = (_req, res) => {
   res.json({ googleEnabled: google.isGoogleEnabled() });
 };

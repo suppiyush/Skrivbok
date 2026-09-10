@@ -1,31 +1,25 @@
 /**
  * Auth routes: path -> guards -> validation -> controller. No logic here.
  *
- * `authLimiter` sits on every credential-accepting endpoint. It counts only
- * failures, so a legitimate user is never locked out by signing in normally,
- * while brute-forcing stops after ten wrong guesses per window.
+ * Google is the only sign-in method. There is no `/register`, `/login` or
+ * `/password` endpoint: an account is created the first time someone completes
+ * the Google flow, and `/google/callback` is the only route that issues a
+ * session.
+ *
+ * `authLimiter` sits on the flow's entry point. It counts only failures, so a
+ * legitimate user is never locked out by signing in normally.
  */
 import { Router } from 'express';
 import { optionalAuth, requireAuth } from '../../middleware/auth.js';
 import { authLimiter } from '../../middleware/rateLimit.js';
 import { validate } from '../../middleware/validate.js';
 import * as controller from './auth.controller.js';
-import {
-  changePasswordSchema,
-  googleCallbackSchema,
-  loginSchema,
-  registerSchema,
-  setPasswordSchema,
-  updateMeSchema,
-} from './auth.schema.js';
+import { googleCallbackSchema, updateMeSchema } from './auth.schema.js';
 
 export const authRouter: Router = Router();
 
 // ── Public ────────────────────────────────────────────────────────────────────
 authRouter.get('/config', controller.authConfig);
-
-authRouter.post('/register', authLimiter, validate({ body: registerSchema }), controller.register);
-authRouter.post('/login', authLimiter, validate({ body: loginSchema }), controller.login);
 
 // ── Google OAuth ──────────────────────────────────────────────────────────────
 authRouter.get('/google', authLimiter, controller.requireGoogleEnabled, controller.googleStart);
@@ -47,18 +41,3 @@ authRouter.get('/me', requireAuth, controller.me);
 authRouter.patch('/me', requireAuth, validate({ body: updateMeSchema }), controller.updateMe);
 
 authRouter.post('/logout-all', requireAuth, controller.logoutAll);
-
-authRouter.put(
-  '/password',
-  requireAuth,
-  authLimiter,
-  validate({ body: changePasswordSchema }),
-  controller.changePassword,
-);
-authRouter.post(
-  '/password',
-  requireAuth,
-  authLimiter,
-  validate({ body: setPasswordSchema }),
-  controller.setPassword,
-);

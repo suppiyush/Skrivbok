@@ -144,15 +144,15 @@ Agree these first, or every screen gets redesigned twice.
 
 ## 3. Public / auth screens
 
-| #   | Screen                 | Requirements                                                                                                      |
-| --- | ---------------------- | ----------------------------------------------------------------------------------------------------------------- |
-| 1   | **Landing page**       | Marketing. Feature grid, platform stats, sign-up CTA                                                              |
-| 2   | **Login**              | Email + password, **"Continue with Google" (hide when not configured)**, error states, rate-limit lockout message |
-| 3   | **Register**           | Name, email, password (min 8 chars, no composition rules), timezone picker                                        |
-| 4   | **Set password**       | For Google-only accounts adding a password                                                                        |
-| 5   | **Change password**    | Warns: _"this signs you out on other devices"_                                                                    |
-| 6   | **Legal pages** ×5     | Terms, EULA, Refund Policy, Privacy Policy, Contact                                                               |
-| 7   | **Public resume page** | Server-rendered HTML today — design team should restyle. Print stylesheet required.                               |
+| #   | Screen                 | Requirements                                                                                                                                                                                                        |
+| --- | ---------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| 1   | **Landing page**       | Marketing. Feature grid, platform stats, sign-up CTA                                                                                                                                                                |
+| 2   | **Sign in / Sign up**  | **One "Continue with Google" button — no email or password fields.** `/login` and `/register` are the same screen, differing only in heading. States: loading, Google unconfigured, server unreachable, OAuth error |
+| 3   | **Legal pages** ×5     | Terms, EULA, Refund Policy, Privacy Policy, Contact                                                                                                                                                                 |
+| 4   | **Public resume page** | Server-rendered HTML today — design team should restyle. Print stylesheet required.                                                                                                                                 |
+
+There is no register, set-password or change-password screen: Google is the only
+sign-in method, and Skrivbok stores no password of its own.
 
 ---
 

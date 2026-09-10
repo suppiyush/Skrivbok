@@ -191,8 +191,11 @@ model User {
   email String  @unique
   name  String?
 
-  /// Null for accounts created purely through OAuth. Such a user must set a
-  /// password before they can use password login.
+  /// DEPRECATED — no longer read or written by anything. Password sign-in was
+  /// removed in favour of Google OAuth, so this is always null for accounts
+  /// created since. It is retained only so hashes belonging to accounts created
+  /// before the change are not destroyed by a migration; drop the column once
+  /// those accounts have signed in with Google and been linked.
   passwordHash String?
 
   role Role @default(USER)

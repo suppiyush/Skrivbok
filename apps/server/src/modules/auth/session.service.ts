@@ -7,7 +7,7 @@
  *   • The database stores only the SHA-256 hash of that token, so a database
  *     dump yields nothing an attacker can present as a cookie.
  *   • Because the server owns the record, a session can be revoked instantly —
- *     on logout, password change, or by an admin. A JWT cannot be.
+ *     on logout, on "sign out everywhere", or by an admin. A JWT cannot be.
  *
  * Expiry slides: a session in active use is extended, an idle one lapses.
  */
@@ -117,9 +117,11 @@ export async function revokeSession(sessionId: string): Promise<void> {
 }
 
 /**
- * Revoke every session for a user — "sign out everywhere". Also called after a
- * password change, so a stolen cookie stops working the moment the owner
- * notices and changes their password.
+ * Revoke every session for a user — "sign out everywhere".
+ *
+ * This is the only lever a user has if they suspect a cookie has been stolen:
+ * sign-in is delegated to Google, so there is no password here to change. Every
+ * session dies at once, including the caller's own.
  */
 export async function revokeAllSessions(userId: string, exceptSessionId?: string): Promise<number> {
   const result = await prisma.session.deleteMany({

@@ -6,21 +6,20 @@
  * Idempotent: every write is an upsert, so running it repeatedly is safe.
  *
  * Two things are seeded:
- *   1. The admin account, from ADMIN_EMAIL / ADMIN_PASSWORD. Unlike the legacy
- *      server there is no hardcoded fallback credential — if those variables
- *      are unset, no admin is created and the script says so.
+ *   1. The admin account, from ADMIN_EMAIL. No password is set, because sign-in
+ *      is Google-only: seeding the row grants the ADMIN role to whoever later
+ *      signs in with that Google address, so it must be an address you control.
+ *      If ADMIN_EMAIL is unset, no admin is created and the script says so.
  *   2. In development only, a demo user with sample records across every
  *      feature, so the API can be exercised without clicking through a UI.
+ *      These accounts hold data; they are not sign-in credentials.
  */
-import bcrypt from 'bcryptjs';
 import { PrismaClient } from '@prisma/client';
 import { env } from '../config/env.js';
 import { logger } from '../config/logger.js';
 
 const prisma = new PrismaClient({ datasourceUrl: env.db.url });
 const log = logger.child({ module: 'seed' });
-
-const BCRYPT_ROUNDS = 12;
 
 /** Midnight-anchored date `days` from now, for readable sample data. */
 function daysFromNow(days: number, hour = 9): Date {
@@ -33,31 +32,31 @@ function daysFromNow(days: number, hour = 9): Date {
 async function seedAdmin(): Promise<void> {
   if (!env.adminSeed) {
     log.warn(
-      'ADMIN_EMAIL / ADMIN_PASSWORD not set — no admin account created. ' +
-        'Set both in .env and re-run to bootstrap one.',
+      'ADMIN_EMAIL not set — no admin account created. ' +
+        'Set it in .env and re-run to bootstrap one.',
     );
     return;
   }
 
   const email = env.adminSeed.email.toLowerCase().trim();
-  const passwordHash = await bcrypt.hash(env.adminSeed.password, BCRYPT_ROUNDS);
 
   const admin = await prisma.user.upsert({
     where: { email },
-    // Re-running must not silently reset a rotated admin password, so `update`
-    // only ensures the role. Change the password through the app, not the seed.
     update: { role: 'ADMIN' },
     create: {
       email,
       name: 'Administrator',
-      passwordHash,
       role: 'ADMIN',
-      emailVerifiedAt: new Date(),
+      // Left unverified: the Google flow marks it verified when this address
+      // signs in for the first time and claims the row.
       emailPreference: { create: {} },
     },
   });
 
-  log.info({ email: admin.email }, 'Admin account ready');
+  log.info(
+    { email: admin.email },
+    'Admin account ready — sign in with this Google address to claim it',
+  );
 }
 
 async function seedDemoData(): Promise<void> {
@@ -67,7 +66,6 @@ async function seedDemoData(): Promise<void> {
   }
 
   const email = 'demo@skrivbok.local';
-  const passwordHash = await bcrypt.hash('demo1234', BCRYPT_ROUNDS);
 
   const user = await prisma.user.upsert({
     where: { email },
@@ -75,7 +73,6 @@ async function seedDemoData(): Promise<void> {
     create: {
       email,
       name: 'Demo Researcher',
-      passwordHash,
       timezone: 'Europe/Stockholm',
       emailVerifiedAt: new Date(),
       emailPreference: { create: {} },
@@ -101,7 +98,6 @@ async function seedDemoData(): Promise<void> {
     create: {
       email: 'colleague@skrivbok.local',
       name: 'Sam Colleague',
-      passwordHash,
       timezone: 'Europe/Stockholm',
       emailVerifiedAt: new Date(),
       emailPreference: { create: {} },
@@ -263,7 +259,7 @@ async function seedDemoData(): Promise<void> {
 
   log.info(
     { demo: user.email, colleague: colleague.email },
-    'Demo data ready — both demo accounts use the password: demo1234',
+    'Demo data ready — these are data fixtures, not sign-in accounts (sign-in is Google-only)',
   );
 }
 

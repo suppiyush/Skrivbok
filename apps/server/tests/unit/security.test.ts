@@ -1,10 +1,12 @@
 /**
- * Password hashing, HTML escaping and error shapes.
+ * HTML escaping and error shapes.
  *
  * Small, boring functions whose failure modes are all security incidents.
+ *
+ * There is no password-hashing suite here any more: Google is the only sign-in
+ * method, so the application stores no credential of its own.
  */
 import { describe, expect, it } from 'vitest';
-import { fakeVerify, hashPassword, verifyPassword } from '../../src/utils/password.js';
 import { escapeHtml } from '../../src/utils/html.js';
 import {
   AppError,
@@ -13,44 +15,6 @@ import {
   NotFoundError,
   isAppError,
 } from '../../src/utils/errors.js';
-
-describe('password hashing', () => {
-  it('produces a bcrypt hash, never the plaintext', async () => {
-    const hash = await hashPassword('correct-horse-battery');
-
-    expect(hash).not.toContain('correct-horse-battery');
-    expect(hash).toMatch(/^\$2[aby]\$/);
-  });
-
-  it('uses cost 12', async () => {
-    const hash = await hashPassword('correct-horse-battery');
-    expect(hash.split('$')[2]).toBe('12');
-  });
-
-  it('salts, so the same password hashes differently each time', async () => {
-    const [a, b] = await Promise.all([
-      hashPassword('same-password'),
-      hashPassword('same-password'),
-    ]);
-    expect(a).not.toBe(b);
-  });
-
-  it('verifies a correct password and rejects a wrong one', async () => {
-    const hash = await hashPassword('correct-horse-battery');
-
-    await expect(verifyPassword('correct-horse-battery', hash)).resolves.toBe(true);
-    await expect(verifyPassword('wrong-password', hash)).resolves.toBe(false);
-  });
-
-  it('fakeVerify always fails, and takes real work to do it', async () => {
-    const started = Date.now();
-    await expect(fakeVerify()).resolves.toBe(false);
-
-    // The point of fakeVerify is to burn comparable CPU time so a nonexistent
-    // account cannot be identified by how quickly login fails.
-    expect(Date.now() - started).toBeGreaterThan(20);
-  });
-});
 
 describe('escapeHtml', () => {
   it('neutralises a script tag', () => {

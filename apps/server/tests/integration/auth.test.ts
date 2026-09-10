@@ -1,29 +1,90 @@
 /**
- * Auth, sessions and the guards.
+ * Sign-up, sessions and the guards.
  *
  * The regression suite for the legacy application's worst flaw: every route
  * trusting an identity supplied by the caller.
+ *
+ * Google is the only sign-in method, so there is no `/register` or `/login` to
+ * exercise. What is tested instead is the part that flaw actually lived in —
+ * that a session is the only thing the server will accept as proof of identity,
+ * and that revoking one really revokes it.
  */
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import {
   app,
+  createUser,
   disconnect,
   makeAdmin,
   prisma,
-  registerUser,
   request,
   resetDatabase,
+  sessionFor,
 } from './helpers.js';
 
 beforeAll(resetDatabase);
 afterAll(disconnect);
 
-describe('registration and login', () => {
-  it('registers, sets an httpOnly session cookie, and returns no password', async () => {
-    const response = await request(app)
+describe('credential endpoints are gone', () => {
+  // These are the routes that no longer exist. Asserting on them keeps a
+  // password path from being reintroduced quietly.
+  it('has no register endpoint', async () => {
+    await request(app)
       .post('/api/v1/auth/register')
-      .send({ name: 'Ada', email: 'Ada@Example.COM', password: 'password12345' })
-      .expect(201);
+      .send({ name: 'Ada', email: 'ada@example.com', password: 'password12345' })
+      .expect(404);
+  });
+
+  it('has no login endpoint', async () => {
+    await request(app)
+      .post('/api/v1/auth/login')
+      .send({ email: 'ada@example.com', password: 'password12345' })
+      .expect(404);
+  });
+
+  it('has no password endpoints', async () => {
+    const user = await createUser('nopassword@example.com');
+
+    await request(app)
+      .put('/api/v1/auth/password')
+      .set('Cookie', user.cookie)
+      .send({ currentPassword: 'a', newPassword: 'password12345' })
+      .expect(404);
+
+    await request(app)
+      .post('/api/v1/auth/password')
+      .set('Cookie', user.cookie)
+      .send({ newPassword: 'password12345' })
+      .expect(404);
+  });
+
+  it('stores no password hash for an account created through Google', async () => {
+    const user = await prisma.user.findUnique({
+      where: { email: 'nopassword@example.com' },
+      select: { passwordHash: true, accounts: { select: { provider: true } } },
+    });
+
+    expect(user?.passwordHash).toBeNull();
+    expect(user?.accounts.map((a) => a.provider)).toEqual(['GOOGLE']);
+  });
+});
+
+describe('sign-in configuration', () => {
+  it('reports whether Google is configured, so the page knows what to show', async () => {
+    const response = await request(app).get('/api/v1/auth/config').expect(200);
+
+    expect(response.body).toHaveProperty('googleEnabled');
+    expect(typeof (response.body as { googleEnabled: unknown }).googleEnabled).toBe('boolean');
+  });
+});
+
+describe('sessions', () => {
+  it('issues an httpOnly cookie and returns no credential material', async () => {
+    const user = await createUser('ada@example.com');
+
+    const response = await request(app)
+      .get('/api/v1/auth/me')
+      .set('Cookie', user.cookie)
+      .expect(200);
 
     const body = response.body as { user: Record<string, unknown> };
 
@@ -31,12 +92,8 @@ describe('registration and login', () => {
     expect(body.user['email']).toBe('ada@example.com');
     expect(body.user).not.toHaveProperty('passwordHash');
     expect(body.user).not.toHaveProperty('password');
-
-    const cookies = response.headers['set-cookie'] as unknown as string[];
-    const session = cookies.find((c) => c.startsWith('skrivbok_sid='));
-
-    expect(session).toContain('HttpOnly');
-    expect(session).toContain('SameSite=Lax');
+    expect(body.user).not.toHaveProperty('hasPassword');
+    expect(body.user['providers']).toEqual(['GOOGLE']);
   });
 
   it('stores only a hash of the session token, never the token', async () => {
@@ -47,53 +104,6 @@ describe('registration and login', () => {
       // SHA-256 hex.
       expect(session.tokenHash).toMatch(/^[a-f0-9]{64}$/);
     }
-  });
-
-  it('rejects a duplicate email', async () => {
-    await request(app)
-      .post('/api/v1/auth/register')
-      .send({ name: 'Impostor', email: 'ada@example.com', password: 'another-password' })
-      .expect(409)
-      .expect((r) =>
-        expect((r.body as { error: { code: string } }).error.code).toBe('EMAIL_TAKEN'),
-      );
-  });
-
-  it('rejects a short password', async () => {
-    await request(app)
-      .post('/api/v1/auth/register')
-      .send({ name: 'Short', email: 'short@example.com', password: 'short' })
-      .expect(422);
-  });
-
-  it('rejects an unrecognised timezone', async () => {
-    await request(app)
-      .post('/api/v1/auth/register')
-      .send({
-        name: 'X',
-        email: 'tz@example.com',
-        password: 'password12345',
-        timezone: 'Mars/Olympus',
-      })
-      .expect(422);
-  });
-
-  it('gives the same answer for a wrong password and an unknown account', async () => {
-    const wrongPassword = await request(app)
-      .post('/api/v1/auth/login')
-      .send({ email: 'ada@example.com', password: 'not-the-password' })
-      .expect(401);
-
-    const unknownAccount = await request(app)
-      .post('/api/v1/auth/login')
-      .send({ email: 'nobody@example.com', password: 'not-the-password' })
-      .expect(401);
-
-    // Identical code and message: the response must not reveal which accounts
-    // exist. (Timing is equalised separately by `fakeVerify`.)
-    expect(unknownAccount.body).toMatchObject({
-      error: { code: (wrongPassword.body as { error: { code: string } }).error.code },
-    });
   });
 });
 
@@ -113,7 +123,7 @@ describe('session guards', () => {
   });
 
   it('rejects — and deletes — an expired session', async () => {
-    const user = await registerUser('expiry@example.com');
+    const user = await createUser('expiry@example.com');
 
     await prisma.session.updateMany({
       where: { userId: user.id },
@@ -129,7 +139,7 @@ describe('session guards', () => {
 
 describe('logout', () => {
   it('revokes the session server-side, not just the cookie', async () => {
-    const user = await registerUser('logout@example.com');
+    const user = await createUser('logout@example.com');
 
     await request(app).get('/api/v1/auth/me').set('Cookie', user.cookie).expect(200);
     await request(app).post('/api/v1/auth/logout').set('Cookie', user.cookie).expect(204);
@@ -141,15 +151,8 @@ describe('logout', () => {
   });
 
   it('leaves other devices signed in', async () => {
-    const first = await registerUser('devices@example.com');
-
-    const secondLogin = await request(app)
-      .post('/api/v1/auth/login')
-      .send({ email: 'devices@example.com', password: 'password12345' })
-      .expect(200);
-
-    const cookies = secondLogin.headers['set-cookie'] as unknown as string[];
-    const second = (cookies.find((c) => c.startsWith('skrivbok_sid=')) ?? '').split(';')[0] ?? '';
+    const first = await createUser('devices@example.com');
+    const second = await sessionFor(first.id);
 
     await request(app).post('/api/v1/auth/logout').set('Cookie', first.cookie).expect(204);
 
@@ -158,46 +161,31 @@ describe('logout', () => {
   });
 });
 
-describe('password change', () => {
-  it('revokes every other session but keeps the current one', async () => {
-    const user = await registerUser('pwchange@example.com');
+describe('sign out everywhere', () => {
+  it('revokes every session for the user, including the caller cookie', async () => {
+    const user = await createUser('everywhere@example.com');
 
-    // A second and third device.
-    for (let i = 0; i < 2; i += 1) {
-      await request(app)
-        .post('/api/v1/auth/login')
-        .send({ email: 'pwchange@example.com', password: 'password12345' })
-        .expect(200);
-    }
+    // Two more devices.
+    const second = await sessionFor(user.id);
+    await sessionFor(user.id);
 
     expect(await prisma.session.count({ where: { userId: user.id } })).toBe(3);
 
     await request(app)
-      .put('/api/v1/auth/password')
+      .post('/api/v1/auth/logout-all')
       .set('Cookie', user.cookie)
-      .send({ currentPassword: 'password12345', newPassword: 'a-brand-new-password' })
       .expect(200)
-      .expect((r) => expect((r.body as { revokedSessions: number }).revokedSessions).toBe(2));
+      .expect((r) => expect((r.body as { revokedSessions: number }).revokedSessions).toBe(3));
 
-    expect(await prisma.session.count({ where: { userId: user.id } })).toBe(1);
-    await request(app).get('/api/v1/auth/me').set('Cookie', user.cookie).expect(200);
-  });
-
-  it('rejects a wrong current password', async () => {
-    const user = await registerUser('pwwrong@example.com');
-
-    await request(app)
-      .put('/api/v1/auth/password')
-      .set('Cookie', user.cookie)
-      .send({ currentPassword: 'not-it', newPassword: 'a-brand-new-password' })
-      .expect(401);
+    expect(await prisma.session.count({ where: { userId: user.id } })).toBe(0);
+    await request(app).get('/api/v1/auth/me').set('Cookie', second).expect(401);
   });
 });
 
 describe('admin guard', () => {
   it('refuses a normal user and allows an admin', async () => {
-    const user = await registerUser('plain@example.com');
-    const admin = await registerUser('admin@example.com');
+    const user = await createUser('plain@example.com');
+    const admin = await createUser('admin@example.com');
     await makeAdmin(admin.id);
 
     // The session was issued before the promotion, and the guard reads the

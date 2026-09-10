@@ -4,6 +4,10 @@
  * These are the contract for the frontend, and will be re-exported from
  * `packages/shared` so the React forms validate against the same rules the
  * server enforces.
+ *
+ * Google is the only sign-in method, so nothing here accepts a password. The
+ * field primitives below (`emailSchema`, `nameSchema`, `timezoneSchema`) are
+ * shared by the other modules and stay regardless.
  */
 import { z } from 'zod';
 
@@ -15,17 +19,6 @@ export const emailSchema = z
   .min(3)
   .max(254)
   .refine((v) => /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(v), 'Enter a valid email address');
-
-/**
- * Minimum 8 characters and nothing else. Composition rules (a digit, a symbol,
- * a capital) push people toward `Password1!` and measurably weaken passwords;
- * length is what matters. The 72-byte ceiling is bcrypt's — input beyond it is
- * silently ignored by the algorithm, so it is rejected rather than truncated.
- */
-export const passwordSchema = z
-  .string()
-  .min(8, 'Password must be at least 8 characters')
-  .max(72, 'Password must be at most 72 characters');
 
 /** Reject anything Intl does not recognise, so reminders cannot be scheduled into a void. */
 export const timezoneSchema = z
@@ -42,28 +35,6 @@ export const timezoneSchema = z
   }, 'Not a recognised IANA timezone');
 
 export const nameSchema = z.string().trim().min(1).max(120);
-
-export const registerSchema = z.object({
-  name: nameSchema,
-  email: emailSchema,
-  password: passwordSchema,
-  timezone: timezoneSchema.optional(),
-});
-
-export const loginSchema = z.object({
-  email: emailSchema,
-  password: z.string().min(1, 'Password is required').max(72),
-});
-
-export const changePasswordSchema = z.object({
-  currentPassword: z.string().min(1).max(72),
-  newPassword: passwordSchema,
-});
-
-/** Setting a first password on an account created through Google. */
-export const setPasswordSchema = z.object({
-  newPassword: passwordSchema,
-});
 
 export const updateMeSchema = z
   .object({
@@ -84,9 +55,5 @@ export const googleCallbackSchema = z.object({
   error: z.string().max(256).optional(),
 });
 
-export type RegisterInput = z.infer<typeof registerSchema>;
-export type LoginInput = z.infer<typeof loginSchema>;
-export type ChangePasswordInput = z.infer<typeof changePasswordSchema>;
-export type SetPasswordInput = z.infer<typeof setPasswordSchema>;
 export type UpdateMeInput = z.infer<typeof updateMeSchema>;
 export type GoogleCallbackQuery = z.infer<typeof googleCallbackSchema>;

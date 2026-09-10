@@ -130,9 +130,9 @@ const schema = z.object({
   FREE_LIMIT_CAREER_GOALS: limit.default(5),
   FREE_LIMIT_LITERATURE: limit.default(5),
 
-  // Admin bootstrap (consumed by the seed script only)
+  // Admin bootstrap (consumed by the seed script only). No password: sign-in is
+  // Google-only, so this names the Google address that gets the ADMIN role.
   ADMIN_EMAIL: optionalStr,
-  ADMIN_PASSWORD: optionalStr,
 
   // Rate limiting
   RATE_LIMIT_WINDOW_MIN: positiveInt.default(15),
@@ -275,10 +275,7 @@ export const env = {
     literature: raw.FREE_LIMIT_LITERATURE,
   },
 
-  adminSeed:
-    raw.ADMIN_EMAIL && raw.ADMIN_PASSWORD
-      ? ({ email: raw.ADMIN_EMAIL, password: raw.ADMIN_PASSWORD } as const)
-      : undefined,
+  adminSeed: raw.ADMIN_EMAIL ? ({ email: raw.ADMIN_EMAIL } as const) : undefined,
 
   rateLimit: {
     windowMs: raw.RATE_LIMIT_WINDOW_MIN * 60 * 1000,

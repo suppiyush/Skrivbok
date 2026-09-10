@@ -68,6 +68,9 @@ const guarded = (node: ReactNode) => <RequireAuth>{page(node)}</RequireAuth>;
 export const router = createBrowserRouter([
   // ── Public ────────────────────────────────────────────────────────────────
   { path: '/', element: <Landing /> },
+  // Sign-in and sign-up are the same Google button, so both paths render the
+  // same page. They are kept apart only so the wording matches the link the
+  // visitor followed — and so existing links to /register keep working.
   { path: '/login', element: <AuthPage mode="login" /> },
   { path: '/register', element: <AuthPage mode="register" /> },
 

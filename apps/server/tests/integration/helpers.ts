@@ -10,6 +10,9 @@ import request from 'supertest';
 import type { App } from 'supertest/types.js';
 import { createApp } from '../../src/app.js';
 import { prisma } from '../../src/db/prisma.js';
+import { findOrCreateGoogleUser } from '../../src/modules/auth/auth.service.js';
+import { createSession } from '../../src/modules/auth/session.service.js';
+import { env } from '../../src/config/env.js';
 
 export const app = createApp() as unknown as App;
 
@@ -52,37 +55,33 @@ export interface TestUser {
 }
 
 /**
- * Pull the session cookie out of a response.
+ * Create a user and a signed-in session for them.
  *
- * Supertest types the `headers` bag loosely, so the shape is narrowed here once
- * rather than at every call site.
+ * Sign-up now happens inside the Google callback, and driving that over HTTP
+ * would mean standing up a fake Google. Instead the two halves the callback is
+ * made of are called directly — `findOrCreateGoogleUser` and `createSession` —
+ * so the account really is created by the production sign-up path (invites are
+ * claimed, the welcome mail fires) and the cookie really is a valid session
+ * token, not a fixture that merely resembles one. Only the token exchange with
+ * Google is skipped.
  */
-export function sessionCookie(response: { headers: Record<string, unknown> }): string {
-  const raw = response.headers['set-cookie'];
-  const cookies: string[] = Array.isArray(raw)
-    ? raw.filter((value): value is string => typeof value === 'string')
-    : typeof raw === 'string'
-      ? [raw]
-      : [];
+export async function createUser(email: string): Promise<TestUser> {
+  const normalised = email.toLowerCase();
 
-  const cookie = cookies.find((c) => c.startsWith('skrivbok_sid='));
+  const user = await findOrCreateGoogleUser({
+    providerAccountId: `google-sub-${normalised}`,
+    email: normalised,
+    name: normalised.split('@')[0] ?? null,
+    emailVerified: true,
+  });
 
-  if (!cookie) throw new Error('Response carried no session cookie');
-  return cookie.split(';')[0] ?? '';
+  return { id: user.id, email: user.email, cookie: await sessionFor(user.id) };
 }
 
-/** Register a user and keep their session cookie. */
-export async function registerUser(email: string, password = 'password12345'): Promise<TestUser> {
-  const response = await request(app)
-    .post('/api/v1/auth/register')
-    .send({ name: email.split('@')[0], email, password })
-    .expect(201);
-
-  return {
-    id: (response.body as { user: { id: string } }).user.id,
-    email,
-    cookie: sessionCookie(response),
-  };
+/** A second session for an existing user, as signing in on another device would. */
+export async function sessionFor(userId: string): Promise<string> {
+  const token = await createSession(userId);
+  return `${env.session.cookieName}=${token}`;
 }
 
 /** Promote a user to admin directly, since nothing in the API can do it first. */

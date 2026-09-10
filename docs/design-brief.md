@@ -440,31 +440,33 @@ For each: route, data, layout, states, actions.
 
 ---
 
-## 5.2 Login — `/login`
+## 5.2 Sign in / Sign up — `/login` and `/register`
 
-- Email, password, submit
-- **"Continue with Google"** — `GET /auth/config` returns `{ googleEnabled }`.
-  **Design the screen both with and without this button.**
-- Link to register, link to forgot-password
-- Error states: wrong credentials (401, deliberately identical for
-  wrong-password and unknown-account — do not hint at which), rate-limited (429,
-  "too many attempts, wait a few minutes")
+**Google is the only sign-in method.** There is no email field, no password
+field and no form: the screen is one **"Continue with Google"** button. Signing
+in and signing up are the same action — the server creates the account the first
+time it sees an identity — so both paths render the same screen and differ only
+in their heading and supporting line.
+
+- `GET /auth/config` returns `{ googleEnabled }`. **When it is false, nobody can
+  sign in at all**, so design a state that says exactly that rather than one
+  that hides the button and leaves an empty panel.
+- Design three non-default states: config still loading, Google not configured
+  (`googleEnabled: false`), and server unreachable.
 - OAuth failure: the redirect carries `?error=google_declined |
-google_state_mismatch | google_failed`. Design one inline error region that
-  handles these.
+google_state_mismatch | google_incomplete | google_failed`. Design one inline
+  error region that handles these.
+- The Terms / EULA / Privacy agreement line sits under the button, since that
+  button is also the sign-up.
 
-## 5.3 Register — `/register`
+No timezone picker: the browser's zone is detected and can be changed later in
+Settings.
 
-- Name, email, password, **timezone picker** (defaults to browser-detected)
-- Password rule: **minimum 8 characters, no composition requirements.** Do not
-  design a "must contain a symbol" checklist — it does not exist.
-- Inline errors: email taken (409), password too short (422), invalid timezone (422)
+## 5.3 Register · 5.4 Set / change password — removed
 
-## 5.4 Set / change password
-
-Two screens. **Change password must warn**: "This signs you out on your other
-devices." The response returns `{ revokedSessions: n }` — confirm with "Signed
-out of n other devices."
+Both were password screens and no longer exist. Sign-up is the same button as
+sign-in (§5.2), and there is no password to set or change. The numbers are left
+in place so the references further down this document still resolve.
 
 ## 5.5 Legal pages ×5
 
@@ -785,7 +787,8 @@ Separate visual treatment is acceptable — denser, more utilitarian.
   counts, sessions, payments. Actions: edit name/role/plan/subscription end,
   **revoke all sessions**, delete
 - **Delete requires typing "DELETE"** — design that confirmation
-- **Admins cannot** change a user's email or password — do not design those fields
+- **Admins cannot** change a user's email — do not design that field. There is no
+  password field anywhere in the product
 - **Subscriptions**: PRO users sorted soonest-to-lapse, with days remaining
 - **Payments**: all payments, filter by status
 - **Report triage**: tabs with counts (Open / In progress / Resolved /

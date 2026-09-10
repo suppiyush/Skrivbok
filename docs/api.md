@@ -1,6 +1,6 @@
 # Skrivbok API
 
-Base URL: `/api/v1` · **133 endpoints** across 17 route groups.
+Base URL: `/api/v1` · **135 endpoints** across 16 route groups.
 
 ---
 
@@ -8,7 +8,9 @@ Base URL: `/api/v1` · **133 endpoints** across 17 route groups.
 
 ### Authentication
 
-A session cookie, set on register/login and sent automatically by the browser.
+A session cookie, set by the Google OAuth callback and sent automatically by the
+browser. **Google is the only sign-in method** — there is no password endpoint
+anywhere in the API, and the server stores no credential of its own.
 
 ```
 skrivbok_sid=<opaque token>; HttpOnly; SameSite=Lax; Secure (production); Max-Age=2592000
@@ -37,16 +39,16 @@ Every failure has the same shape:
 
 **Branch on `code`, never on `message`.** Messages change; codes do not.
 
-| Status | Typical codes                                               |
-| ------ | ----------------------------------------------------------- |
-| 400    | `BAD_REQUEST`                                               |
-| 401    | `UNAUTHENTICATED`, `SESSION_EXPIRED`, `INVALID_CREDENTIALS` |
-| 403    | `FORBIDDEN`, `ADMIN_REQUIRED`, `FREE_LIMIT_REACHED`         |
-| 404    | `NOT_FOUND`                                                 |
-| 409    | `CONFLICT`, `EMAIL_TAKEN`, `ALREADY_EXISTS`                 |
-| 422    | `VALIDATION_FAILED`                                         |
-| 429    | `RATE_LIMITED`                                              |
-| 503    | `SERVICE_UNAVAILABLE`, `FEATURE_DISABLED`                   |
+| Status | Typical codes                                       |
+| ------ | --------------------------------------------------- |
+| 400    | `BAD_REQUEST`                                       |
+| 401    | `UNAUTHENTICATED`, `SESSION_EXPIRED`                |
+| 403    | `FORBIDDEN`, `ADMIN_REQUIRED`, `FREE_LIMIT_REACHED` |
+| 404    | `NOT_FOUND`                                         |
+| 409    | `CONFLICT`, `ALREADY_EXISTS`                        |
+| 422    | `VALIDATION_FAILED`                                 |
+| 429    | `RATE_LIMITED`                                      |
+| 503    | `SERVICE_UNAVAILABLE`, `FEATURE_DISABLED`           |
 
 **404 vs 403 for other people's data:** a record you have no access to answers
 **404**, not 403 — a 403 would confirm it exists. 403 is used only when you
@@ -73,11 +75,11 @@ no-op — this prevents a client bug from silently resetting fields to defaults.
 
 `RateLimit` / `RateLimit-Policy` headers on every response.
 
-| Bucket                                         | Limit                                         |
-| ---------------------------------------------- | --------------------------------------------- |
-| General                                        | 300 / 15 min per IP                           |
-| Auth (`/auth/login`, `/register`, `/password`) | 10 **failures** / 15 min — successes are free |
-| Expensive (orders, reports)                    | 20 / hour                                     |
+| Bucket                      | Limit                                         |
+| --------------------------- | --------------------------------------------- |
+| General                     | 300 / 15 min per IP                           |
+| Auth (`/auth/google`)       | 10 **failures** / 15 min — successes are free |
+| Expensive (orders, reports) | 20 / hour                                     |
 
 ---
 
@@ -92,19 +94,20 @@ no-op — this prevents a client bug from silently resetting fields to defaults.
 
 ## Auth — `/api/v1/auth`
 
-| Method | Path               | Notes                                                          |
-| ------ | ------------------ | -------------------------------------------------------------- |
-| GET    | `/config`          | `{ googleEnabled }` — hide the Google button when unconfigured |
-| POST   | `/register`        | → 201 + session                                                |
-| POST   | `/login`           | → 200 + session                                                |
-| POST   | `/logout`          | 204. Revokes server-side, not just the cookie                  |
-| POST   | `/logout-all`      | Sign out everywhere                                            |
-| GET    | `/me`              | Current user + `hasPassword`, `providers`                      |
-| PATCH  | `/me`              | `name`, `timezone`                                             |
-| PUT    | `/password`        | Change. **Revokes all other sessions**                         |
-| POST   | `/password`        | Set a first password (Google-only accounts)                    |
-| GET    | `/google`          | → consent screen                                               |
-| GET    | `/google/callback` | → session + redirect. Passes **no identity in the URL**        |
+| Method | Path               | Notes                                                                     |
+| ------ | ------------------ | ------------------------------------------------------------------------- |
+| GET    | `/config`          | `{ googleEnabled }` — false means nobody can sign in; the page says so    |
+| GET    | `/google`          | → consent screen                                                          |
+| GET    | `/google/callback` | → session + redirect. Signs up on first use. **No identity in the URL**   |
+| POST   | `/logout`          | 204. Revokes server-side, not just the cookie                             |
+| POST   | `/logout-all`      | Sign out everywhere → `{ revokedSessions }`. Ends the caller's session too |
+| GET    | `/me`              | Current user + `providers`                                                |
+| PATCH  | `/me`              | `name`, `timezone`                                                        |
+
+There is no `/register`, `/login` or `/password`. **Sign-up is not a separate
+call:** the Google callback creates the account the first time it sees an
+identity. An account whose email matches an existing user is linked to it,
+provided Google reports that address as verified.
 
 ---
 
@@ -149,7 +152,7 @@ it. Literature tags are lowercased and de-duplicated on write.
 | PUT    | `/:id/brief`              | EDITOR                           |
 
 Roles rank `OWNER > EDITOR > VIEWER`. Inviting someone with no account creates a
-**pending member row** that is linked when they register.
+**pending member row** that is linked the first time they sign in with Google.
 
 ---
 
@@ -293,7 +296,7 @@ Every route requires `requireAuth` **and** `requireAdmin`.
 | GET    | `/reports` (with tab counts) · `/reports/:id`               |
 | PATCH  | `/reports/:id` — status + resolution                        |
 
-An admin **cannot** change a user's email or password, delete themselves, or
+An admin **cannot** change a user's email, delete themselves, or
 demote the last remaining admin. Every mutation is logged with the acting
 admin's id.
 

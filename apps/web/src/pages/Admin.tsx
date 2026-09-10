@@ -2,8 +2,9 @@
  * Admin.
  *
  * Deliberately denser and plainer than the rest of the app — this is an
- * operator's tool, not a workspace. Two things it does not offer, because the
- * backend does not: changing a user's email, and changing their password.
+ * operator's tool, not a workspace. One thing it does not offer, because the
+ * backend does not: changing a user's email. There is no password to change —
+ * sign-in is delegated to Google.
  */
 import { useState } from 'react';
 import { AppShell } from '../components/layout/AppShell';
@@ -219,7 +220,7 @@ export default function Admin() {
 
           <p className="text-[12.5px] text-ink-3">
             Deleting a user permanently removes their content and requires typing <code>DELETE</code>{' '}
-            to confirm. Email and password cannot be changed from here.
+            to confirm. Email addresses cannot be changed from here.
           </p>
         </>
       ) : null}
