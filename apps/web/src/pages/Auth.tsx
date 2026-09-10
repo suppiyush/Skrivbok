@@ -7,9 +7,14 @@
  * seen — so `/login` and `/register` render the same page and differ only in
  * their wording.
  *
- * Layout is two columns: a fixed reassurance panel on the left and the sign-in
- * panel on the right. The left column is deliberately composed rather than left
- * half-empty — an unbalanced sign-in screen is the first thing a new user sees.
+ * Layout is two columns. The left is the brand side: logo, positioning line and
+ * the usage counters from `design/stats.png`. The right is the sign-in side:
+ * the button, and a short list of what the workspace holds so the column is not
+ * one button in an empty field. Both are deliberately composed — an unbalanced
+ * sign-in screen is the first thing a new user sees.
+ *
+ * The page carries `theme-sticky`, the landing page's pastel palette, so
+ * arriving here from the marketing site is not a change of brand mid-flow.
  *
  * Every error state is handled: Google declined · expired state · server not
  * configured for Google · server unreachable.
@@ -19,7 +24,6 @@ import { Link, useSearchParams } from 'react-router-dom';
 import { auth } from '../lib/api';
 import { Icon } from '../components/ui/Icon';
 import { Logo } from '../components/marketing/MarketingChrome';
-import { LoginArt } from '../components/marketing/LoginArt';
 
 /** Google's redirect carries a reason; each maps to its own sentence. */
 const OAUTH_ERRORS: Record<string, string> = {
@@ -29,6 +33,25 @@ const OAUTH_ERRORS: Record<string, string> = {
   google_incomplete: 'Google did not complete the sign-in. Please try again.',
   google_failed: 'Google sign-in could not be completed. Please try again in a moment.',
 };
+
+/**
+ * Usage counters, as in `design/stats.png`.
+ *
+ * These are maintained by hand, not read from the API: the numbers are small
+ * enough that a live count would be a query on every anonymous page load for no
+ * benefit, and `/auth/config` is the only endpoint this page may call before a
+ * session exists. Update them here when they move.
+ */
+const STATS = [
+  { value: '22+', label: 'Users' },
+  { value: '13+', label: 'Projects' },
+  { value: '13+', label: 'Ideas' },
+  { value: '12+', label: 'Goals' },
+];
+
+/** The line under the button, in place of a feature list. */
+const QUOTE =
+  "Life's messy. Research is messy. But your ideas, projects, and goals don't have to be.";
 
 export default function AuthPage({ mode }: { mode: 'login' | 'register' }) {
   const [params] = useSearchParams();
@@ -76,12 +99,15 @@ export default function AuthPage({ mode }: { mode: 'login' | 'register' }) {
 
   const isLogin = mode === 'login';
 
+  // `lg:h-screen` pins the page to exactly one viewport so it never scrolls.
+  // Each column still gets `overflow-y-auto` as a floor: on a genuinely short
+  // window the content stays reachable rather than being clipped away.
   return (
-    <div className="grid min-h-screen bg-canvas-alt lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
-      {/* ── Left: the illustration ──────────────────────────────────────
+    <div className="theme-sticky grid min-h-screen bg-canvas-alt lg:h-screen lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)] lg:overflow-hidden">
+      {/* ── Left: the brand side ────────────────────────────────────────
           Hidden below `lg`: on a phone the sign-in panel is the whole point of
-          the screen, and an illustration above it only pushes it down. */}
-      <aside className="relative hidden flex-col justify-center overflow-hidden bg-surface px-14 py-12 lg:flex">
+          the screen, and anything above it only pushes it down. */}
+      <aside className="relative hidden flex-col overflow-x-hidden overflow-y-auto bg-surface px-14 py-10 lg:flex">
         <span
           aria-hidden="true"
           className="pointer-events-none absolute -top-40 -left-24 size-[560px] rounded-full"
@@ -90,8 +116,15 @@ export default function AuthPage({ mode }: { mode: 'login' | 'register' }) {
           }}
         />
 
-        <div className="relative mx-auto w-full max-w-[520px]">
-          <h2 className="text-[clamp(28px,2.6vw,38px)] leading-[1.15] font-extrabold tracking-[-0.035em]">
+        {/* `my-auto` rather than `justify-center` on the parent: it centres the
+            same way, but when the viewport is too short to hold the column the
+            top stays reachable instead of overflowing above the scroll origin. */}
+        <div className="relative mx-auto my-auto w-full max-w-[520px]">
+          <Link to="/" aria-label="Skrivbok home" className="inline-flex">
+            <Logo size={30} />
+          </Link>
+
+          <h2 className="mt-10 text-[clamp(28px,2.6vw,38px)] leading-[1.15] font-extrabold tracking-[-0.035em]">
             Everything your research runs on, in one workspace.
           </h2>
           <p className="mt-4 max-w-[46ch] text-[15.5px] leading-[1.7] text-ink-3">
@@ -99,14 +132,43 @@ export default function AuthPage({ mode }: { mode: 'login' | 'register' }) {
             tracked in four places and lost in a fifth.
           </p>
 
-          <LoginArt className="mt-10 w-full" />
+          {/* The counters from design/stats.png: a 2×2 grid, the figure carried
+              by the brand colour and the label small and quiet beneath it. */}
+          <dl className="mt-10 grid grid-cols-2 gap-3.5">
+            {STATS.map((stat) => (
+              <div
+                key={stat.label}
+                className="rounded-2xl border border-line-2 bg-surface-5 px-5 py-5 text-center"
+              >
+                <dt className="sr-only">{stat.label}</dt>
+                <dd>
+                  <span className="block text-[32px] leading-none font-extrabold tracking-[-0.04em] text-brand">
+                    {stat.value}
+                  </span>
+                  <span className="mt-2.5 block text-[11.5px] font-bold tracking-[0.14em] text-ink-4 uppercase">
+                    {stat.label}
+                  </span>
+                </dd>
+              </div>
+            ))}
+          </dl>
         </div>
       </aside>
 
       {/* ── Right: the sign-in panel ───────────────────────────────────── */}
-      <div className="flex flex-col px-5 py-7 sm:px-10">
-        <div className="flex items-center justify-between gap-4">
-          <Link to="/" aria-label="Skrivbok home">
+      <div className="relative flex flex-col overflow-x-hidden px-5 py-7 sm:px-10 lg:overflow-y-auto">
+        <span
+          aria-hidden="true"
+          className="pointer-events-none absolute -top-32 -right-28 size-[480px] rounded-full"
+          style={{
+            background: 'radial-gradient(closest-side, var(--color-brand-tint), transparent)',
+          }}
+        />
+
+        <div className="relative flex items-center justify-between gap-4">
+          {/* The logo lives in the left column, which is hidden below `lg`, so
+              this one stands in for it there and disappears once it is back. */}
+          <Link to="/" aria-label="Skrivbok home" className="lg:invisible">
             <Logo size={28} />
           </Link>
           <Link
@@ -118,20 +180,32 @@ export default function AuthPage({ mode }: { mode: 'login' | 'register' }) {
           </Link>
         </div>
 
-        <div className="mx-auto flex w-full max-w-[400px] flex-1 flex-col justify-center py-12">
-          <h1 className="text-[27px] leading-tight font-extrabold tracking-[-0.035em]">
+        {/* `text-center` cascades to every child below — headings, the Google
+            button's label, and the alert copy — so nothing in this column
+            reverts to left-aligned by default. */}
+        <div className="relative mx-auto flex w-full max-w-[400px] flex-1 flex-col justify-center py-10 text-center">
+          {/* A little air above the heading, so the panel does not read as a
+              button dropped into the middle of empty space. `mx-auto` centres
+              it on the cross axis without the column losing its default
+              stretch (which is what keeps the button and alerts full-width). */}
+          <span
+            aria-hidden="true"
+            className="mx-auto grid size-14 place-items-center rounded-2xl bg-brand-tint text-brand"
+          >
+            <Icon name="waving_hand" size={26} />
+          </span>
+
+          <h1 className="mt-5 text-[29px] leading-tight font-extrabold tracking-[-0.035em]">
             {isLogin ? 'Welcome back' : 'Create your account'}
           </h1>
-          <p className="mt-2 text-[14px] leading-relaxed text-ink-3">
-            {isLogin
-              ? 'Continue with Google to pick up where you left off.'
-              : 'Continue with Google. Nothing to install, no password to remember, no card required.'}
+          <p className="mt-2.5 text-[14.5px] leading-relaxed text-ink-3">
+            Sign in to continue to your workspace
           </p>
 
           {errorMessage ? (
             <div
               role="alert"
-              className="mt-6 flex items-start gap-2.5 rounded-xl border border-danger/25 border-l-[3px] border-l-danger bg-danger-tint px-4 py-3"
+              className="mt-6 flex items-start justify-center gap-2.5 rounded-xl border border-danger/25 border-l-[3px] border-l-danger bg-danger-tint px-4 py-3"
             >
               <Icon name="error" size={18} className="mt-px flex-none text-danger" />
               <p className="text-[13px] leading-relaxed text-danger-ink">{errorMessage}</p>
@@ -159,7 +233,7 @@ export default function AuthPage({ mode }: { mode: 'login' | 'register' }) {
           ) : (
             <div
               role="alert"
-              className="mt-6 flex items-start gap-2.5 rounded-xl border-l-[3px] border-l-warn bg-warn-tint px-4 py-3"
+              className="mt-6 flex items-start justify-center gap-2.5 rounded-xl border-l-[3px] border-l-warn bg-warn-tint px-4 py-3"
             >
               <Icon
                 name={google === 'off' ? 'key_off' : 'cloud_off'}
@@ -174,45 +248,39 @@ export default function AuthPage({ mode }: { mode: 'login' | 'register' }) {
             </div>
           )}
 
-          {/* The payment provider requires the Terms, EULA and Privacy Policy
-              to be agreed at sign-up and reachable from here. Signing in and
-              signing up are the same button, so the line sits under it. */}
-          <p className="mt-5 text-center text-[12px] leading-relaxed text-ink-4">
-            By continuing you agree to our{' '}
-            <Link to="/terms" className="font-semibold text-ink-3 hover:text-ink">
-              Terms
-            </Link>
-            ,{' '}
-            <Link to="/end-user-agreement" className="font-semibold text-ink-3 hover:text-ink">
-              End User Agreement
-            </Link>{' '}
-            and{' '}
-            <Link to="/privacy-policy" className="font-semibold text-ink-3 hover:text-ink">
-              Privacy Policy
-            </Link>
-            .
-          </p>
-
-          <p className="mt-6 border-t border-line pt-5 text-center text-[13px] leading-relaxed text-ink-3">
-            {isLogin
-              ? 'No account yet? The same button creates one the first time you sign in.'
-              : 'Already have an account? The same button signs you back into it.'}
+          {/* Sits right under the button, in the spot the Terms line used to
+              occupy — the first thing read after deciding to sign in. */}
+          <p className="mt-5 text-center text-[13.5px] leading-relaxed font-medium text-ink-2 italic">
+            “{QUOTE}”
           </p>
         </div>
 
-        <footer className="mx-auto flex w-full max-w-[400px] flex-wrap items-center justify-between gap-x-4 gap-y-2 text-[12px] text-ink-4">
-          <span>© {new Date().getFullYear()} Skrivbok</span>
-          <span className="flex flex-wrap items-center gap-x-4 gap-y-1">
-            <Link to="/terms" className="transition hover:text-ink-2">
-              Terms
-            </Link>
-            <Link to="/privacy-policy" className="transition hover:text-ink-2">
-              Privacy
-            </Link>
-            <Link to="/contact" className="transition hover:text-ink-2">
-              Contact
-            </Link>
-          </span>
+        {/* The payment provider requires the Terms, EULA and Privacy Policy to
+            be agreed at sign-up and reachable from here. Signing in and signing
+            up are the same button, so this now sits above the copyright rather
+            than under the button — read once, not competing with the button. */}
+        <footer className="relative mx-auto flex w-full max-w-[400px] flex-col items-center gap-3 pb-1 text-center">
+          <div className="w-full border-t border-line pt-6">
+            {/* Narrower than the divider above it, so the line breaks after
+                "our" rather than after "Terms," — the wrap falls early,
+                leaving more of the sentence on the second line than the first. */}
+            <p className="mx-auto max-w-[220px] text-[12px] leading-relaxed text-ink-4">
+              By continuing you agree to our{' '}
+              <Link to="/terms" className="font-semibold text-ink-3 hover:text-ink">
+                Terms
+              </Link>
+              ,{' '}
+              <Link to="/end-user-agreement" className="font-semibold text-ink-3 hover:text-ink">
+                End User Agreement
+              </Link>{' '}
+              and{' '}
+              <Link to="/privacy-policy" className="font-semibold text-ink-3 hover:text-ink">
+                Privacy Policy
+              </Link>
+              .
+            </p>
+          </div>
+          <span className="text-[12px] text-ink-4">© {new Date().getFullYear()} Skrivbok</span>
         </footer>
       </div>
     </div>
