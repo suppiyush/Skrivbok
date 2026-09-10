@@ -14,7 +14,6 @@ import { Button } from '../ui/Button';
 const NAV = [
   { label: 'Features', href: '#features' },
   { label: 'Why Skrivbok', href: '#why' },
-  { label: 'How it works', href: '#how' },
   { label: 'FAQ', href: '#faq' },
 ];
 
@@ -66,16 +65,18 @@ export function SectionHeading({
   accentColor = 'var(--color-brand)',
   underline = 'var(--color-accent)',
   center = false,
+  size = 'text-[clamp(28px,4vw,40px)]',
 }: {
   lead: string;
   accent: string;
   accentColor?: string;
   underline?: string;
   center?: boolean;
+  size?: string;
 }) {
   return (
     <h2
-      className={`pb-3 text-[clamp(28px,4vw,40px)] font-extrabold leading-[1.12] tracking-[-0.035em] ${
+      className={`pb-3 ${size} font-extrabold leading-[1.12] tracking-[-0.035em] ${
         center ? 'text-center' : ''
       }`}
     >
@@ -108,7 +109,7 @@ export function MarketingNav({ isSignedIn = false }: { isSignedIn?: boolean }) {
           : 'border-b border-transparent'
       }`}
     >
-      <div className="mx-auto flex h-[72px] max-w-[1200px] items-center gap-6 px-5">
+      <div className="flex h-[72px] w-full items-center gap-6 px-5 sm:px-8 lg:px-12">
         <Link to="/" aria-label="Skrivbok home">
           <Logo size={30} />
         </Link>
@@ -186,11 +187,14 @@ export function ArtPlaceholder({
   ratio = '4 / 3',
   icon,
   className = '',
+  showLabel = true,
 }: {
   label: string;
   ratio?: string;
   icon?: string;
   className?: string;
+  /** Set false to render the placeholder without its visible caption text. */
+  showLabel?: boolean;
 }) {
   return (
     <div
@@ -200,8 +204,8 @@ export function ArtPlaceholder({
       aria-label={label}
     >
       <span className="flex flex-col items-center gap-2">
-        {icon ? <Icon name={icon} size={26} className="text-brand" /> : null}
-        {label}
+        {icon ? <Icon name={icon} size={showLabel ? 26 : 34} className="text-brand" /> : null}
+        {showLabel ? label : null}
       </span>
     </div>
   );
@@ -212,73 +216,10 @@ export function MarketingFooter() {
 
   return (
     <footer className="border-t border-line bg-surface">
-      <div className="mx-auto grid max-w-[1200px] gap-10 px-5 py-14 md:grid-cols-[1.6fr_1fr_1fr]">
-        <div>
-          <Logo size={30} />
-          <p className="mt-4 max-w-[42ch] text-[14px] leading-relaxed text-ink-3">
-            A workspace for academic research — projects, deadlines, literature, ideas, calendar and
-            career goals in one place.
-          </p>
-        </div>
-
-        <FooterColumn
-          title="Product"
-          links={[
-            { label: 'Features', href: '#features' },
-            { label: 'Why Skrivbok', href: '#why' },
-            { label: 'How it works', href: '#how' },
-            { label: 'FAQ', href: '#faq' },
-            { label: 'Sign in', href: '/login', internal: true },
-          ]}
-        />
-
-        <FooterColumn
-          title="Company"
-          links={[
-            { label: 'Contact', href: '/contact', internal: true },
-            { label: 'Privacy Policy', href: '/privacy-policy', internal: true },
-            { label: 'Terms of Service', href: '/terms', internal: true },
-            { label: 'End User Agreement', href: '/end-user-agreement', internal: true },
-            { label: 'Refund Policy', href: '/refund-policy', internal: true },
-          ]}
-        />
-      </div>
-
-      <div className="border-t border-line">
-        <p className="mx-auto max-w-[1200px] px-5 py-5 text-[13px] text-ink-3">
-          © {year} Skrivbok. All rights reserved.
-        </p>
-      </div>
+      <p className="mx-auto max-w-[1200px] px-5 py-5 text-center text-[13px] text-ink-3">
+        © {year} Skrivbok. All rights reserved.
+      </p>
     </footer>
-  );
-}
-
-function FooterColumn({
-  title,
-  links,
-}: {
-  title: string;
-  links: { label: string; href: string; internal?: boolean }[];
-}) {
-  return (
-    <div>
-      <h3 className="text-[13px] font-bold tracking-[0.06em] text-ink-4 uppercase">{title}</h3>
-      <ul className="mt-4 flex flex-col gap-2.5">
-        {links.map((l) => (
-          <li key={l.label}>
-            {l.internal ? (
-              <Link to={l.href} className="text-[14px] text-ink-3 hover:text-ink">
-                {l.label}
-              </Link>
-            ) : (
-              <a href={l.href} className="text-[14px] text-ink-3 hover:text-ink">
-                {l.label}
-              </a>
-            )}
-          </li>
-        ))}
-      </ul>
-    </div>
   );
 }
 
