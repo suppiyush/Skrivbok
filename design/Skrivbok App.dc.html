@@ -1,0 +1,1983 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <script src="./support.js"></script>
+  </head>
+  <body>
+    <x-dc>
+      <helmet data-dc-atomics>
+        <title>Skrivbok — app shell, auth and dashboard</title>
+        <link rel="preconnect" href="https://fonts.googleapis.com" />
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+        <link
+          href="https://fonts.googleapis.com/css2?family=Figtree:wght@400;500;600;700;800&family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,400,0,0&display=swap"
+          rel="stylesheet"
+        />
+        <style>
+          * {
+            box-sizing: border-box;
+          }
+          body {
+            margin: 0;
+            background: #eef0f4;
+            color: #0b0f19;
+            font-family: Figtree, system-ui, sans-serif;
+            -webkit-font-smoothing: antialiased;
+          }
+          h1,
+          h2,
+          h3,
+          h4,
+          p,
+          ul {
+            margin: 0;
+          }
+          ul {
+            padding: 0;
+            list-style: none;
+          }
+          a {
+            color: #1d4fd8;
+            text-decoration: none;
+          }
+          a:hover {
+            color: #16399f;
+          }
+          button,
+          input,
+          select {
+            font-family: Figtree, system-ui, sans-serif;
+          }
+          :focus-visible {
+            outline: 2px solid #2f6bfa;
+            outline-offset: 2px;
+            border-radius: 6px;
+          }
+          .ms {
+            font-family: 'Material Symbols Outlined';
+            font-weight: 400;
+            font-style: normal;
+            line-height: 1;
+            letter-spacing: normal;
+            text-transform: none;
+            display: inline-block;
+            white-space: nowrap;
+            word-wrap: normal;
+            direction: ltr;
+          }
+          @keyframes shimmer {
+            0% {
+              opacity: 0.55;
+            }
+            50% {
+              opacity: 1;
+            }
+            100% {
+              opacity: 0.55;
+            }
+          }
+        </style>
+      </helmet>
+
+      <div style="min-height: 100vh; display: flex; flex-direction: column">
+        <div
+          style="
+            background: #0b0f19;
+            color: #fff;
+            padding: 10px 16px;
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px 18px;
+            align-items: center;
+            position: sticky;
+            top: 0;
+            z-index: 40;
+          "
+        >
+          <span
+            style="
+              font-family: ui-monospace, Menlo, monospace;
+              font-size: 11px;
+              letter-spacing: 0.08em;
+              color: #9aa1b0;
+            "
+            >DESIGN HARNESS</span
+          >
+          <label
+            style="display: flex; align-items: center; gap: 7px; font-size: 12.5px; color: #c9cede"
+            >Screen
+            <select
+              value="{{ screen }}"
+              onChange="{{ setScreen }}"
+              style="
+                background: #171c28;
+                color: #fff;
+                border: 1px solid rgba(255, 255, 255, 0.14);
+                border-radius: 8px;
+                padding: 6px 9px;
+                font-size: 12.5px;
+              "
+            >
+              <option value="dashboard">App shell + Dashboard</option>
+              <option value="auth">Login / Sign up</option>
+            </select>
+          </label>
+          <label
+            style="display: flex; align-items: center; gap: 7px; font-size: 12.5px; color: #c9cede"
+            >State
+            <select
+              value="{{ view }}"
+              onChange="{{ setView }}"
+              style="
+                background: #171c28;
+                color: #fff;
+                border: 1px solid rgba(255, 255, 255, 0.14);
+                border-radius: 8px;
+                padding: 6px 9px;
+                font-size: 12.5px;
+              "
+            >
+              <sc-for list="{{ viewOptions }}" as="o" hint-placeholder-count="7">
+                <option value="{{ o.id }}">{{ o.label }}</option>
+              </sc-for>
+            </select>
+          </label>
+          <div
+            style="
+              display: flex;
+              gap: 3px;
+              padding: 3px;
+              background: #171c28;
+              border-radius: 9px;
+              border: 1px solid rgba(255, 255, 255, 0.14);
+            "
+          >
+            <button
+              type="button"
+              onClick="{{ setComfortable }}"
+              style="border:0;border-radius:7px;padding:5px 11px;font-size:12px;font-weight:600;cursor:pointer;background:{{ comfBg }};color:{{ comfFg }}"
+            >
+              Comfortable
+            </button>
+            <button
+              type="button"
+              onClick="{{ setCompact }}"
+              style="border:0;border-radius:7px;padding:5px 11px;font-size:12px;font-weight:600;cursor:pointer;background:{{ compBg }};color:{{ compFg }}"
+            >
+              Compact
+            </button>
+          </div>
+          <span style="margin-left: auto; font-size: 12px; color: #9aa1b0">{{ viewNote }}</span>
+        </div>
+
+        <sc-if value="{{ isApp }}" hint-placeholder-val="{{ true }}">
+          <div
+            style="
+              flex: 1;
+              display: flex;
+              flex-direction: column;
+              min-height: 0;
+              background: #eef0f4;
+            "
+          >
+            <header
+              style="flex:none;height:{{ barH }};background:#fff;border-bottom:1px solid rgba(11,15,25,.07);display:flex;align-items:center;gap:14px;padding:0 20px;position:sticky;top:0;z-index:30"
+            >
+              <button
+                type="button"
+                onClick="{{ toggleCollapse }}"
+                aria-label="{{ collapseLabel }}"
+                style="
+                  width: 40px;
+                  height: 40px;
+                  border: 0;
+                  background: none;
+                  border-radius: 10px;
+                  display: grid;
+                  place-items: center;
+                  cursor: pointer;
+                  flex: none;
+                "
+                style-hover="background:#f2f4f8"
+              >
+                <span class="ms" style="font-size: 24px; color: #3a4152">menu</span>
+              </button>
+              <a
+                href="#"
+                style="display: flex; align-items: center; gap: 9px; color: #0b0f19; flex: none"
+              >
+                <img
+                  src="assets/skrivbok-logo.png"
+                  alt=""
+                  style="width: 32px; height: 32px; object-fit: contain"
+                />
+                <span style="font-size: 19px; font-weight: 800; letter-spacing: -0.03em"
+                  >Skrivbok<span style="color: #2f6bfa">.</span></span
+                >
+              </a>
+              <div style="flex: 1; display: flex; justify-content: center; min-width: 0">
+                <label
+                  style="
+                    display: flex;
+                    align-items: center;
+                    gap: 10px;
+                    width: 100%;
+                    max-width: 440px;
+                    height: 44px;
+                    padding: 0 16px;
+                    border-radius: 999px;
+                    background: #f2f4f8;
+                    border: 1px solid rgba(11, 15, 25, 0.06);
+                  "
+                >
+                  <span class="ms" style="font-size: 20px; color: #2f6bfa">search</span>
+                  <input
+                    placeholder="Search everything (Cmd+K)"
+                    style="
+                      border: 0;
+                      outline: 0;
+                      background: none;
+                      font-size: 14.5px;
+                      width: 100%;
+                      min-width: 0;
+                      color: #0b0f19;
+                    "
+                  />
+                </label>
+              </div>
+              <div style="display: flex; align-items: center; gap: 6px; flex: none">
+                <span
+                  title="Deadlines due today"
+                  style="
+                    display: flex;
+                    align-items: center;
+                    gap: 6px;
+                    padding: 0 10px;
+                    height: 40px;
+                    border-radius: 999px;
+                    color: #3a4152;
+                  "
+                  ><span class="ms" style="font-size: 21px; color: #c98a00"
+                    >local_fire_department</span
+                  ><span style="font-size: 15px; font-weight: 700">3</span></span
+                >
+                <div style="position: relative">
+                  <button
+                    type="button"
+                    onClick="{{ toggleNotif }}"
+                    aria-label="Notifications, 7 unread"
+                    style="
+                      width: 40px;
+                      height: 40px;
+                      border: 0;
+                      background: none;
+                      border-radius: 999px;
+                      display: grid;
+                      place-items: center;
+                      cursor: pointer;
+                      position: relative;
+                    "
+                    style-hover="background:#f2f4f8"
+                  >
+                    <span class="ms" style="font-size: 23px; color: #3a4152">notifications</span>
+                    <span
+                      style="
+                        position: absolute;
+                        top: 1px;
+                        right: 0;
+                        min-width: 18px;
+                        height: 18px;
+                        border-radius: 9px;
+                        background: #d3372e;
+                        color: #fff;
+                        font-size: 10.5px;
+                        font-weight: 700;
+                        display: grid;
+                        place-items: center;
+                        padding: 0 4px;
+                      "
+                      >7</span
+                    >
+                  </button>
+                  <sc-if value="{{ notifOpen }}" hint-placeholder-val="{{ false }}">
+                    <div
+                      style="
+                        position: absolute;
+                        right: 0;
+                        top: 48px;
+                        width: 370px;
+                        max-width: calc(100vw - 40px);
+                        background: #fff;
+                        border: 1px solid rgba(11, 15, 25, 0.1);
+                        border-radius: 16px;
+                        box-shadow: 0 28px 64px -28px rgba(11, 15, 25, 0.45);
+                        overflow: hidden;
+                        z-index: 35;
+                      "
+                    >
+                      <div
+                        style="
+                          padding: 14px 16px;
+                          display: flex;
+                          align-items: center;
+                          justify-content: space-between;
+                          border-bottom: 1px solid rgba(11, 15, 25, 0.08);
+                        "
+                      >
+                        <span style="font-size: 14px; font-weight: 700">Notifications</span>
+                        <button
+                          type="button"
+                          style="
+                            border: 0;
+                            background: none;
+                            font-size: 12.5px;
+                            font-weight: 600;
+                            color: #1d4fd8;
+                            cursor: pointer;
+                          "
+                        >
+                          Mark all read
+                        </button>
+                      </div>
+                      <div style="max-height: 380px; overflow-y: auto">
+                        <sc-for list="{{ notifications }}" as="n" hint-placeholder-count="5">
+                          <a
+                            href="#"
+                            style="display:flex;gap:11px;padding:13px 16px;border-bottom:1px solid rgba(11,15,25,.06);background:{{ n.bg }};color:#0b0f19"
+                          >
+                            <span
+                              style="width:34px;height:34px;border-radius:10px;flex:none;display:grid;place-items:center;background:{{ n.tint }}"
+                              ><span class="ms" style="font-size:19px;color:{{ n.fg }}"
+                                >{{ n.icon }}</span
+                              ></span
+                            >
+                            <span style="min-width: 0; flex: 1">
+                              <span style="display: block; font-size: 13px; font-weight: 600"
+                                >{{ n.title }}</span
+                              >
+                              <span
+                                style="
+                                  display: block;
+                                  margin-top: 2px;
+                                  font-size: 12.5px;
+                                  line-height: 1.45;
+                                  color: #5b6472;
+                                "
+                                >{{ n.message }}</span
+                              >
+                              <span
+                                style="
+                                  display: block;
+                                  margin-top: 4px;
+                                  font-size: 11px;
+                                  color: #5b6472;
+                                  font-family: ui-monospace, Menlo, monospace;
+                                "
+                                >{{ n.time }}</span
+                              >
+                            </span>
+                            <sc-if value="{{ n.unread }}" hint-placeholder-val="{{ true }}">
+                              <span
+                                style="
+                                  width: 8px;
+                                  height: 8px;
+                                  border-radius: 50%;
+                                  background: #2f6bfa;
+                                  flex: none;
+                                  margin-top: 6px;
+                                "
+                              ></span>
+                            </sc-if>
+                          </a>
+                        </sc-for>
+                      </div>
+                      <div
+                        style="
+                          padding: 12px 16px;
+                          display: flex;
+                          justify-content: space-between;
+                          align-items: center;
+                        "
+                      >
+                        <a href="#" style="font-size: 12.5px; font-weight: 600"
+                          >See all notifications</a
+                        >
+                        <button
+                          type="button"
+                          style="
+                            border: 0;
+                            background: none;
+                            font-size: 12.5px;
+                            color: #5b6472;
+                            cursor: pointer;
+                          "
+                        >
+                          Clear read
+                        </button>
+                      </div>
+                    </div>
+                  </sc-if>
+                </div>
+                <button
+                  type="button"
+                  aria-label="Your account"
+                  style="
+                    width: 42px;
+                    height: 42px;
+                    border-radius: 50%;
+                    border: 1px solid rgba(11, 15, 25, 0.08);
+                    background: #dbe6ff;
+                    color: #274a95;
+                    display: grid;
+                    place-items: center;
+                    font-size: 14px;
+                    font-weight: 700;
+                    cursor: pointer;
+                  "
+                >
+                  AL
+                </button>
+              </div>
+            </header>
+
+            <div style="flex: 1; display: flex; min-height: 0">
+              <aside
+                style="width:{{ sidebarW }};flex:none;background:#fff;border-right:1px solid rgba(11,15,25,.07);display:flex;flex-direction:column;position:sticky;top:{{ barH }};align-self:flex-start;height:calc(100vh - {{ barH }})"
+              >
+                <nav
+                  style="flex:1;overflow-y:auto;padding:{{ railPad }};display:flex;flex-direction:column;gap:3px"
+                >
+                  <sc-for list="{{ navItems }}" as="i" hint-placeholder-count="12">
+                    <a
+                      href="#"
+                      title="{{ i.name }}"
+                      style="display:flex;align-items:center;gap:14px;padding:{{ navPad }};border-radius:12px;background:{{ i.bg }};color:{{ i.fg }};font-size:{{ navFont }};font-weight:{{ i.weight }};justify-content:{{ navJustify }}"
+                      style-hover="background:#f4f6fa"
+                    >
+                      <span class="ms" style="font-size:23px;flex:none;color:{{ i.iconFg }}"
+                        >{{ i.icon }}</span
+                      >
+                      <sc-if value="{{ expanded }}" hint-placeholder-val="{{ true }}">
+                        <span
+                          style="
+                            flex: 1;
+                            white-space: nowrap;
+                            overflow: hidden;
+                            text-overflow: ellipsis;
+                          "
+                          >{{ i.name }}</span
+                        >
+                      </sc-if>
+                      <sc-if value="{{ i.showCount }}" hint-placeholder-val="{{ true }}">
+                        <span
+                          style="
+                            font-size: 11.5px;
+                            font-family: ui-monospace, Menlo, monospace;
+                            color: #5b6472;
+                            flex: none;
+                          "
+                          >{{ i.count }}</span
+                        >
+                      </sc-if>
+                    </a>
+                  </sc-for>
+                </nav>
+                <div style="border-top:1px solid rgba(11,15,25,.07);padding:{{ railPad }}">
+                  <sc-if value="{{ expanded }}" hint-placeholder-val="{{ true }}">
+                    <div
+                      style="
+                        border: 1px solid rgba(11, 15, 25, 0.09);
+                        border-radius: 12px;
+                        padding: 13px;
+                        background: #fbfbfd;
+                        margin-bottom: 8px;
+                      "
+                    >
+                      <p style="font-size: 12.5px; font-weight: 700">PRO — active</p>
+                      <p
+                        style="margin-top: 5px; font-size: 11.5px; line-height: 1.5; color: #5b6472"
+                      >
+                        Renews 12 March 2027.
+                      </p>
+                      <a
+                        href="#"
+                        style="
+                          margin-top: 10px;
+                          display: block;
+                          text-align: center;
+                          padding: 8px;
+                          border-radius: 9px;
+                          background: #f0f2f6;
+                          font-size: 12.5px;
+                          font-weight: 600;
+                          color: #0b0f19;
+                        "
+                        >Manage billing</a
+                      >
+                    </div>
+                  </sc-if>
+                  <sc-for list="{{ sideFooter }}" as="s" hint-placeholder-count="2">
+                    <a
+                      href="#"
+                      title="{{ s.name }}"
+                      style="display:flex;align-items:center;gap:14px;padding:{{ navPad }};border-radius:12px;color:#3a4152;font-size:{{ navFont }};font-weight:500;justify-content:{{ navJustify }}"
+                      style-hover="background:#f4f6fa"
+                      ><span class="ms" style="font-size: 23px; flex: none; color: #6f7889"
+                        >{{ s.icon }}</span
+                      ><sc-if value="{{ expanded }}" hint-placeholder-val="{{ true }}"
+                        ><span>{{ s.name }}</span></sc-if
+                      ></a
+                    >
+                  </sc-for>
+                </div>
+              </aside>
+
+              <main
+                style="flex:1;min-width:0;padding:{{ mainPad }};display:flex;flex-direction:column;gap:{{ sectionGap }}"
+              >
+                <sc-if value="{{ isLoading }}" hint-placeholder-val="{{ false }}">
+                  <div
+                    style="
+                      display: flex;
+                      flex-direction: column;
+                      gap: 18px;
+                      animation: shimmer 1.4s ease-in-out infinite;
+                    "
+                  >
+                    <div
+                      style="height: 30px; width: 280px; border-radius: 8px; background: #e2e5ec"
+                    ></div>
+                    <div
+                      style="
+                        display: grid;
+                        grid-template-columns: repeat(auto-fit, minmax(min(100%, 190px), 1fr));
+                        gap: 12px;
+                      "
+                    >
+                      <sc-for list="{{ four }}" as="x" hint-placeholder-count="4">
+                        <div style="height: 86px; border-radius: 16px; background: #e2e5ec"></div>
+                      </sc-for>
+                    </div>
+                    <div style="height: 420px; border-radius: 20px; background: #e2e5ec"></div>
+                  </div>
+                </sc-if>
+
+                <sc-if value="{{ isError }}" hint-placeholder-val="{{ false }}">
+                  <div
+                    style="
+                      background: #fff;
+                      border-radius: 20px;
+                      padding: 56px 28px;
+                      display: grid;
+                      place-items: center;
+                      gap: 12px;
+                      text-align: center;
+                    "
+                  >
+                    <span class="ms" style="font-size: 34px; color: #b4483c">cloud_off</span>
+                    <h2 style="font-size: 19px; font-weight: 700">
+                      Your dashboard could not be loaded
+                    </h2>
+                    <p style="font-size: 14px; line-height: 1.6; color: #5b6472; max-width: 44ch">
+                      The request to the workspace failed. Nothing has been lost — try again, and if
+                      it keeps failing quote the request ID below in a report.
+                    </p>
+                    <p
+                      style="
+                        font-family: ui-monospace, Menlo, monospace;
+                        font-size: 11.5px;
+                        color: #5b6472;
+                        background: #f2f4f8;
+                        border-radius: 8px;
+                        padding: 6px 10px;
+                      "
+                    >
+                      requestId a01859e8-60fd-4361-91ab-d262de3e349f
+                    </p>
+                    <div style="margin-top: 6px; display: flex; gap: 10px">
+                      <button
+                        type="button"
+                        style="
+                          padding: 12px 18px;
+                          border: 0;
+                          border-radius: 11px;
+                          background: #0b0f19;
+                          color: #fff;
+                          font-size: 14px;
+                          font-weight: 600;
+                          cursor: pointer;
+                        "
+                      >
+                        Try again
+                      </button>
+                      <button
+                        type="button"
+                        style="
+                          padding: 12px 18px;
+                          border: 1px solid rgba(11, 15, 25, 0.14);
+                          border-radius: 11px;
+                          background: #fff;
+                          font-size: 14px;
+                          font-weight: 600;
+                          cursor: pointer;
+                        "
+                      >
+                        Report the problem
+                      </button>
+                    </div>
+                  </div>
+                </sc-if>
+
+                <sc-if value="{{ isReadOnly }}" hint-placeholder-val="{{ false }}">
+                  <div
+                    style="
+                      background: #fff;
+                      border-radius: 16px;
+                      border-left: 3px solid #2f6bfa;
+                      padding: 18px 20px;
+                      display: flex;
+                      gap: 13px;
+                      align-items: flex-start;
+                    "
+                  >
+                    <span class="ms" style="font-size: 21px; color: #2f6bfa; flex: none"
+                      >visibility</span
+                    >
+                    <div>
+                      <h2 style="font-size: 15px; font-weight: 700">
+                        Read-only — you are viewing a shared project's dashboard
+                      </h2>
+                      <p
+                        style="
+                          margin-top: 6px;
+                          font-size: 13.5px;
+                          line-height: 1.6;
+                          color: #5b6472;
+                          max-width: 70ch;
+                        "
+                      >
+                        Your role on <strong>Ligand binding — 2026</strong> is Viewer, so editing
+                        controls are not shown. Ask the owner, R. Mehta, for edit access if you need
+                        to change something.
+                      </p>
+                      <button
+                        type="button"
+                        style="
+                          margin-top: 12px;
+                          padding: 10px 15px;
+                          border: 1px solid rgba(11, 15, 25, 0.14);
+                          border-radius: 10px;
+                          background: #fff;
+                          font-size: 13.5px;
+                          font-weight: 600;
+                          cursor: pointer;
+                        "
+                      >
+                        Ask for edit access
+                      </button>
+                    </div>
+                  </div>
+                </sc-if>
+
+                <sc-if value="{{ showGreeting }}" hint-placeholder-val="{{ true }}">
+                  <div
+                    style="
+                      display: flex;
+                      flex-wrap: wrap;
+                      gap: 12px;
+                      align-items: flex-end;
+                      justify-content: space-between;
+                    "
+                  >
+                    <div>
+                      <h1 style="font-size:{{ greetFont }};font-weight:700;letter-spacing:-.025em">
+                        Good morning, Anna<button
+                          type="button"
+                          aria-label="Edit your name"
+                          style="
+                            margin-left: 8px;
+                            border: 0;
+                            background: none;
+                            cursor: pointer;
+                            padding: 2px;
+                          "
+                        >
+                          <span class="ms" style="font-size: 17px; color: #6f7889">edit</span>
+                        </button>
+                      </h1>
+                      <p style="margin-top: 5px; font-size: 13.5px; color: #5b6472">
+                        Saturday 5 September 2026 · Europe/Stockholm
+                      </p>
+                    </div>
+                    <div style="display: flex; gap: 9px">
+                      <button
+                        type="button"
+                        style="
+                          display: flex;
+                          align-items: center;
+                          gap: 7px;
+                          padding: 11px 16px;
+                          border: 1px solid rgba(11, 15, 25, 0.1);
+                          border-radius: 11px;
+                          background: #fff;
+                          font-size: 13.5px;
+                          font-weight: 600;
+                          cursor: pointer;
+                        "
+                      >
+                        <span class="ms" style="font-size: 18px; color: #2f6bfa">lightbulb</span
+                        >Capture an idea
+                      </button>
+                      <button
+                        type="button"
+                        style="
+                          display: flex;
+                          align-items: center;
+                          gap: 7px;
+                          padding: 11px 16px;
+                          border: 0;
+                          border-radius: 11px;
+                          background: #2f6bfa;
+                          color: #fff;
+                          font-size: 13.5px;
+                          font-weight: 600;
+                          cursor: pointer;
+                        "
+                      >
+                        <span class="ms" style="font-size: 18px">add</span>New deadline
+                      </button>
+                    </div>
+                  </div>
+                </sc-if>
+
+                <sc-if value="{{ isNewUser }}" hint-placeholder-val="{{ false }}">
+                  <div style="background: #fff; border-radius: 20px; padding: 34px">
+                    <h2 style="font-size: 21px; font-weight: 700; letter-spacing: -0.02em">
+                      Start with the next deadline
+                    </h2>
+                    <p
+                      style="
+                        margin-top: 9px;
+                        font-size: 14.5px;
+                        line-height: 1.6;
+                        color: #5b6472;
+                        max-width: 62ch;
+                      "
+                    >
+                      Your workspace is empty. Four things get it useful in about five minutes — not
+                      in order, and none of them required.
+                    </p>
+                    <div
+                      style="
+                        margin-top: 24px;
+                        display: grid;
+                        grid-template-columns: repeat(auto-fit, minmax(min(100%, 240px), 1fr));
+                        gap: 14px;
+                      "
+                    >
+                      <sc-for list="{{ onboarding }}" as="o" hint-placeholder-count="4">
+                        <div
+                          style="
+                            background: #f6f7fa;
+                            border-radius: 16px;
+                            padding: 20px;
+                            display: flex;
+                            flex-direction: column;
+                            gap: 9px;
+                          "
+                        >
+                          <span
+                            style="
+                              width: 38px;
+                              height: 38px;
+                              border-radius: 11px;
+                              background: #eaf0ff;
+                              display: grid;
+                              place-items: center;
+                            "
+                            ><span class="ms" style="font-size: 21px; color: #2f6bfa"
+                              >{{ o.icon }}</span
+                            ></span
+                          >
+                          <h3 style="font-size: 14.5px; font-weight: 700">{{ o.title }}</h3>
+                          <p style="font-size: 13px; line-height: 1.55; color: #5b6472">
+                            {{ o.copy }}
+                          </p>
+                          <a href="#" style="margin-top: auto; font-size: 13px; font-weight: 600"
+                            >{{ o.action }}</a
+                          >
+                        </div>
+                      </sc-for>
+                    </div>
+                    <p style="margin-top: 20px; font-size: 12.5px; color: #5b6472">
+                      Your timezone is Europe/Stockholm. Reminders and calendar defaults follow it —
+                      change it in Profile.
+                    </p>
+                  </div>
+                </sc-if>
+
+                <sc-if value="{{ showToday }}" hint-placeholder-val="{{ true }}">
+                  <div
+                    style="display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,200px),1fr));gap:{{ tileGap }}"
+                  >
+                    <sc-for list="{{ todayStrip }}" as="t" hint-placeholder-count="4">
+                      <a
+                        href="#"
+                        style="background:#fff;border-radius:16px;padding:{{ tilePad }};display:flex;align-items:center;gap:14px;color:#0b0f19;box-shadow:0 1px 2px rgba(11,15,25,.05)"
+                      >
+                        <span
+                          style="width:42px;height:42px;border-radius:12px;flex:none;display:grid;place-items:center;background:{{ t.tint }}"
+                          ><span class="ms" style="font-size:22px;color:{{ t.fg }}"
+                            >{{ t.icon }}</span
+                          ></span
+                        >
+                        <span>
+                          <span
+                            style="
+                              display: block;
+                              font-size: 27px;
+                              font-weight: 700;
+                              letter-spacing: -0.03em;
+                              line-height: 1;
+                            "
+                            >{{ t.value }}</span
+                          >
+                          <span
+                            style="
+                              display: block;
+                              margin-top: 4px;
+                              font-size: 12.5px;
+                              font-weight: 600;
+                              color: #3a4152;
+                            "
+                            >{{ t.label }}</span
+                          >
+                        </span>
+                      </a>
+                    </sc-for>
+                  </div>
+                </sc-if>
+
+                <sc-if value="{{ showCalendar }}" hint-placeholder-val="{{ true }}">
+                  <section
+                    style="background:#fff;border-radius:20px;padding:{{ panelPad }};box-shadow:0 1px 2px rgba(11,15,25,.05)"
+                  >
+                    <h2 style="font-size: 20px; font-weight: 700; letter-spacing: -0.02em">
+                      Deadlines &amp; calendar
+                    </h2>
+                    <div
+                      style="
+                        margin-top: 22px;
+                        display: flex;
+                        flex-wrap: wrap;
+                        gap: 12px;
+                        align-items: center;
+                        justify-content: space-between;
+                      "
+                    >
+                      <button
+                        type="button"
+                        style="
+                          display: flex;
+                          align-items: center;
+                          gap: 8px;
+                          border: 0;
+                          background: none;
+                          cursor: pointer;
+                          padding: 0;
+                        "
+                      >
+                        <span style="font-size: 25px; font-weight: 700; letter-spacing: -0.025em"
+                          >September 2026</span
+                        >
+                        <span class="ms" style="font-size: 22px; color: #5b6472">expand_more</span>
+                      </button>
+                      <div style="display: flex; gap: 8px">
+                        <button
+                          type="button"
+                          aria-label="Previous month"
+                          style="
+                            width: 42px;
+                            height: 42px;
+                            border: 1px solid rgba(11, 15, 25, 0.1);
+                            background: #fff;
+                            border-radius: 12px;
+                            display: grid;
+                            place-items: center;
+                            cursor: pointer;
+                          "
+                          style-hover="background:#f4f6fa"
+                        >
+                          <span class="ms" style="font-size: 21px; color: #3a4152"
+                            >chevron_left</span
+                          >
+                        </button>
+                        <button
+                          type="button"
+                          aria-label="Next month"
+                          style="
+                            width: 42px;
+                            height: 42px;
+                            border: 1px solid rgba(11, 15, 25, 0.1);
+                            background: #fff;
+                            border-radius: 12px;
+                            display: grid;
+                            place-items: center;
+                            cursor: pointer;
+                          "
+                          style-hover="background:#f4f6fa"
+                        >
+                          <span class="ms" style="font-size: 21px; color: #3a4152"
+                            >chevron_right</span
+                          >
+                        </button>
+                      </div>
+                    </div>
+                    <div
+                      style="
+                        margin-top: 20px;
+                        display: grid;
+                        grid-template-columns: repeat(7, minmax(0, 1fr));
+                      "
+                    >
+                      <sc-for list="{{ weekdays }}" as="d" hint-placeholder-count="7">
+                        <div
+                          style="
+                            padding: 0 6px 12px;
+                            font-size: 11px;
+                            font-weight: 700;
+                            letter-spacing: 0.11em;
+                            color: #5b6472;
+                            text-align: center;
+                          "
+                        >
+                          {{ d }}
+                        </div>
+                      </sc-for>
+                    </div>
+                    <div
+                      style="
+                        display: grid;
+                        grid-template-columns: repeat(7, minmax(0, 1fr));
+                        border-top: 1px solid rgba(11, 15, 25, 0.08);
+                        border-left: 1px solid rgba(11, 15, 25, 0.08);
+                      "
+                    >
+                      <sc-for list="{{ days }}" as="d" hint-placeholder-count="35">
+                        <div
+                          style="min-height:{{ cellH }};border-right:1px solid rgba(11,15,25,.08);border-bottom:1px solid rgba(11,15,25,.08);padding:8px;background:{{ d.bg }};display:flex;flex-direction:column;gap:5px;min-width:0"
+                        >
+                          <span
+                            style="min-width:24px;height:24px;padding:0 6px;border-radius:999px;display:inline-grid;place-items:center;justify-self:start;font-size:12px;font-weight:{{ d.weight }};background:{{ d.numBg }};color:{{ d.numFg }}"
+                            >{{ d.n }}</span
+                          >
+                          <sc-for list="{{ d.events }}" as="e" hint-placeholder-count="0">
+                            <span
+                              style="display:flex;align-items:center;gap:5px;padding:3px 6px;border-radius:6px;background:{{ e.bg }};min-width:0"
+                            >
+                              <span
+                                style="width:5px;height:5px;border-radius:50%;flex:none;background:{{ e.dot }}"
+                              ></span>
+                              <span
+                                style="font-size:11px;font-weight:600;color:{{ e.fg }};white-space:nowrap;overflow:hidden;text-overflow:ellipsis"
+                                >{{ e.label }}</span
+                              >
+                            </span>
+                          </sc-for>
+                        </div>
+                      </sc-for>
+                    </div>
+                    <div style="margin-top: 16px; display: flex; flex-wrap: wrap; gap: 16px">
+                      <sc-for list="{{ legend }}" as="l" hint-placeholder-count="3">
+                        <span
+                          style="
+                            display: flex;
+                            align-items: center;
+                            gap: 7px;
+                            font-size: 12.5px;
+                            color: #3a4152;
+                          "
+                          ><span
+                            style="width:9px;height:9px;border-radius:3px;background:{{ l.color }}"
+                          ></span
+                          >{{ l.label }}</span
+                        >
+                      </sc-for>
+                    </div>
+                  </section>
+                </sc-if>
+
+                <sc-if value="{{ showTiles }}" hint-placeholder-val="{{ true }}">
+                  <div>
+                    <div
+                      style="
+                        display: flex;
+                        align-items: baseline;
+                        justify-content: space-between;
+                        gap: 12px;
+                      "
+                    >
+                      <h2
+                        style="
+                          font-size: 12.5px;
+                          font-weight: 700;
+                          letter-spacing: 0.09em;
+                          color: #5b6472;
+                        "
+                      >
+                        YOUR WORKSPACE
+                      </h2>
+                      <span style="font-size: 12.5px; color: #5b6472"
+                        >{{ densityLabel }} density</span
+                      >
+                    </div>
+                    <div
+                      style="margin-top:12px;display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,280px),1fr));gap:{{ tileGap }}"
+                    >
+                      <sc-for list="{{ tiles }}" as="t" hint-placeholder-count="8">
+                        <a
+                          href="#"
+                          style="background:#fff;border-radius:16px;padding:{{ tilePad }};display:flex;flex-direction:column;gap:11px;color:#0b0f19;box-shadow:0 1px 2px rgba(11,15,25,.05)"
+                          style-hover="box-shadow:0 10px 26px -18px rgba(11,15,25,.5)"
+                        >
+                          <div style="display: flex; align-items: center; gap: 11px">
+                            <span
+                              style="width:36px;height:36px;border-radius:11px;flex:none;display:grid;place-items:center;background:{{ t.tint }}"
+                              ><span class="ms" style="font-size:20px;color:{{ t.fg }}"
+                                >{{ t.icon }}</span
+                              ></span
+                            >
+                            <h3 style="font-size: 15px; font-weight: 700; flex: 1">{{ t.name }}</h3>
+                            <span
+                              style="
+                                font-family: ui-monospace, Menlo, monospace;
+                                font-size: 12.5px;
+                                color: #5b6472;
+                              "
+                              >{{ t.count }}</span
+                            >
+                          </div>
+                          <sc-if value="{{ t.failed }}" hint-placeholder-val="{{ false }}">
+                            <div
+                              style="
+                                border-top: 1px solid rgba(11, 15, 25, 0.07);
+                                padding-top: 11px;
+                                display: flex;
+                                gap: 9px;
+                                align-items: flex-start;
+                              "
+                            >
+                              <span class="ms" style="font-size: 18px; color: #b4483c; flex: none"
+                                >error</span
+                              >
+                              <span>
+                                <span style="display: block; font-size: 12.5px; font-weight: 600"
+                                  >This panel failed to load</span
+                                >
+                                <span
+                                  style="
+                                    display: block;
+                                    margin-top: 3px;
+                                    font-size: 12px;
+                                    color: #5b6472;
+                                  "
+                                  >The rest of the dashboard is up to date.</span
+                                >
+                                <span
+                                  style="
+                                    display: inline-block;
+                                    margin-top: 7px;
+                                    font-size: 12.5px;
+                                    font-weight: 600;
+                                    color: #1d4fd8;
+                                  "
+                                  >Retry</span
+                                >
+                              </span>
+                            </div>
+                          </sc-if>
+                          <sc-if value="{{ t.ok }}" hint-placeholder-val="{{ true }}">
+                            <ul
+                              style="border-top:1px solid rgba(11,15,25,.07);padding-top:{{ previewPad }};display:flex;flex-direction:column;gap:{{ previewGap }}"
+                            >
+                              <sc-for list="{{ t.items }}" as="i" hint-placeholder-count="3">
+                                <li
+                                  style="display:flex;gap:9px;align-items:baseline;font-size:{{ previewFont }};line-height:1.4"
+                                >
+                                  <span
+                                    style="
+                                      width: 5px;
+                                      height: 5px;
+                                      border-radius: 50%;
+                                      background: #c3c9d6;
+                                      flex: none;
+                                      transform: translateY(-2px);
+                                    "
+                                  ></span>
+                                  <span
+                                    style="
+                                      flex: 1;
+                                      min-width: 0;
+                                      white-space: nowrap;
+                                      overflow: hidden;
+                                      text-overflow: ellipsis;
+                                      color: #3a4152;
+                                    "
+                                    >{{ i.text }}</span
+                                  >
+                                  <span
+                                    style="
+                                      font-size: 11.5px;
+                                      color: #5b6472;
+                                      flex: none;
+                                      font-family: ui-monospace, Menlo, monospace;
+                                    "
+                                    >{{ i.meta }}</span
+                                  >
+                                </li>
+                              </sc-for>
+                            </ul>
+                          </sc-if>
+                        </a>
+                      </sc-for>
+                    </div>
+                  </div>
+                </sc-if>
+              </main>
+            </div>
+
+            <sc-if value="{{ isLimit }}" hint-placeholder-val="{{ false }}">
+              <div
+                style="
+                  position: fixed;
+                  inset: 0;
+                  background: rgba(11, 15, 25, 0.42);
+                  display: flex;
+                  align-items: center;
+                  justify-content: center;
+                  padding: 24px;
+                  overflow: auto;
+                  z-index: 120;
+                "
+              >
+                <div
+                  style="
+                    background: #fff;
+                    border-radius: 20px;
+                    max-width: 470px;
+                    width: 100%;
+                    padding: 30px;
+                    box-shadow: 0 40px 90px -30px rgba(11, 15, 25, 0.6);
+                    margin: auto;
+                  "
+                >
+                  <div style="display: flex; align-items: flex-start; gap: 13px">
+                    <span
+                      style="
+                        width: 40px;
+                        height: 40px;
+                        border-radius: 12px;
+                        background: #fff6d1;
+                        display: grid;
+                        place-items: center;
+                        flex: none;
+                      "
+                      ><span class="ms" style="font-size: 22px; color: #7d6000"
+                        >workspace_premium</span
+                      ></span
+                    >
+                    <div>
+                      <h2 style="font-size: 18px; font-weight: 700; letter-spacing: -0.02em">
+                        You have used all 5 free projects
+                      </h2>
+                      <p style="margin-top: 8px; font-size: 14px; line-height: 1.6; color: #5b6472">
+                        Free accounts include 5 projects. Ideas, notes, journal entries, deadlines,
+                        calendar events, collaboration and reminders stay unlimited — only projects,
+                        career goals and literature are capped.
+                      </p>
+                    </div>
+                  </div>
+                  <div
+                    style="
+                      margin-top: 20px;
+                      background: #f6f7fa;
+                      border-radius: 14px;
+                      overflow: hidden;
+                    "
+                  >
+                    <sc-for list="{{ quotas }}" as="q" hint-placeholder-count="3">
+                      <div
+                        style="
+                          padding: 13px 15px;
+                          border-bottom: 1px solid rgba(11, 15, 25, 0.06);
+                          display: flex;
+                          align-items: center;
+                          gap: 12px;
+                        "
+                      >
+                        <span style="flex: 1; font-size: 13.5px; font-weight: 600"
+                          >{{ q.name }}</span
+                        >
+                        <span
+                          style="
+                            font-family: ui-monospace, Menlo, monospace;
+                            font-size: 12px;
+                            color: #5b6472;
+                          "
+                          >{{ q.used }} of 5</span
+                        >
+                        <span
+                          style="
+                            width: 76px;
+                            height: 6px;
+                            border-radius: 3px;
+                            background: #e2e5ec;
+                            flex: none;
+                            overflow: hidden;
+                          "
+                          ><span
+                            style="display:block;height:100%;width:{{ q.pct }};background:{{ q.bar }}"
+                          ></span
+                        ></span>
+                      </div>
+                    </sc-for>
+                  </div>
+                  <div style="margin-top: 20px; display: flex; flex-wrap: wrap; gap: 10px">
+                    <a
+                      href="#"
+                      style="
+                        flex: 1 1 180px;
+                        text-align: center;
+                        padding: 14px 18px;
+                        border-radius: 11px;
+                        background: #2f6bfa;
+                        color: #fff;
+                        font-size: 14px;
+                        font-weight: 600;
+                      "
+                      >See PRO — ₹499 / month</a
+                    >
+                    <button
+                      type="button"
+                      onClick="{{ closeLimit }}"
+                      style="
+                        flex: 1 1 120px;
+                        padding: 14px 18px;
+                        border: 1px solid rgba(11, 15, 25, 0.14);
+                        border-radius: 11px;
+                        background: #fff;
+                        font-size: 14px;
+                        font-weight: 600;
+                        cursor: pointer;
+                      "
+                    >
+                      Not now
+                    </button>
+                  </div>
+                  <p style="margin-top: 12px; font-size: 12.5px; color: #5b6472">
+                    Archiving a project frees a slot. Nothing is deleted when you reach the cap.
+                  </p>
+                </div>
+              </div>
+            </sc-if>
+          </div>
+        </sc-if>
+
+        <sc-if value="{{ isAuth }}" hint-placeholder-val="{{ false }}">
+          <div
+            style="
+              flex: 1;
+              display: grid;
+              grid-template-columns: repeat(auto-fit, minmax(min(100%, 430px), 1fr));
+              background: #fff;
+            "
+          >
+            <div
+              style="
+                background: linear-gradient(150deg, #dbe6fb 0%, #eaf0fb 45%, #f4f7fd 100%);
+                padding: 44px 48px;
+                display: flex;
+                flex-direction: column;
+                position: relative;
+              "
+            >
+              <button
+                type="button"
+                aria-label="Go back"
+                style="
+                  width: 40px;
+                  height: 40px;
+                  border: 0;
+                  background: none;
+                  border-radius: 10px;
+                  display: grid;
+                  place-items: center;
+                  cursor: pointer;
+                  align-self: flex-start;
+                "
+              >
+                <span class="ms" style="font-size: 26px; color: #2f6bfa">arrow_back</span>
+              </button>
+              <div style="margin: auto 0; max-width: 520px">
+                <div style="display: flex; align-items: center; gap: 11px">
+                  <img
+                    src="assets/skrivbok-logo.png"
+                    alt=""
+                    style="width: 46px; height: 46px; object-fit: contain"
+                  />
+                  <span style="font-size: 27px; font-weight: 800; letter-spacing: -0.035em"
+                    >Skrivbok<span style="color: #2f6bfa">.</span></span
+                  >
+                </div>
+                <h2
+                  style="
+                    margin-top: 44px;
+                    font-size: clamp(30px, 3.6vw, 44px);
+                    line-height: 1.1;
+                    letter-spacing: -0.04em;
+                    font-weight: 800;
+                    text-wrap: pretty;
+                  "
+                >
+                  Ready to run <span style="color: #2f6bfa">your whole</span> research career from
+                  one place?
+                </h2>
+                <p
+                  style="
+                    margin-top: 26px;
+                    font-size: 17px;
+                    line-height: 1.62;
+                    color: #3d4657;
+                    max-width: 44ch;
+                    text-wrap: pretty;
+                  "
+                >
+                  Projects, deadlines, literature, ideas, calendar and career goals — held together
+                  for as long as the work runs.
+                </p>
+                <ul style="margin-top: 32px; display: flex; flex-direction: column; gap: 14px">
+                  <sc-for list="{{ authPoints }}" as="p" hint-placeholder-count="3">
+                    <li
+                      style="
+                        display: flex;
+                        gap: 11px;
+                        align-items: flex-start;
+                        font-size: 14.5px;
+                        line-height: 1.55;
+                        color: #3d4657;
+                      "
+                    >
+                      <span class="ms" style="font-size: 20px; color: #2f6bfa; flex: none"
+                        >check_circle</span
+                      >{{ p }}
+                    </li>
+                  </sc-for>
+                </ul>
+              </div>
+            </div>
+
+            <div
+              style="
+                padding: 52px 40px;
+                display: flex;
+                align-items: flex-start;
+                justify-content: center;
+                background: #fff;
+              "
+            >
+              <div style="width: 100%; max-width: 420px">
+                <h1 style="font-size: 32px; font-weight: 800; letter-spacing: -0.035em">
+                  {{ authTitle }}
+                </h1>
+                <p style="margin-top: 9px; font-size: 16px; color: #5b6472">{{ authSub }}</p>
+
+                <div
+                  style="
+                    margin-top: 28px;
+                    display: grid;
+                    grid-template-columns: 1fr 1fr;
+                    border-bottom: 1px solid rgba(11, 15, 25, 0.1);
+                  "
+                >
+                  <button
+                    type="button"
+                    onClick="{{ pickLogin }}"
+                    style="border:0;background:none;padding:13px 8px;font-size:15px;font-weight:700;cursor:pointer;color:{{ loginTabFg }};border-bottom:2.5px solid {{ loginTabLine }};margin-bottom:-1px"
+                  >
+                    Login
+                  </button>
+                  <button
+                    type="button"
+                    onClick="{{ pickRegister }}"
+                    style="border:0;background:none;padding:13px 8px;font-size:15px;font-weight:700;cursor:pointer;color:{{ regTabFg }};border-bottom:2.5px solid {{ regTabLine }};margin-bottom:-1px"
+                  >
+                    Sign Up
+                  </button>
+                </div>
+
+                <sc-if value="{{ authAlert }}" hint-placeholder-val="{{ false }}">
+                  <div
+                    style="
+                      margin-top: 22px;
+                      border: 1px solid rgba(180, 72, 60, 0.3);
+                      background: #fdf3f2;
+                      border-radius: 12px;
+                      padding: 13px 15px;
+                      display: flex;
+                      gap: 11px;
+                      align-items: flex-start;
+                    "
+                  >
+                    <span class="ms" style="font-size: 19px; color: #b4483c; flex: none"
+                      >error</span
+                    >
+                    <div>
+                      <p style="font-size: 13.5px; font-weight: 700; color: #7d2d24">
+                        {{ authAlertTitle }}
+                      </p>
+                      <p
+                        style="margin-top: 4px; font-size: 13px; line-height: 1.55; color: #7d3f36"
+                      >
+                        {{ authAlertBody }}
+                      </p>
+                    </div>
+                  </div>
+                </sc-if>
+
+                <div style="margin-top: 26px; display: flex; flex-direction: column; gap: 12px">
+                  <button
+                    type="button"
+                    style="
+                      width: 100%;
+                      height: 52px;
+                      border: 1px solid rgba(11, 15, 25, 0.14);
+                      border-radius: 999px;
+                      background: #fff;
+                      font-size: 15px;
+                      font-weight: 700;
+                      cursor: pointer;
+                      display: flex;
+                      align-items: center;
+                      justify-content: center;
+                      gap: 11px;
+                      box-shadow: 0 1px 2px rgba(11, 15, 25, 0.05);
+                    "
+                  >
+                    <span
+                      style="
+                        width: 22px;
+                        height: 22px;
+                        border-radius: 50%;
+                        background: #f2f4f8;
+                        display: grid;
+                        place-items: center;
+                        font-size: 12px;
+                        font-weight: 800;
+                        color: #d3372e;
+                      "
+                      >G</span
+                    >
+                    Continue with Google
+                  </button>
+                  <button
+                    type="button"
+                    style="
+                      width: 100%;
+                      height: 52px;
+                      border: 0;
+                      border-radius: 999px;
+                      background: #0a66c2;
+                      color: #fff;
+                      font-size: 15px;
+                      font-weight: 700;
+                      cursor: pointer;
+                      display: flex;
+                      align-items: center;
+                      justify-content: center;
+                      gap: 11px;
+                    "
+                  >
+                    <span
+                      style="
+                        width: 22px;
+                        height: 22px;
+                        border-radius: 5px;
+                        background: rgba(255, 255, 255, 0.22);
+                        display: grid;
+                        place-items: center;
+                        font-size: 11px;
+                        font-weight: 800;
+                      "
+                      >in</span
+                    >
+                    Continue with LinkedIn
+                  </button>
+                </div>
+
+                <div style="margin-top: 26px; display: flex; align-items: center; gap: 14px">
+                  <span style="flex: 1; height: 1px; background: rgba(11, 15, 25, 0.1)"></span>
+                  <span
+                    style="
+                      font-size: 11.5px;
+                      font-weight: 700;
+                      letter-spacing: 0.1em;
+                      color: #5b6472;
+                    "
+                    >OR</span
+                  >
+                  <span style="flex: 1; height: 1px; background: rgba(11, 15, 25, 0.1)"></span>
+                </div>
+
+                <form
+                  onSubmit="{{ noSubmit }}"
+                  style="margin-top: 24px; display: flex; flex-direction: column; gap: 18px"
+                >
+                  <sc-if value="{{ isRegister }}" hint-placeholder-val="{{ false }}">
+                    <label
+                      style="
+                        display: flex;
+                        flex-direction: column;
+                        gap: 8px;
+                        font-size: 14px;
+                        font-weight: 700;
+                        color: #0b0f19;
+                      "
+                      >Full Name
+                      <input
+                        placeholder="Enter your full name"
+                        style="
+                          height: 54px;
+                          padding: 0 16px;
+                          border-radius: 14px;
+                          border: 1px solid rgba(11, 15, 25, 0.13);
+                          background: #fff;
+                          font-size: 15px;
+                          box-shadow: 0 1px 2px rgba(11, 15, 25, 0.04);
+                        "
+                      />
+                    </label>
+                  </sc-if>
+                  <label
+                    style="
+                      display: flex;
+                      flex-direction: column;
+                      gap: 8px;
+                      font-size: 14px;
+                      font-weight: 700;
+                      color: #0b0f19;
+                    "
+                    >Email Address
+                    <input
+                      type="email"
+                      placeholder="Enter your email"
+                      aria-invalid="{{ emailInvalid }}"
+                      style="height:54px;padding:0 16px;border-radius:14px;border:1px solid {{ emailBorder }};background:#fff;font-size:15px;box-shadow:0 1px 2px rgba(11,15,25,.04)"
+                    />
+                    <sc-if value="{{ emailError }}" hint-placeholder-val="{{ false }}">
+                      <span style="font-size: 12.5px; color: #b4483c; font-weight: 600"
+                        >An account with this email already exists.
+                        <a href="#">Sign in instead</a></span
+                      >
+                    </sc-if>
+                  </label>
+                  <div>
+                    <div
+                      style="
+                        display: flex;
+                        align-items: baseline;
+                        justify-content: space-between;
+                        gap: 12px;
+                      "
+                    >
+                      <label for="pw" style="font-size: 14px; font-weight: 700; color: #0b0f19"
+                        >Password</label
+                      >
+                      <sc-if value="{{ isLogin }}" hint-placeholder-val="{{ true }}">
+                        <a href="#" style="font-size: 13.5px; font-weight: 600">Forgot Password?</a>
+                      </sc-if>
+                    </div>
+                    <input
+                      id="pw"
+                      type="password"
+                      placeholder="At least 8 characters"
+                      style="margin-top:8px;width:100%;height:54px;padding:0 16px;border-radius:14px;border:1px solid {{ pwBorder }};background:#fff;font-size:15px;box-shadow:0 1px 2px rgba(11,15,25,.04)"
+                    />
+                    <sc-if value="{{ pwError }}" hint-placeholder-val="{{ false }}">
+                      <p
+                        style="margin-top: 7px; font-size: 12.5px; color: #b4483c; font-weight: 600"
+                      >
+                        Too short: expected at least 8 characters
+                      </p>
+                    </sc-if>
+                    <sc-if value="{{ isRegister }}" hint-placeholder-val="{{ false }}">
+                      <p style="margin-top: 7px; font-size: 12.5px; color: #5b6472">
+                        Minimum 8 characters. No symbol or number is required.
+                      </p>
+                    </sc-if>
+                  </div>
+                  <sc-if value="{{ isRegister }}" hint-placeholder-val="{{ false }}">
+                    <label
+                      style="
+                        display: flex;
+                        flex-direction: column;
+                        gap: 8px;
+                        font-size: 14px;
+                        font-weight: 700;
+                        color: #0b0f19;
+                      "
+                      >Timezone
+                      <span style="position: relative; display: flex; align-items: center">
+                        <select
+                          style="
+                            width: 100%;
+                            height: 54px;
+                            padding: 0 42px 0 16px;
+                            border-radius: 14px;
+                            border: 1px solid rgba(11, 15, 25, 0.13);
+                            background: #fff;
+                            font-size: 15px;
+                            appearance: none;
+                            box-shadow: 0 1px 2px rgba(11, 15, 25, 0.04);
+                          "
+                        >
+                          <option>Europe/Stockholm — detected</option>
+                          <option>Europe/London</option>
+                          <option>Asia/Kolkata</option>
+                          <option>America/New_York</option>
+                        </select>
+                        <span
+                          class="ms"
+                          style="
+                            position: absolute;
+                            right: 14px;
+                            font-size: 20px;
+                            color: #5b6472;
+                            pointer-events: none;
+                          "
+                          >expand_more</span
+                        >
+                      </span>
+                      <span style="font-size: 12.5px; font-weight: 500; color: #5b6472"
+                        >Deadline reminders and calendar defaults use this. You can change it
+                        later.</span
+                      >
+                    </label>
+                  </sc-if>
+                  <button
+                    type="submit"
+                    disabled="{{ submitting }}"
+                    style="height:56px;border:0;border-radius:999px;background:#ffe01f;color:#0b0f19;font-size:16px;font-weight:700;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:10px;opacity:{{ submitOpacity }};box-shadow:0 8px 20px -12px rgba(180,150,0,.8)"
+                  >
+                    <sc-if value="{{ submitting }}" hint-placeholder-val="{{ false }}">
+                      <span class="ms" style="font-size: 19px">progress_activity</span>
+                    </sc-if>
+                    {{ submitLabel }}
+                  </button>
+                </form>
+
+                <p
+                  style="
+                    margin-top: 22px;
+                    text-align: center;
+                    font-size: 13px;
+                    line-height: 1.6;
+                    color: #5b6472;
+                  "
+                >
+                  By continuing you agree to our
+                  <a href="#" style="font-weight: 600; text-decoration: underline">Terms</a>,
+                  <a href="#" style="font-weight: 600; text-decoration: underline"
+                    >End User Agreement</a
+                  >
+                  and
+                  <a href="#" style="font-weight: 600; text-decoration: underline">Privacy Policy</a
+                  >.
+                </p>
+              </div>
+            </div>
+          </div>
+        </sc-if>
+      </div>
+    </x-dc>
+    <script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1440,"height":960}}'>
+      const NAV = [
+        { icon: "dashboard", name: "Dashboard", count: "", active: true },
+        { icon: "lightbulb", name: "Ideas", count: "128" },
+        { icon: "sticky_note_2", name: "Notes", count: "64" },
+        { icon: "history_edu", name: "Journal", count: "712" },
+        { icon: "folder_open", name: "Projects", count: "7" },
+        { icon: "menu_book", name: "Literature", count: "312" },
+        { icon: "flag", name: "Deadlines", count: "41" },
+        { icon: "calendar_month", name: "Calendar", count: "" },
+        { icon: "groups", name: "Meetings", count: "2" },
+        { icon: "stairs", name: "Career goals", count: "4" },
+        { icon: "badge", name: "Profile", count: "" },
+        { icon: "settings", name: "Settings", count: "" }
+      ];
+
+      const DEADLINE = { bg: "#fdeceb", dot: "#b4483c", fg: "#8a382e" };
+      const EVENT = { bg: "#eaf0ff", dot: "#2f6bfa", fg: "#22459c" };
+      const BUSY = { bg: "#f0f2f6", dot: "#8b93a3", fg: "#4a515f" };
+
+      const MONTH_EVENTS = {
+        1: [{ ...EVENT, label: "Supervision" }],
+        3: [{ ...DEADLINE, label: "Referee report" }],
+        5: [{ ...EVENT, label: "Lab meeting" }, { ...BUSY, label: "Busy" }],
+        8: [{ ...EVENT, label: "Cohort call" }],
+        10: [{ ...DEADLINE, label: "Grant report" }],
+        14: [{ ...EVENT, label: "Seminar" }],
+        17: [{ ...DEADLINE, label: "JMLR revision" }],
+        18: [{ ...BUSY, label: "Busy" }],
+        22: [{ ...EVENT, label: "Supervision" }],
+        25: [{ ...DEADLINE, label: "Ethics annex" }],
+        29: [{ ...EVENT, label: "Dept. meeting" }]
+      };
+
+      class Component extends DCLogic {
+        state = { screen: "dashboard", view: "default", density: "comfortable", collapsed: false, notifOpen: false, authTab: "login" };
+
+        renderVals() {
+          const { screen, view, density, collapsed, notifOpen, authTab } = this.state;
+          const compact = density === "compact";
+          const isApp = screen === "dashboard";
+          const isLogin = !isApp && authTab === "login";
+          const isRegister = !isApp && authTab === "register";
+
+          const appViews = [
+            { id: "default", label: "Default — loaded" },
+            { id: "loading", label: "Loading — skeleton" },
+            { id: "empty", label: "Empty — brand-new user" },
+            { id: "filtered", label: "Empty after search" },
+            { id: "error", label: "Error — dashboard failed" },
+            { id: "readonly", label: "Read-only (403)" },
+            { id: "limit", label: "Limit reached — 5 projects" },
+            { id: "partial", label: "Partial — one tile failed" }
+          ];
+          const authViews = [
+            { id: "default", label: "Default" },
+            { id: "submitting", label: "Loading — submitting" },
+            { id: "credentials", label: "Error — wrong credentials" },
+            { id: "ratelimited", label: "Error — rate limited (429)" },
+            { id: "oauth", label: "Error — Google declined" },
+            { id: "validation", label: "Error — inline field errors" }
+          ];
+
+          const notes = {
+            default: isApp ? "Dense list screens come next — Ideas is the template." : "Tabs switch Login and Sign Up in place.",
+            loading: "Skeleton matches the real layout — no centred spinner.",
+            empty: "The onboarding moment. Nothing is required.",
+            filtered: "Different copy from first-use empty.",
+            error: "requestId is quotable in a support report.",
+            readonly: "Role controls are hidden, per your pick.",
+            limit: "A natural next step, not a penalty.",
+            partial: "One panel failed; the rest is current.",
+            submitting: "Button disabled while the request is in flight.",
+            credentials: "Identical message for unknown account and wrong password.",
+            ratelimited: "429 — wait, do not retry immediately.",
+            oauth: "Handles google_declined | state_mismatch | failed.",
+            validation: "details[] maps to per-field errors, not a toast."
+          };
+
+          const filtered = view === "filtered";
+          const tint = (t, f) => ({ tint: t, fg: f });
+
+          const baseTiles = [
+            { icon: "flag", name: "Deadlines", count: "41", ...tint("#fdeceb", "#a8443a"), items: [
+              { text: "Referee report — JMLR", meta: "overdue 2d" },
+              { text: "Grant interim report", meta: "today 17:00" },
+              { text: "Cohort review submission", meta: "Mon" }
+            ] },
+            { icon: "calendar_month", name: "Calendar", count: "4 today", ...tint("#eaf0ff", "#2454c9"), items: [
+              { text: "Supervision — Alvarsson", meta: "09:00" },
+              { text: "Lab meeting", meta: "11:00" },
+              { text: "Busy — details private", meta: "15:30" }
+            ] },
+            { icon: "folder_open", name: "Projects", count: "7", ...tint("#eaf0ff", "#2454c9"), items: [
+              { text: "Ligand binding — 2026", meta: "62%" },
+              { text: "Cohort study, wave 3", meta: "40%" },
+              { text: "Review paper (shared)", meta: "15%" }
+            ] },
+            { icon: "menu_book", name: "Literature", count: "312", ...tint("#eef1f6", "#3a4152"), items: [
+              { text: "Sparse attention in long docs", meta: "2025" },
+              { text: "Reproducibility in HCI", meta: "2024" },
+              { text: "Cohort attrition methods", meta: "2023" }
+            ] },
+            { icon: "lightbulb", name: "Ideas", count: "128", ...tint("#fff6d1", "#7d6000"), items: [
+              { text: "Reuse the 2024 pipeline for wave 3", meta: "2d" },
+              { text: "Ask M. about the ethics annex", meta: "4d" },
+              { text: "Follow-up study on attrition", meta: "1w" }
+            ] },
+            { icon: "history_edu", name: "Journal", count: "712", ...tint("#eef1f6", "#3a4152"), items: [
+              { text: "Run 14 — parameters logged", meta: "yesterday" },
+              { text: "Failed approach, noted why", meta: "Wed" },
+              { text: "Reading notes, Chapter 4", meta: "Tue" }
+            ] },
+            { icon: "stairs", name: "Career goals", count: "4", ...tint("#eaf0ff", "#2454c9"), items: [
+              { text: "Promotion case — stage 3 of 5", meta: "60%" },
+              { text: "Two first-author papers", meta: "50%" },
+              { text: "Supervise a PhD to completion", meta: "25%" }
+            ] },
+            { icon: "groups", name: "Meetings", count: "2 pending", ...tint("#eef1f6", "#3a4152"), items: [
+              { text: "R. Mehta — Thu 14:00", meta: "inbox" },
+              { text: "K. Osei — Fri 10:30", meta: "sent" },
+              { text: "Clashes with Lab meeting", meta: "conflict" }
+            ] }
+          ];
+
+          const tiles = baseTiles.map((t, i) => {
+            const failed = view === "partial" && i === 3;
+            return { ...t, failed, ok: !failed, count: failed ? "—" : t.count };
+          });
+
+          const days = [];
+          for (let i = 30; i <= 31; i++) days.push({ n: String(i), out: true });
+          for (let i = 1; i <= 30; i++) days.push({ n: String(i), out: false });
+          for (let i = 1; days.length < 35; i++) days.push({ n: String(i), out: true });
+          const calendarDays = days.map(d => {
+            const today = !d.out && d.n === "5";
+            const num = Number(d.n);
+            return {
+              n: d.n,
+              bg: d.out ? "#fafbfc" : "#fff",
+              weight: today ? "700" : "600",
+              numBg: today ? "#2f6bfa" : "transparent",
+              numFg: today ? "#fff" : (d.out ? "#8b93a3" : "#0b0f19"),
+              events: d.out ? [] : (MONTH_EVENTS[num] || [])
+            };
+          });
+
+          const authAlerts = {
+            credentials: { title: "That email and password do not match", body: "Check both and try again. If you signed up with Google or LinkedIn, use those buttons above." },
+            ratelimited: { title: "Too many attempts", body: "For security, sign-in is paused for a few minutes. Nothing is wrong with your account." },
+            oauth: { title: "Google sign-in did not complete", body: "The request was declined or expired before it finished. Try again, or sign in with your email and password." }
+          };
+          const alert = !isApp ? authAlerts[view] : null;
+          const validation = !isApp && view === "validation";
+
+          return {
+            screen, view, isApp, isAuth: !isApp, isLogin, isRegister,
+            viewOptions: isApp ? appViews : authViews,
+            viewNote: notes[view] || "",
+            setScreen: e => this.setState({ screen: e.target.value, view: "default", notifOpen: false }),
+            setView: e => this.setState({ view: e.target.value }),
+            setCompact: () => this.setState({ density: "compact" }),
+            setComfortable: () => this.setState({ density: "comfortable" }),
+            comfBg: compact ? "transparent" : "#2f6bfa", comfFg: compact ? "#c9cede" : "#fff",
+            compBg: compact ? "#2f6bfa" : "transparent", compFg: compact ? "#fff" : "#c9cede",
+            densityLabel: compact ? "Compact" : "Comfortable",
+            toggleCollapse: () => this.setState(s => ({ collapsed: !s.collapsed })),
+            collapseLabel: collapsed ? "Expand sidebar" : "Collapse sidebar",
+            expanded: !collapsed,
+            sidebarW: collapsed ? "76px" : "258px",
+            navJustify: collapsed ? "center" : "flex-start",
+            railPad: compact ? "10px" : "12px",
+            toggleNotif: () => this.setState(s => ({ notifOpen: !s.notifOpen })),
+            notifOpen,
+            closeLimit: () => this.setState({ view: "default" }),
+            noSubmit: e => e.preventDefault(),
+            pickLogin: () => this.setState({ authTab: "login" }),
+            pickRegister: () => this.setState({ authTab: "register" }),
+            loginTabFg: isLogin ? "#0b0f19" : "#5b6472",
+            loginTabLine: isLogin ? "#2f6bfa" : "transparent",
+            regTabFg: isRegister ? "#0b0f19" : "#5b6472",
+            regTabLine: isRegister ? "#2f6bfa" : "transparent",
+
+            navPad: compact ? "9px 11px" : "11px 13px",
+            navFont: compact ? "13.5px" : "14.5px",
+            barH: compact ? "62px" : "72px",
+            mainPad: compact ? "18px 20px 40px" : "26px 26px 56px",
+            sectionGap: compact ? "18px" : "24px",
+            greetFont: compact ? "22px" : "26px",
+            tilePad: compact ? "14px" : "18px",
+            tileGap: compact ? "10px" : "14px",
+            panelPad: compact ? "20px" : "28px",
+            cellH: compact ? "78px" : "104px",
+            previewPad: compact ? "9px" : "11px",
+            previewGap: compact ? "5px" : "7px",
+            previewFont: compact ? "12.5px" : "13px",
+
+            isLoading: view === "loading",
+            isError: view === "error",
+            isReadOnly: view === "readonly",
+            isNewUser: view === "empty",
+            isLimit: view === "limit",
+            showGreeting: !["loading", "error"].includes(view),
+            showToday: !["loading", "error", "empty"].includes(view),
+            showCalendar: !["loading", "error", "empty", "filtered"].includes(view),
+            showTiles: !["loading", "error", "empty"].includes(view),
+            four: [1, 2, 3, 4],
+
+            navItems: NAV.map(i => ({
+              ...i,
+              showCount: !!i.count && !collapsed,
+              bg: i.active ? "#eaf0ff" : "transparent",
+              fg: i.active ? "#1d4fd8" : "#3a4152",
+              iconFg: i.active ? "#2f6bfa" : "#6f7889",
+              weight: i.active ? "700" : "500"
+            })),
+            sideFooter: [{ icon: "help", name: "Help & feedback" }, { icon: "logout", name: "Sign out" }],
+
+            weekdays: ["SUN", "MON", "TUE", "WED", "THU", "FRI", "SAT"],
+            days: calendarDays,
+            legend: [
+              { label: "Deadline", color: "#b4483c" },
+              { label: "Event", color: "#2f6bfa" },
+              { label: "Busy — details private", color: "#8b93a3" }
+            ],
+
+            todayStrip: filtered ? [
+              { icon: "search_off", value: "0", label: "results for “attrition”", tint: "#eef1f6", fg: "#3a4152" },
+              { icon: "flag", value: "41", label: "deadlines, unfiltered", tint: "#eef1f6", fg: "#3a4152" },
+              { icon: "filter_alt_off", value: "3", label: "filters applied", tint: "#eef1f6", fg: "#3a4152" },
+              { icon: "restart_alt", value: "—", label: "clear all filters", tint: "#eaf0ff", fg: "#2454c9" }
+            ] : [
+              { icon: "priority_high", value: "2", label: "Overdue", tint: "#fdeceb", fg: "#a8443a" },
+              { icon: "today", value: "3", label: "Due today", tint: "#fff6d1", fg: "#7d6000" },
+              { icon: "event", value: "4", label: "Events today", tint: "#eaf0ff", fg: "#2454c9" },
+              { icon: "mark_email_unread", value: "1", label: "Meeting request", tint: "#eef1f6", fg: "#3a4152" }
+            ],
+            tiles: filtered ? tiles.slice(0, 4).map(t => ({ ...t, count: "0", failed: false, ok: true, items: [{ text: "No matches in this area", meta: "" }] })) : tiles,
+
+            onboarding: [
+              { icon: "flag", title: "Add a deadline", copy: "One thing due this month, with a reminder in your timezone.", action: "Add a deadline" },
+              { icon: "folder_open", title: "Create a project", copy: "A line of work that notes, deadlines and events can belong to.", action: "Create a project" },
+              { icon: "menu_book", title: "Add three papers", copy: "The ones you keep reopening. Tag them once and find them later.", action: "Add literature" },
+              { icon: "badge", title: "Fill in your profile", copy: "Degrees, appointments and grants — the CV generates from it.", action: "Open profile" }
+            ],
+            quotas: [
+              { name: "Projects", used: "5", pct: "100%", bar: "#b4483c" },
+              { name: "Career goals", used: "4", pct: "80%", bar: "#2f6bfa" },
+              { name: "Literature entries", used: "5", pct: "100%", bar: "#b4483c" }
+            ],
+            notifications: [
+              { icon: "flag", title: "Referee report — JMLR is overdue", message: "Was due 3 September, 17:00 Europe/Stockholm.", time: "2 days ago", unread: true, bg: "#f7f9ff", tint: "#fdeceb", fg: "#a8443a" },
+              { icon: "mark_email_unread", title: "Meeting request from R. Mehta", message: "Thursday 14:00–15:00 · clashes with Lab meeting.", time: "4 hours ago", unread: true, bg: "#f7f9ff", tint: "#eaf0ff", fg: "#2454c9" },
+              { icon: "how_to_reg", title: "K. Osei accepted your meeting", message: "Friday 10:30–11:00. Added to both calendars.", time: "yesterday", unread: true, bg: "#f7f9ff", tint: "#eaf0ff", fg: "#2454c9" },
+              { icon: "lock_open", title: "Calendar access granted", message: "M. Alvarsson gave you free/busy access.", time: "3 days ago", unread: false, bg: "#fff", tint: "#eef1f6", fg: "#3a4152" },
+              { icon: "group_add", title: "Project invitation", message: "Review paper — you were invited as Editor.", time: "last week", unread: false, bg: "#fff", tint: "#eef1f6", fg: "#3a4152" }
+            ],
+
+            authTitle: isRegister ? "Create account" : "Welcome back",
+            authSub: isRegister ? "Free to start, and free to keep using." : "Sign in to pick up where you left off.",
+            submitLabel: view === "submitting" ? (isRegister ? "Creating your account…" : "Signing in…") : (isRegister ? "Create Account" : "Sign In"),
+            submitting: view === "submitting",
+            submitOpacity: view === "submitting" ? "0.65" : "1",
+            authAlert: !!alert, authAlertTitle: alert ? alert.title : "", authAlertBody: alert ? alert.body : "",
+            emailError: validation && isRegister,
+            emailInvalid: validation ? "true" : "false",
+            emailBorder: validation ? "#b4483c" : "rgba(11,15,25,.13)",
+            pwError: validation,
+            pwBorder: validation ? "#b4483c" : "rgba(11,15,25,.13)",
+            authPoints: [
+              "Deadlines with real timezones and email reminders at the hour you choose.",
+              "Calendar sharing with two access levels — private events stay private.",
+              "A literature library that still works at three hundred entries."
+            ]
+          };
+        }
+      }
+    </script>
+  </body>
+</html>

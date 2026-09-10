@@ -1,0 +1,55 @@
+{
+  "name": "skrivbok",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Skrivbok — a space to write, organize and grow",
+  "license": "UNLICENSED",
+  "type": "module",
+  "engines": {
+    "node": ">=22.0.0"
+  },
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "dev": "npm run dev --workspace @skrivbok/server",
+    "build": "npm run build --workspace @skrivbok/server",
+    "start": "npm run start --workspace @skrivbok/server",
+    "typecheck": "npm run typecheck --workspaces --if-present",
+    "lint": "eslint .",
+    "lint:fix": "eslint . --fix",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "db:up": "docker compose up -d postgres",
+    "db:down": "docker compose down",
+    "db:logs": "docker compose logs -f postgres",
+    "db:migrate": "npm run db:migrate --workspace @skrivbok/server",
+    "db:deploy": "npm run db:deploy --workspace @skrivbok/server",
+    "db:seed": "npm run db:seed --workspace @skrivbok/server",
+    "db:studio": "npm run db:studio --workspace @skrivbok/server",
+    "db:reset": "npm run db:reset --workspace @skrivbok/server",
+    "db:generate": "npm run db:generate --workspace @skrivbok/server",
+    "db:validate": "npm run db:validate --workspace @skrivbok/server",
+    "worker": "npm run worker:dev --workspace @skrivbok/server",
+    "test": "npm run test --workspace @skrivbok/server",
+    "test:watch": "npm run test:watch --workspace @skrivbok/server",
+    "test:coverage": "npm run test:coverage --workspace @skrivbok/server",
+    "db:test:setup": "npm run db:test:setup --workspace @skrivbok/server",
+    "dev:web": "npm run dev --workspace @skrivbok/web",
+    "dev:server": "npm run dev --workspace @skrivbok/server",
+    "build:web": "npm run build --workspace @skrivbok/web"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.39.4",
+    "eslint": "^9.39.4",
+    "eslint-config-prettier": "^10.1.8",
+    "globals": "^17.4.0",
+    "prettier": "^3.6.2",
+    "typescript": "^5.9.3",
+    "typescript-eslint": "^8.58.0"
+  },
+  "overrides": {
+    "deepmerge-ts": "^8.0.0"
+  }
+}

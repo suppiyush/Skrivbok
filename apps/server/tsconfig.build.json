@@ -1,0 +1,11 @@
+{
+  // Production build only: source in, tests out.
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "rootDir": "./src",
+    "tsBuildInfoFile": "./dist/.tsbuildinfo.build",
+    "types": ["node"]
+  },
+  "include": ["src/**/*.ts"],
+  "exclude": ["node_modules", "dist", "tests", "vitest.config.ts"]
+}

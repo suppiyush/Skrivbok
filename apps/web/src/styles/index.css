@@ -1,0 +1,459 @@
+@import 'tailwindcss';
+
+/* ============================================================================
+   Skrivbok design tokens
+
+   Extracted from the approved Claude Design files:
+     design/Skrivbok App.dc.html   (readable source)
+     design/Skrivbok Landing.html  (rendered and sampled)
+
+   Every value below appears in one of those two files. Nothing is invented.
+   ========================================================================== */
+
+@theme {
+  /* ── Neutral ramp ──────────────────────────────────────────────────────── */
+  --color-ink: #0b0f19; /* headings, primary text */
+  --color-ink-2: #3a4152; /* secondary text, nav labels */
+  --color-ink-3: #5b6472; /* body copy, meta */
+  --color-ink-4: #6f7889; /* icon rest state */
+  --color-ink-5: #8b93a3; /* disabled, busy blocks */
+
+  --color-canvas: #eef0f4; /* app background */
+  --color-canvas-alt: #f1f3f7; /* marketing background */
+  --color-surface: #ffffff; /* cards, sidebar, header */
+  --color-surface-2: #f2f4f8; /* inset fields, hover */
+  --color-surface-3: #f4f6fa; /* nav hover */
+  --color-surface-4: #eef1f6; /* neutral tint */
+  --color-surface-5: #fbfbfd; /* subtle panel */
+
+  --color-line: rgb(11 15 25 / 0.07); /* standard border */
+  --color-line-2: rgb(11 15 25 / 0.14); /* button border */
+  --color-line-3: #e2e5ec; /* skeleton fill */
+
+  /* ── Primary ───────────────────────────────────────────────────────────── */
+  --color-brand: #2f6bfa;
+  --color-brand-ink: #1d4fd8; /* links */
+  --color-brand-ink-2: #2454c9; /* icon on tint */
+  --color-brand-deep: #22459c;
+  --color-brand-tint: #eaf0ff;
+  --color-brand-tint-2: #f7f9ff;
+  --color-brand-avatar: #dbe6ff;
+  --color-brand-avatar-ink: #274a95;
+
+  /* ── Accent: the yellow used for primary marketing CTAs ────────────────── */
+  --color-accent: #ffd60a;
+  --color-accent-ink: #7d6000;
+  --color-accent-tint: #fff6d1;
+
+  /* ── Semantic ──────────────────────────────────────────────────────────── */
+  --color-danger: #b4483c;
+  --color-danger-ink: #8a382e;
+  --color-danger-strong: #d3372e; /* notification badge */
+  --color-danger-tint: #fdeceb;
+  --color-danger-alt: #a8443a;
+
+  --color-warn: #c98a00;
+  --color-warn-ink: #7d6000;
+  --color-warn-tint: #fff6d1;
+
+  --color-shell: #171c28; /* dark chrome */
+  --color-shell-ink: #c9cede;
+  --color-shell-muted: #9aa1b0;
+
+  /* ── Typography ────────────────────────────────────────────────────────── */
+  --font-sans: 'Figtree', system-ui, -apple-system, sans-serif;
+  --font-mono: ui-monospace, Menlo, 'Cascadia Mono', monospace;
+
+  /* ── Radius ────────────────────────────────────────────────────────────── */
+  --radius-xs: 6px;
+  --radius-sm: 8px;
+  --radius-md: 10px;
+  --radius-lg: 12px;
+  --radius-xl: 16px;
+  --radius-2xl: 20px;
+  --radius-3xl: 24px;
+  --radius-4xl: 32px;
+
+  /* ── Elevation — borders first, shadow used sparingly ──────────────────── */
+  --shadow-card: 0 1px 2px rgb(11 15 25 / 0.04);
+  --shadow-pop: 0 28px 64px -28px rgb(11 15 25 / 0.45);
+  --shadow-lift: 0 18px 40px -24px rgb(11 15 25 / 0.35);
+}
+
+@layer base {
+  /* ── Base ─────────────────────────────────────────────────────────────────── */
+
+  *,
+  *::before,
+  *::after {
+    box-sizing: border-box;
+  }
+
+  html {
+    scroll-behavior: smooth;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    html {
+      scroll-behavior: auto;
+    }
+    *,
+    *::before,
+    *::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+    }
+  }
+
+  body {
+    margin: 0;
+    background: var(--color-canvas);
+    color: var(--color-ink);
+    font-family: var(--font-sans);
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  h1,
+  h2,
+  h3,
+  h4,
+  p,
+  ul,
+  figure {
+    margin: 0;
+  }
+
+  ul {
+    padding: 0;
+    list-style: none;
+  }
+
+  /* Links inherit by default. Anything that should be blue says so with a class.
+     Written inside a base layer so Tailwind utilities beat it — an unlayered
+     rule here outranks every utility and turned the whole sidebar blue. */
+  a {
+    color: inherit;
+    text-decoration: none;
+  }
+
+  button,
+  input,
+  select,
+  textarea {
+    font-family: inherit;
+  }
+
+  /* One focus treatment everywhere, visible in every context. */
+  :focus-visible {
+    outline: 2px solid var(--color-brand);
+    outline-offset: 2px;
+    border-radius: var(--radius-xs);
+  }
+
+}
+
+/* ── Material Symbols ─────────────────────────────────────────────────────── */
+
+.ms {
+  font-family: 'Material Symbols Outlined';
+  font-weight: 400;
+  font-style: normal;
+  line-height: 1;
+  letter-spacing: normal;
+  text-transform: none;
+  display: inline-block;
+  white-space: nowrap;
+  word-wrap: normal;
+  direction: ltr;
+  font-variation-settings:
+    'FILL' 0,
+    'wght' 400,
+    'GRAD' 0,
+    'opsz' 24;
+  user-select: none;
+}
+
+/* ── Utilities the designs rely on ────────────────────────────────────────── */
+
+@utility tabular {
+  font-variant-numeric: tabular-nums;
+}
+
+/* Skeletons pulse rather than spin — a skeleton that matches the real layout
+   tells the user what is coming; a centred spinner tells them nothing. */
+@keyframes shimmer {
+  0%,
+  100% {
+    opacity: 0.55;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+
+@utility shimmer {
+  animation: shimmer 1.4s ease-in-out infinite;
+}
+
+/* The striped block used for artwork that has not been supplied yet. Reading
+   as obviously provisional is the point — it should never be mistaken for a
+   finished visual. */
+@utility art-placeholder {
+  background-color: var(--color-brand-tint);
+  background-image: repeating-linear-gradient(
+    45deg,
+    rgb(47 107 250 / 0.09) 0 10px,
+    transparent 10px 20px
+  );
+  color: var(--color-brand-deep);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  line-height: 1.6;
+  text-align: center;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+}
+
+/* The app shell's sidebar is fixed; the content region reserves its width from
+   the --sidebar-w custom property the shell sets. One breakpoint, one place. */
+@media (min-width: 768px) {
+  .with-sidebar {
+    padding-left: var(--sidebar-w, 236px);
+  }
+}
+
+/* ============================================================================
+   Motion
+
+   Two rules govern everything here:
+
+   1. Motion carries meaning or it does not exist. Things enter from where they
+      came from, panels grow from the control that opened them, and a value
+      that changed is the only thing that moves.
+   2. Everything is disabled wholesale under `prefers-reduced-motion`. The
+      global override in the base layer above zeroes every duration, so a
+      reveal that starts at `opacity: 0` must still end visible — which is why
+      the reveal below is driven by a class the observer adds, not by an
+      animation that might never run.
+   ========================================================================== */
+
+:root {
+  /* One easing curve for entrances, one for exits. Used by name everywhere. */
+  --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-in-out: cubic-bezier(0.65, 0, 0.35, 1);
+}
+
+@keyframes fade-up {
+  from {
+    opacity: 0;
+    transform: translateY(14px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes scale-in {
+  from {
+    opacity: 0;
+    transform: scale(0.97) translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes slide-down {
+  from {
+    opacity: 0;
+    transform: translateY(-6px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes slide-in-right {
+  from {
+    opacity: 0;
+    transform: translateX(16px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* Scroll reveal.
+   `.reveal` is the resting (hidden) state; the IntersectionObserver in
+   components/ui/Motion.tsx adds `.reveal-in` when the element enters the
+   viewport. Under reduced motion the transition collapses to nothing and the
+   element simply appears — which is the correct behaviour, not a fallback. */
+.reveal {
+  opacity: 0;
+  transform: translateY(18px);
+  transition:
+    opacity 0.65s var(--ease-out),
+    transform 0.65s var(--ease-out);
+  transition-delay: var(--reveal-delay, 0ms);
+  will-change: opacity, transform;
+}
+
+.reveal-in {
+  opacity: 1;
+  transform: none;
+}
+
+/* If JavaScript never runs, nothing should stay invisible. */
+@media (scripting: none) {
+  .reveal {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@utility animate-fade-up {
+  animation: fade-up 0.5s var(--ease-out) both;
+}
+
+@utility animate-fade-in {
+  animation: fade-in 0.35s var(--ease-out) both;
+}
+
+@utility animate-scale-in {
+  animation: scale-in 0.24s var(--ease-out) both;
+}
+
+@utility animate-slide-down {
+  animation: slide-down 0.18s var(--ease-out) both;
+}
+
+@utility animate-slide-in-right {
+  animation: slide-in-right 0.3s var(--ease-out) both;
+}
+
+/* Interactive surfaces.
+   A card that is a link lifts; a card that is not, does not. The lift is small
+   on purpose — this is a work tool, and a large hover displacement makes a
+   dense list feel unstable. */
+@utility lift {
+  transition:
+    transform 0.22s var(--ease-out),
+    box-shadow 0.22s var(--ease-out),
+    border-color 0.22s var(--ease-out);
+
+  &:hover {
+    transform: translateY(-2px);
+    box-shadow: var(--shadow-lift);
+    border-color: var(--color-line-2);
+  }
+}
+
+/* Buttons and small controls acknowledge the press itself. */
+@utility press {
+  transition: transform 0.12s var(--ease-out);
+
+  &:active {
+    transform: scale(0.97);
+  }
+}
+
+/* A row in a list: no displacement, only a background and a nudge of the
+   trailing chevron, so a long list stays visually still while scanning. */
+@utility row-hover {
+  transition: background-color 0.16s var(--ease-out);
+
+  & .row-arrow {
+    transition: transform 0.22s var(--ease-out);
+  }
+
+  &:hover .row-arrow {
+    transform: translateX(3px);
+  }
+}
+
+/* Numbers that change should be seen to change. */
+@utility count-up {
+  animation: fade-up 0.45s var(--ease-out) both;
+}
+
+/* ── The hero lamp ──────────────────────────────────────────────────────────
+   Unlit the glass is white and the rays are hidden; lit it is the accent
+   yellow with a glow, and the rays spread. Driven by a class on the <svg>, so
+   the whole thing is one state change rather than an animation per part.
+
+   The glass keeps a visible outline in both states — a white bulb on a light
+   background would otherwise read as a hole. */
+
+.hero-art .bulb-glass {
+  fill: var(--color-surface);
+  transition:
+    fill 0.55s var(--ease-out),
+    filter 0.55s var(--ease-out);
+}
+
+.hero-art.is-lit .bulb-glass {
+  fill: var(--color-accent);
+  /* The glow is on the shape, not the whole SVG, so only the bulb blooms. */
+  filter: drop-shadow(0 0 26px rgb(255 214 10 / 0.75));
+}
+
+.hero-art .bulb-filament {
+  fill: var(--color-line-3);
+  transition: fill 0.55s var(--ease-out);
+}
+
+.hero-art.is-lit .bulb-filament {
+  fill: var(--color-accent-ink);
+}
+
+/* The rays are revealed in place rather than moved.
+   Nothing here may touch `transform`: a CSS transform *replaces* an SVG
+   element's `transform` attribute rather than composing with it, so scaling a
+   ray also discards the translate that positions it — which threw all three
+   rays across the drawing on the first attempt. Opacity and fill only. */
+.hero-art .bulb-ray {
+  fill: var(--color-line-3);
+  opacity: 0;
+  transition:
+    opacity 0.45s var(--ease-out),
+    fill 0.45s var(--ease-out);
+}
+
+.hero-art.is-lit .bulb-ray {
+  fill: var(--color-accent);
+  opacity: 1;
+}
+
+/* A scroll container that still scrolls, but without a visible bar. Used by
+   the carousel, where the arrows and the cut-off card already say the row
+   continues and a scrollbar under the cards only adds noise. */
+@utility no-scrollbar {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+
+  &::-webkit-scrollbar {
+    display: none;
+  }
+}

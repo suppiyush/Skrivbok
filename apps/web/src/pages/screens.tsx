@@ -1,0 +1,694 @@
+/**
+ * The seven single-owner resources, as configuration.
+ *
+ * Each is a `ResourceConfig`: how to load it, how a row reads, what the form
+ * contains, and how that form becomes a request body. The screen itself lives
+ * in `ResourceScreen.tsx` and is shared.
+ *
+ * `toInput` is the only place that translates between the DOM and the API. It
+ * sends `null` rather than `''` for cleared optional text, because the backend
+ * treats an empty string as a value and `null` as "unset".
+ */
+import { Field } from '../components/ui/Field';
+import { Checkbox, FieldRow, Select, Textarea } from '../components/ui/Form';
+import { Icon } from '../components/ui/Icon';
+import type {
+  CareerGoal,
+  Deadline,
+  FutureWork as FutureWorkItem,
+  Idea,
+  JournalEntry,
+  Literature as LiteratureEntry,
+  Note,
+} from '../lib/api';
+import { dateInputValue, dateTimeInputValue, dueLabel, humanise, shortAge } from '../lib/format';
+import {
+  careerGoalHooks,
+  deadlineHooks,
+  futureWorkHooks,
+  ideaHooks,
+  journalHooks,
+  literatureHooks,
+  noteHooks,
+  useCareerQuota,
+  useLiteratureTags,
+} from '../lib/queries';
+import { ResourceScreen, useFieldError, type ResourceConfig } from './ResourceScreen';
+
+/* ── Shared option lists ──────────────────────────────────────────────────── */
+
+const COLOURS = [
+  { value: 'YELLOW', label: 'Yellow' },
+  { value: 'BLUE', label: 'Blue' },
+  { value: 'GREEN', label: 'Green' },
+  { value: 'PINK', label: 'Pink' },
+  { value: 'PURPLE', label: 'Purple' },
+  { value: 'ORANGE', label: 'Orange' },
+  { value: 'GRAY', label: 'Grey' },
+];
+
+const PRIORITIES = [
+  { value: 'LOW', label: 'Low' },
+  { value: 'MEDIUM', label: 'Medium' },
+  { value: 'HIGH', label: 'High' },
+  { value: 'URGENT', label: 'Urgent' },
+];
+
+const DEADLINE_STATUSES = [
+  { value: 'PENDING', label: 'Pending' },
+  { value: 'IN_PROGRESS', label: 'In progress' },
+  { value: 'COMPLETED', label: 'Completed' },
+  { value: 'CANCELLED', label: 'Cancelled' },
+];
+
+/** Priority as a pill tone. Urgent is the only one that gets to shout. */
+const PRIORITY_TONE = {
+  URGENT: 'danger',
+  HIGH: 'warning',
+  MEDIUM: 'neutral',
+  LOW: 'neutral',
+} as const;
+
+/* ── Form helpers ─────────────────────────────────────────────────────────── */
+
+/** Trimmed string, or null when the user cleared the field. */
+function text(form: FormData, name: string): string | null {
+  const value = String(form.get(name) ?? '').trim();
+  return value === '' ? null : value;
+}
+
+/** Required string. Left as-is so the server does the validating and reporting. */
+function required(form: FormData, name: string): string {
+  return String(form.get(name) ?? '').trim();
+}
+
+/** A `datetime-local` value is wall-clock with no zone; the browser's zone is
+ *  the one the user meant, so it is resolved here and sent as an instant. */
+function instant(form: FormData, name: string): string {
+  const value = String(form.get(name) ?? '');
+  return value ? new Date(value).toISOString() : '';
+}
+
+/** Errors are reported by the server against the field name. */
+function Err(name: string) {
+  return useFieldError(name);
+}
+
+/* ── Ideas ────────────────────────────────────────────────────────────────── */
+
+const ideasConfig: ResourceConfig<Idea> = {
+  title: 'Ideas',
+  icon: 'lightbulb',
+  noun: 'idea',
+  blurb:
+    'Anything worth keeping, recorded before it goes. Categorise and colour them, then search across everything you have written.',
+  createLabel: 'New idea',
+  hooks: ideaHooks as never,
+  sorts: [
+    { value: 'newest', label: 'Newest' },
+    { value: 'oldest', label: 'Oldest' },
+    { value: 'title', label: 'Title' },
+  ],
+  row: (idea) => ({
+    primary: idea.title,
+    secondary: idea.content,
+    tag: idea.category,
+    meta: shortAge(idea.createdAt),
+  }),
+  form: (idea) => (
+    <>
+      <Field label="Title" name="title" defaultValue={idea?.title ?? ''} required error={Err('title')} />
+      <Textarea
+        label="Details"
+        name="content"
+        rows={5}
+        defaultValue={idea?.content ?? ''}
+        placeholder="What is the idea, and what would it take?"
+        error={Err('content')}
+      />
+      <FieldRow>
+        <Field
+          label="Category"
+          name="category"
+          defaultValue={idea?.category ?? 'general'}
+          placeholder="general"
+          error={Err('category')}
+        />
+        <Select label="Colour" name="color" defaultValue={idea?.color ?? 'YELLOW'} options={COLOURS} />
+      </FieldRow>
+    </>
+  ),
+  toInput: (form) => ({
+    title: required(form, 'title'),
+    content: text(form, 'content'),
+    category: text(form, 'category') ?? 'general',
+    color: form.get('color'),
+  }),
+  emptyTitle: 'No ideas yet',
+  emptyBody:
+    'The first one is usually the hardest. Write down the next thing you would work on if you had a free week.',
+};
+
+/* ── Notes ────────────────────────────────────────────────────────────────── */
+
+const notesConfig: ResourceConfig<Note> = {
+  title: 'Notes',
+  icon: 'sticky_note_2',
+  noun: 'note',
+  blurb: 'Longer working notes, pinned to the top when you need them close at hand.',
+  createLabel: 'New note',
+  hooks: noteHooks as never,
+  filters: [
+    {
+      name: 'pinned',
+      label: 'Pinned',
+      options: [
+        { value: 'true', label: 'Pinned only' },
+        { value: 'false', label: 'Unpinned only' },
+      ],
+    },
+  ],
+  sorts: [
+    { value: 'newest', label: 'Newest' },
+    { value: 'oldest', label: 'Oldest' },
+    { value: 'title', label: 'Title' },
+  ],
+  row: (note) => ({
+    primary: note.title,
+    secondary: note.content,
+    tag: note.pinned ? 'pinned' : note.category,
+    tone: note.pinned ? 'brand' : 'neutral',
+    meta: shortAge(note.updatedAt),
+  }),
+  form: (note) => (
+    <>
+      <Field label="Title" name="title" defaultValue={note?.title ?? ''} required error={Err('title')} />
+      <Textarea
+        label="Note"
+        name="content"
+        rows={7}
+        defaultValue={note?.content ?? ''}
+        error={Err('content')}
+      />
+      <FieldRow>
+        <Field
+          label="Category"
+          name="category"
+          defaultValue={note?.category ?? 'general'}
+          error={Err('category')}
+        />
+        <Select label="Colour" name="color" defaultValue={note?.color ?? 'YELLOW'} options={COLOURS} />
+      </FieldRow>
+      <Checkbox
+        name="pinned"
+        label="Pin to the top"
+        hint="Pinned notes stay first regardless of the sort order."
+        defaultChecked={note?.pinned ?? false}
+      />
+    </>
+  ),
+  toInput: (form) => ({
+    title: required(form, 'title'),
+    content: text(form, 'content'),
+    category: text(form, 'category') ?? 'general',
+    color: form.get('color'),
+    pinned: form.get('pinned') === 'on',
+  }),
+  emptyTitle: 'No notes yet',
+  emptyBody: 'Notes hold the longer writing — a method, a summary, a half-finished argument.',
+};
+
+/* ── Journal ──────────────────────────────────────────────────────────────── */
+
+const journalConfig: ResourceConfig<JournalEntry> = {
+  title: 'Journal',
+  icon: 'menu_book',
+  noun: 'entry',
+  blurb:
+    'A dated record of what you actually did. Entries belong to the day they are about, not the day they were typed.',
+  createLabel: 'New entry',
+  hooks: journalHooks as never,
+  sorts: [
+    { value: 'newest', label: 'Newest' },
+    { value: 'oldest', label: 'Oldest' },
+  ],
+  row: (entry) => ({
+    primary: entry.title || new Date(entry.entryDate).toDateString(),
+    secondary: entry.content,
+    tag: entry.mood ?? undefined,
+    meta: shortAge(entry.entryDate),
+  }),
+  form: (entry) => (
+    <>
+      <FieldRow>
+        <Field
+          label="Date"
+          name="entryDate"
+          type="date"
+          defaultValue={dateInputValue(entry?.entryDate ?? new Date())}
+          error={Err('entryDate')}
+        />
+        <Field
+          label="Mood"
+          name="mood"
+          defaultValue={entry?.mood ?? ''}
+          placeholder="Optional"
+          error={Err('mood')}
+        />
+      </FieldRow>
+      <Field
+        label="Title"
+        name="title"
+        defaultValue={entry?.title ?? ''}
+        placeholder="Optional"
+        error={Err('title')}
+      />
+      <Textarea
+        label="Entry"
+        name="content"
+        rows={9}
+        defaultValue={entry?.content ?? ''}
+        required
+        error={Err('content')}
+      />
+    </>
+  ),
+  toInput: (form) => ({
+    title: text(form, 'title'),
+    content: required(form, 'content'),
+    entryDate: text(form, 'entryDate') ?? undefined,
+    mood: text(form, 'mood'),
+  }),
+  emptyTitle: 'The journal is empty',
+  emptyBody:
+    'A few lines a day is enough. It is the record you will want when you write the progress report.',
+};
+
+/* ── Deadlines ────────────────────────────────────────────────────────────── */
+
+const deadlinesConfig: ResourceConfig<Deadline> = {
+  title: 'Deadlines',
+  icon: 'flag',
+  noun: 'deadline',
+  blurb:
+    'Everything with a date attached. Reminders arrive at the hour you chose, in the timezone you set.',
+  createLabel: 'New deadline',
+  hooks: deadlineHooks as never,
+  filters: [
+    { name: 'status', label: 'Status', options: DEADLINE_STATUSES },
+    { name: 'priority', label: 'Priority', options: PRIORITIES },
+    { name: 'overdue', label: 'Overdue', options: [{ value: 'true', label: 'Overdue only' }] },
+  ],
+  sorts: [
+    { value: 'dueSoonest', label: 'Due soonest' },
+    { value: 'dueLatest', label: 'Due latest' },
+    { value: 'priority', label: 'Priority' },
+    { value: 'newest', label: 'Newest' },
+  ],
+  row: (deadline) => {
+    const due = dueLabel(deadline.dueAt);
+    const done = deadline.status === 'COMPLETED';
+    return {
+      primary: deadline.title,
+      secondary: done ? 'Completed' : (due?.text ?? null),
+      tag: humanise(deadline.priority),
+      tone: done ? 'success' : (due?.tone ?? PRIORITY_TONE[deadline.priority]),
+      meta: humanise(deadline.status),
+    };
+  },
+  form: (deadline) => (
+    <>
+      <Field
+        label="Title"
+        name="title"
+        defaultValue={deadline?.title ?? ''}
+        required
+        error={Err('title')}
+      />
+      <Textarea
+        label="Description"
+        name="description"
+        rows={3}
+        defaultValue={deadline?.description ?? ''}
+        error={Err('description')}
+      />
+      <FieldRow>
+        <Field
+          label="Due"
+          name="dueAt"
+          type="datetime-local"
+          defaultValue={dateTimeInputValue(deadline?.dueAt)}
+          required
+          error={Err('dueAt')}
+        />
+        <Select
+          label="Priority"
+          name="priority"
+          defaultValue={deadline?.priority ?? 'MEDIUM'}
+          options={PRIORITIES}
+        />
+      </FieldRow>
+      <FieldRow>
+        <Select
+          label="Status"
+          name="status"
+          defaultValue={deadline?.status ?? 'PENDING'}
+          options={DEADLINE_STATUSES}
+        />
+        <div className="flex items-end pb-2.5">
+          <Checkbox
+            name="reminderEnabled"
+            label="Email me a reminder"
+            defaultChecked={deadline?.reminderEnabled ?? true}
+          />
+        </div>
+      </FieldRow>
+    </>
+  ),
+  toInput: (form) => ({
+    title: required(form, 'title'),
+    description: text(form, 'description'),
+    dueAt: instant(form, 'dueAt'),
+    // The browser's zone is the one the user typed the local time in.
+    timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+    priority: form.get('priority'),
+    status: form.get('status'),
+    reminderEnabled: form.get('reminderEnabled') === 'on',
+  }),
+  emptyTitle: 'Nothing is due',
+  emptyBody: 'Add the next submission, review or report and it will appear on your calendar too.',
+};
+
+/* ── Future work ──────────────────────────────────────────────────────────── */
+
+const futureWorkConfig: ResourceConfig<FutureWorkItem> = {
+  title: 'Future work',
+  icon: 'rocket_launch',
+  noun: 'item',
+  blurb:
+    'The work you intend to do but have not scheduled. Timelines here are deliberately loose — "next semester" is a valid answer.',
+  createLabel: 'New item',
+  hooks: futureWorkHooks as never,
+  filters: [{ name: 'priority', label: 'Priority', options: PRIORITIES }],
+  sorts: [
+    { value: 'newest', label: 'Newest' },
+    { value: 'priority', label: 'Priority' },
+    { value: 'title', label: 'Title' },
+  ],
+  row: (item) => ({
+    primary: item.title,
+    secondary: item.description,
+    tag: humanise(item.priority),
+    tone: PRIORITY_TONE[item.priority],
+    meta: item.timeline ?? shortAge(item.createdAt),
+  }),
+  form: (item) => (
+    <>
+      <Field label="Title" name="title" defaultValue={item?.title ?? ''} required error={Err('title')} />
+      <Textarea
+        label="Description"
+        name="description"
+        rows={4}
+        defaultValue={item?.description ?? ''}
+        error={Err('description')}
+      />
+      <FieldRow>
+        <Select
+          label="Priority"
+          name="priority"
+          defaultValue={item?.priority ?? 'MEDIUM'}
+          options={PRIORITIES}
+        />
+        <Field
+          label="Timeline"
+          name="timeline"
+          defaultValue={item?.timeline ?? ''}
+          placeholder="Next semester"
+          error={Err('timeline')}
+        />
+      </FieldRow>
+    </>
+  ),
+  toInput: (form) => ({
+    title: required(form, 'title'),
+    description: text(form, 'description'),
+    priority: form.get('priority'),
+    timeline: text(form, 'timeline'),
+  }),
+  emptyTitle: 'Nothing planned yet',
+  emptyBody: 'Park the things you want to come back to. They stay out of the way until they matter.',
+};
+
+/* ── Literature ───────────────────────────────────────────────────────────── */
+
+const literatureConfig: ResourceConfig<LiteratureEntry> = {
+  title: 'Literature',
+  icon: 'auto_stories',
+  noun: 'entry',
+  blurb:
+    'Your reading, with authors, year, links, tags and your own summary. Filter by any combination of tags.',
+  createLabel: 'Add entry',
+  hooks: literatureHooks as never,
+  sorts: [
+    { value: 'newest', label: 'Newest' },
+    { value: 'year', label: 'Year' },
+    { value: 'title', label: 'Title' },
+  ],
+  row: (entry) => ({
+    primary: entry.title,
+    secondary: [entry.authors, entry.year].filter(Boolean).join(' · ') || entry.summary,
+    tag: entry.tags[0],
+    tone: 'brand',
+    meta: entry.links.length ? `${entry.links.length} link${entry.links.length > 1 ? 's' : ''}` : '',
+  }),
+  form: (entry) => (
+    <>
+      <Field label="Title" name="title" defaultValue={entry?.title ?? ''} required error={Err('title')} />
+      <FieldRow>
+        <Field
+          label="Authors"
+          name="authors"
+          defaultValue={entry?.authors ?? ''}
+          placeholder="Ongaro, Ousterhout"
+          error={Err('authors')}
+        />
+        <Field
+          label="Year"
+          name="year"
+          type="number"
+          defaultValue={entry?.year ?? ''}
+          error={Err('year')}
+        />
+      </FieldRow>
+      <Field
+        label="Tags"
+        name="tags"
+        defaultValue={entry?.tags.join(', ') ?? ''}
+        placeholder="consensus, raft"
+        hint="Comma separated. Tags are lowercased so they group properly."
+        error={Err('tags')}
+      />
+      <Field
+        label="Links"
+        name="links"
+        defaultValue={entry?.links.join(', ') ?? ''}
+        placeholder="https://…"
+        hint="Comma separated. Full URLs only."
+        error={Err('links')}
+      />
+      <Textarea
+        label="Your summary"
+        name="summary"
+        rows={5}
+        defaultValue={entry?.summary ?? ''}
+        placeholder="What it argues, and why it matters to your work."
+        error={Err('summary')}
+      />
+    </>
+  ),
+  toInput: (form) => {
+    const split = (name: string) =>
+      String(form.get(name) ?? '')
+        .split(',')
+        .map((s) => s.trim())
+        .filter(Boolean);
+    const year = String(form.get('year') ?? '').trim();
+
+    return {
+      title: required(form, 'title'),
+      authors: text(form, 'authors'),
+      year: year ? Number(year) : null,
+      tags: split('tags'),
+      links: split('links'),
+      summary: text(form, 'summary'),
+    };
+  },
+  aside: ({ filters, setFilter }) => <TagSidebar active={filters['tag'] ?? ''} onPick={(t) => setFilter('tag', t)} />,
+  emptyTitle: 'The library is empty',
+  emptyBody: 'Add the paper you read most recently. Tags are what make it findable at three hundred.',
+};
+
+/** The literature tag filter. Counts come from the backend, not the loaded page. */
+function TagSidebar({ active, onPick }: { active: string; onPick: (tag: string) => void }) {
+  const { data, isPending } = useLiteratureTags();
+  const tags = data?.tags ?? [];
+
+  return (
+    <div className="rounded-[18px] border border-line bg-surface p-4">
+      <h2 className="text-[12.5px] font-bold tracking-[0.06em] text-ink-4 uppercase">Tags</h2>
+
+      {isPending ? (
+        <p className="mt-3 text-[13px] text-ink-4">Loading…</p>
+      ) : tags.length === 0 ? (
+        <p className="mt-3 text-[13px] leading-relaxed text-ink-3">
+          Tags appear here once entries have them.
+        </p>
+      ) : (
+        <ul className="mt-3 flex flex-col gap-0.5">
+          {tags.map(({ tag, count }) => (
+            <li key={tag}>
+              <button
+                type="button"
+                onClick={() => onPick(active === tag ? '' : tag)}
+                className={`flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left text-[13px] transition ${
+                  active === tag
+                    ? 'bg-brand-tint font-semibold text-brand-deep'
+                    : 'text-ink-2 hover:bg-surface-2'
+                }`}
+              >
+                <Icon name="label" size={15} className="flex-none text-ink-4" />
+                <span className="min-w-0 flex-1 truncate">{tag}</span>
+                <span className="flex-none font-mono text-[11.5px] text-ink-4 tabular">{count}</span>
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  );
+}
+
+/* ── Career goals ─────────────────────────────────────────────────────────── */
+
+const careerGoalsConfig: ResourceConfig<CareerGoal> = {
+  title: 'Career goals',
+  icon: 'trending_up',
+  noun: 'goal',
+  blurb:
+    'Longer-running goals broken into stages, so progress is something you can point at rather than estimate.',
+  createLabel: 'New goal',
+  hooks: careerGoalHooks as never,
+  useQuota: useCareerQuota,
+  filters: [
+    {
+      name: 'status',
+      label: 'Status',
+      options: [
+        { value: 'active', label: 'Active' },
+        { value: 'achieved', label: 'Achieved' },
+      ],
+    },
+  ],
+  sorts: [
+    { value: 'newest', label: 'Newest' },
+    { value: 'progress', label: 'Progress' },
+    { value: 'target', label: 'Target date' },
+    { value: 'title', label: 'Title' },
+  ],
+  row: (goal) => {
+    const pct = Math.round((goal.currentStage / Math.max(1, goal.totalStages)) * 100);
+    return {
+      primary: goal.title,
+      secondary: goal.stageDescription ?? goal.description,
+      tag: goal.achievedAt ? 'Achieved' : goal.goalType,
+      tone: goal.achievedAt ? 'success' : 'brand',
+      meta: `${goal.currentStage}/${goal.totalStages}`,
+      extra: (
+        <span className="mt-2 flex items-center gap-2.5">
+          <span className="h-1.5 w-full max-w-[220px] overflow-hidden rounded-full bg-surface-2">
+            <span
+              className="block h-full rounded-full bg-brand transition-[width] duration-500"
+              style={{ width: `${pct}%` }}
+            />
+          </span>
+          <span className="text-[11.5px] text-ink-4 tabular">{pct}%</span>
+        </span>
+      ),
+    };
+  },
+  form: (goal) => (
+    <>
+      <Field label="Title" name="title" defaultValue={goal?.title ?? ''} required error={Err('title')} />
+      <Textarea
+        label="Description"
+        name="description"
+        rows={3}
+        defaultValue={goal?.description ?? ''}
+        error={Err('description')}
+      />
+      <FieldRow>
+        <Field
+          label="Type"
+          name="goalType"
+          defaultValue={goal?.goalType ?? 'general'}
+          placeholder="Publication"
+          error={Err('goalType')}
+        />
+        <Field
+          label="Total stages"
+          name="totalStages"
+          type="number"
+          min={2}
+          max={50}
+          defaultValue={goal?.totalStages ?? 5}
+          error={Err('totalStages')}
+        />
+      </FieldRow>
+      <FieldRow>
+        <Field
+          label="Start"
+          name="startAt"
+          type="date"
+          defaultValue={dateInputValue(goal?.startAt)}
+          error={Err('startAt')}
+        />
+        <Field
+          label="Target"
+          name="targetAt"
+          type="date"
+          defaultValue={dateInputValue(goal?.targetAt)}
+          error={Err('targetAt')}
+        />
+      </FieldRow>
+      <Field
+        label="Current stage description"
+        name="stageDescription"
+        defaultValue={goal?.stageDescription ?? ''}
+        placeholder="What is happening right now"
+        error={Err('stageDescription')}
+      />
+    </>
+  ),
+  toInput: (form) => ({
+    title: required(form, 'title'),
+    description: text(form, 'description'),
+    goalType: text(form, 'goalType') ?? 'general',
+    totalStages: Number(form.get('totalStages') ?? 5),
+    stageDescription: text(form, 'stageDescription'),
+    startAt: text(form, 'startAt'),
+    targetAt: text(form, 'targetAt'),
+  }),
+  emptyTitle: 'No goals set',
+  emptyBody:
+    'Break something long-running into stages — a paper, a grant, a course rebuild — and track it here.',
+};
+
+/* ── Exports ──────────────────────────────────────────────────────────────── */
+
+export const Ideas = () => <ResourceScreen config={ideasConfig} />;
+export const Notes = () => <ResourceScreen config={notesConfig} />;
+export const Journal = () => <ResourceScreen config={journalConfig} />;
+export const Deadlines = () => <ResourceScreen config={deadlinesConfig} />;
+export const FutureWork = () => <ResourceScreen config={futureWorkConfig} />;
+export const Literature = () => <ResourceScreen config={literatureConfig} />;
+export const CareerGoals = () => <ResourceScreen config={careerGoalsConfig} />;

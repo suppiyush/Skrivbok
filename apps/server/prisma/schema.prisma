@@ -1,0 +1,905 @@
+// ============================================================================
+//  Skrivbok — database schema
+// ============================================================================
+//  Conventions used throughout:
+//
+//  • IDs are `cuid()` strings, not auto-increment integers. Sequential integer
+//    IDs let anyone enumerate other people's records by guessing `/ideas/43`.
+//  • Every timestamp is `DateTime` (Postgres `timestamptz`) stored in UTC. The
+//    legacy schema kept dates and times as TEXT, which made comparison,
+//    sorting and DST handling impossible to get right. Where the user's local
+//    wall-clock time matters (calendar events, deadlines), an IANA `timezone`
+//    string is stored alongside the instant.
+//  • Every relation declares an explicit referential action. Deleting a user
+//    used to orphan rows across a dozen tables.
+//  • Free-text status/priority columns are now enums, so an invalid value is a
+//    database error rather than a silent bug.
+//  • No soft deletes. Deletes cascade; account deletion genuinely removes data.
+// ============================================================================
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+// ============================================================================
+//  ENUMS
+// ============================================================================
+
+enum Role {
+  USER
+  ADMIN
+}
+
+enum Plan {
+  FREE
+  PRO
+}
+
+enum Priority {
+  LOW
+  MEDIUM
+  HIGH
+  URGENT
+}
+
+enum DeadlineStatus {
+  PENDING
+  IN_PROGRESS
+  COMPLETED
+  CANCELLED
+}
+
+enum NoteColor {
+  YELLOW
+  PINK
+  BLUE
+  GREEN
+  PURPLE
+  ORANGE
+  GRAY
+}
+
+/// Role of a person on a project. OWNER is implied by `Project.ownerId` and is
+/// also materialised as a member row so member listings need only one query.
+enum ProjectRole {
+  OWNER
+  EDITOR
+  VIEWER
+}
+
+enum MeetingStatus {
+  PENDING
+  ACCEPTED
+  REJECTED
+  CANCELLED
+}
+
+enum AccessRequestStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  REVOKED
+}
+
+enum CalendarAccessLevel {
+  /// Can see that a slot is busy, but not its details.
+  FREE_BUSY
+  /// Can see full event details.
+  VIEW
+}
+
+/// Who may see an event on a calendar the viewer has been granted access to.
+enum EventVisibility {
+  /// Only the owner, regardless of granted calendar access.
+  PRIVATE
+  /// Others see a blocked-out slot with no details.
+  BUSY
+  /// Others with access see the full event.
+  PUBLIC
+}
+
+enum ShowAs {
+  FREE
+  BUSY
+  TENTATIVE
+  OUT_OF_OFFICE
+}
+
+enum RecurrenceFrequency {
+  NONE
+  DAILY
+  WEEKLY
+  BIWEEKLY
+  MONTHLY
+  YEARLY
+}
+
+enum ReportType {
+  BUG
+  FEATURE
+  FEEDBACK
+}
+
+enum ReportStatus {
+  OPEN
+  IN_PROGRESS
+  RESOLVED
+  DISMISSED
+}
+
+enum NotificationType {
+  DEADLINE_DUE
+  MEETING_REQUEST
+  MEETING_ACCEPTED
+  MEETING_REJECTED
+  CALENDAR_ACCESS_REQUEST
+  CALENDAR_ACCESS_GRANTED
+  PROJECT_INVITE
+  SUBSCRIPTION
+  SYSTEM
+}
+
+/// Which kind of record a sent reminder refers to. Used with `itemId` to make
+/// reminder delivery idempotent.
+enum ReminderItemType {
+  DEADLINE
+  CALENDAR_EVENT
+  MEETING
+  DAILY_AGENDA
+}
+
+enum BillingPlan {
+  MONTHLY
+  YEARLY
+}
+
+enum PaymentStatus {
+  CREATED
+  AUTHORIZED
+  CAPTURED
+  FAILED
+  REFUNDED
+}
+
+/// A review is written by a user and only reaches the public site once an
+/// admin has approved it. Without that gate, anyone who can register can
+/// publish arbitrary text onto the marketing page.
+enum ReviewStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+enum OAuthProvider {
+  GOOGLE
+}
+
+// ============================================================================
+//  IDENTITY
+// ============================================================================
+
+model User {
+  id    String  @id @default(cuid())
+  /// Always stored lowercased and trimmed — the application normalises before
+  /// writing so that uniqueness is genuinely case-insensitive.
+  email String  @unique
+  name  String?
+
+  /// Null for accounts created purely through OAuth. Such a user must set a
+  /// password before they can use password login.
+  passwordHash String?
+
+  role Role @default(USER)
+
+  /// IANA timezone, e.g. "Europe/Stockholm". Drives reminder delivery and the
+  /// default timezone for new calendar events.
+  timezone String @default("UTC")
+
+  // ── Subscription ──────────────────────────────────────────────────────────
+  // Written only by the verified Razorpay webhook, never by a client request.
+  plan               Plan      @default(FREE)
+  subscriptionEndsAt DateTime?
+
+  emailVerifiedAt DateTime?
+  lastLoginAt     DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // ── Relations ─────────────────────────────────────────────────────────────
+  accounts         OAuthAccount[]
+  sessions         Session[]
+  profile          Profile?
+  review           Review?          @relation("ReviewAuthor")
+  reviewsModerated Review[]         @relation("ReviewModerator")
+  emailPreference  EmailPreference?
+
+  ownedProjects   Project[]       @relation("ProjectOwner")
+  projectMembers  ProjectMember[]
+  ideas           Idea[]
+  notes           Note[]
+  journalEntries  JournalEntry[]
+  deadlines       Deadline[]
+  futureWork      FutureWork[]
+  literature      Literature[]
+  careerGoals     CareerGoal[]
+  calendarEvents  CalendarEvent[]
+  notifications   Notification[]
+  sentReminders   SentReminder[]
+  payments        Payment[]
+  reports         Report[]        @relation("ReportAuthor")
+  resolvedReports Report[]        @relation("ReportResolver")
+
+  sentMeetingRequests     MeetingRequest[] @relation("MeetingSender")
+  receivedMeetingRequests MeetingRequest[] @relation("MeetingReceiver")
+
+  /// Access this user has granted others to their own calendar.
+  grantedCalendarAccess CalendarAccess[] @relation("CalendarOwner")
+  /// Access this user holds on other people's calendars.
+  heldCalendarAccess    CalendarAccess[] @relation("CalendarViewer")
+
+  sentAccessRequests     CalendarAccessRequest[] @relation("AccessRequester")
+  receivedAccessRequests CalendarAccessRequest[] @relation("AccessTarget")
+
+  @@index([plan, subscriptionEndsAt])
+  @@index([createdAt])
+  @@map("users")
+}
+
+/// A linked third-party identity. Separate from `User` so one account can hold
+/// several providers, and so revoking a provider never touches the user row.
+model OAuthAccount {
+  id                String        @id @default(cuid())
+  userId            String
+  provider          OAuthProvider
+  /// The provider's own stable user id (Google's `sub`), not the email.
+  providerAccountId String
+  createdAt         DateTime      @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+  @@index([userId])
+  @@map("oauth_accounts")
+}
+
+/// Server-side session. Only the SHA-256 hash of the token is stored, so a
+/// database leak does not hand an attacker usable session cookies.
+model Session {
+  id         String   @id @default(cuid())
+  tokenHash  String   @unique
+  userId     String
+  expiresAt  DateTime
+  createdAt  DateTime @default(now())
+  /// Refreshed on use, to support a sliding expiry window.
+  lastUsedAt DateTime @default(now())
+
+  ipAddress String?
+  userAgent String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([expiresAt])
+  @@map("sessions")
+}
+
+// ============================================================================
+//  PROFILE
+// ============================================================================
+
+/// Academic profile, and the source for the generated resume.
+///
+/// The repeating CV sections (degrees, employment, courses, grants, awards) are
+/// `Json` arrays rather than tables: they are always read and written together
+/// with the profile, are never queried independently, and are replaced wholesale
+/// on save. Their shape is enforced by Zod at the API boundary.
+model Profile {
+  id     String @id @default(cuid())
+  userId String @unique
+
+  /// Uploaded to object storage; this is the URL, not the image.
+  avatarUrl String?
+
+  fullName    String?
+  designation String?
+  department  String?
+  institution String?
+
+  officialEmail String?
+  phone         String?
+  website       String?
+  scholarLink   String?
+
+  /// A short bio, and the keywords that describe the work.
+  researchKeywords    String?
+  researchDescription String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("profiles")
+}
+
+// ============================================================================
+//  PROJECTS
+// ============================================================================
+
+model Project {
+  id      String @id @default(cuid())
+  ownerId String
+
+  name        String
+  description String?
+  /// 0–100. Validated at the API boundary.
+  progress    Int     @default(0)
+
+  archivedAt DateTime?
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
+
+  owner   User            @relation("ProjectOwner", fields: [ownerId], references: [id], onDelete: Cascade)
+  members ProjectMember[]
+  brief   ProjectBrief?
+
+  @@index([ownerId, updatedAt])
+  @@map("projects")
+}
+
+/// A person on a project.
+///
+/// `userId` is null when the person has been invited by email but has not
+/// registered yet; when they sign up, the invite is claimed and linked. This
+/// replaces the legacy `projects.colleagues` JSON-string column, which could not
+/// be joined, indexed or counted.
+model ProjectMember {
+  id        String      @id @default(cuid())
+  projectId String
+  userId    String?
+  /// Lowercased. Present even when `userId` is set, so pending and claimed
+  /// invites are looked up the same way.
+  email     String
+  name      String?
+  role      ProjectRole @default(VIEWER)
+
+  invitedAt  DateTime  @default(now())
+  acceptedAt DateTime?
+
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  user    User?   @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@unique([projectId, email])
+  @@index([userId])
+  @@index([email])
+  @@map("project_members")
+}
+
+/// The 25-field creative brief. Split out of `Project` because it is large,
+/// optional, and only loaded on the description screen.
+model ProjectBrief {
+  id        String @id @default(cuid())
+  projectId String @unique
+
+  projectTitle String?
+  notes        String?
+
+  // Client / colleague contact
+  colleagueName     String?
+  colleaguePhone    String?
+  colleagueEmail    String?
+  colleagueAddress1 String?
+  colleagueAddress2 String?
+  colleagueAddress3 String?
+
+  // Own contact
+  yourName     String?
+  yourPhone    String?
+  yourEmail    String?
+  yourAddress1 String?
+  yourAddress2 String?
+  yourAddress3 String?
+
+  // Brief content
+  objectives        String?
+  timeline          String?
+  primaryAudience   String?
+  secondaryAudience String?
+  callToAction      String?
+  competition       String?
+  graphics          String?
+  photography       String?
+  multimedia        String?
+  otherInfo         String?
+
+  // Sign-off
+  clientName        String?
+  clientComments    String?
+  approvalDate      DateTime?
+  approvalSignature String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@map("project_briefs")
+}
+
+// ============================================================================
+//  CONTENT
+// ============================================================================
+
+model Idea {
+  id       String    @id @default(cuid())
+  userId   String
+  title    String
+  content  String?
+  /// Free-form so users can invent their own groupings.
+  category String    @default("general")
+  color    NoteColor @default(YELLOW)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt])
+  @@map("ideas")
+}
+
+model Note {
+  id       String    @id @default(cuid())
+  userId   String
+  title    String
+  content  String?
+  category String    @default("general")
+  color    NoteColor @default(YELLOW)
+
+  pinned Boolean @default(false)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt])
+  @@map("notes")
+}
+
+/// Personal journal. New in this rebuild: the legacy app kept journal entries in
+/// the browser's localStorage, so clearing site data destroyed them and they
+/// never synced between devices.
+model JournalEntry {
+  id      String  @id @default(cuid())
+  userId  String
+  title   String?
+  content String
+
+  /// The day the entry is *about*, which is not always the day it was written.
+  entryDate DateTime @db.Date
+  mood      String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, entryDate])
+  @@map("journal_entries")
+}
+
+model Deadline {
+  id          String  @id @default(cuid())
+  userId      String
+  title       String
+  description String?
+
+  /// The exact instant the deadline falls, in UTC.
+  dueAt    DateTime
+  /// The timezone the user entered `dueAt` in, so it can be redisplayed as the
+  /// wall-clock time they intended.
+  timezone String   @default("UTC")
+
+  priority Priority       @default(MEDIUM)
+  status   DeadlineStatus @default(PENDING)
+
+  reminderEnabled Boolean   @default(true)
+  /// When the reminder should fire. Null means "derive from `dueAt` and the
+  /// user's EmailPreference".
+  remindAt        DateTime?
+
+  completedAt DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, dueAt])
+  @@index([remindAt], map: "idx_deadlines_remind_at")
+  @@map("deadlines")
+}
+
+model FutureWork {
+  id          String   @id @default(cuid())
+  userId      String
+  title       String
+  description String?
+  priority    Priority @default(MEDIUM)
+  /// Free text, e.g. "Next semester", "2027 H1".
+  timeline    String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt])
+  @@map("future_work")
+}
+
+model Literature {
+  id      String   @id @default(cuid())
+  userId  String
+  title   String
+  authors String?
+  year    Int?
+  /// Multiple links per entry — the legacy column was a single TEXT blob.
+  links   String[] @default([])
+  tags    String[] @default([])
+  summary String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt])
+  @@index([tags], type: Gin)
+  @@map("literature")
+}
+
+// ============================================================================
+//  CAREER
+// ============================================================================
+
+model CareerGoal {
+  id          String  @id @default(cuid())
+  userId      String
+  title       String
+  description String?
+
+  /// Free text, e.g. "Publication", "Teaching".
+  goalType String @default("general")
+
+  totalStages      Int     @default(5)
+  currentStage     Int     @default(0)
+  stageDescription String?
+
+  startAt  DateTime?
+  targetAt DateTime?
+
+  achievedAt DateTime?
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
+
+  user    User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
+  history CareerStageHistory[]
+
+  @@index([userId, createdAt])
+  @@map("career_goals")
+}
+
+/// Append-only log of stage transitions, so progress over time is auditable.
+model CareerStageHistory {
+  id          String   @id @default(cuid())
+  goalId      String
+  stage       Int
+  description String?
+  recordedAt  DateTime @default(now())
+
+  goal CareerGoal @relation(fields: [goalId], references: [id], onDelete: Cascade)
+
+  @@index([goalId, recordedAt])
+  @@map("career_stage_history")
+}
+
+// ============================================================================
+//  CALENDAR
+// ============================================================================
+
+model CalendarEvent {
+  id          String  @id @default(cuid())
+  userId      String
+  title       String
+  description String?
+  location    String?
+
+  /// Both instants are UTC. `timezone` records the zone the user authored them
+  /// in, which is what makes recurrence and all-day events survive a DST shift.
+  startAt  DateTime
+  endAt    DateTime
+  timezone String   @default("UTC")
+  isAllDay Boolean  @default(false)
+
+  category   String          @default("Work")
+  priority   Priority        @default(MEDIUM)
+  showAs     ShowAs          @default(BUSY)
+  /// Governs what other users with calendar access can see. Defaults to PRIVATE
+  /// — the legacy default of exposing details was the wrong way round.
+  visibility EventVisibility @default(PRIVATE)
+
+  isOnline    Boolean  @default(false)
+  meetingLink String?
+  /// Invitee email addresses. Not a relation: attendees are frequently people
+  /// with no Skrivbok account.
+  attendees   String[] @default([])
+
+  reminderMinutes Int? @default(15)
+
+  recurrence      RecurrenceFrequency @default(NONE)
+  recurrenceEndAt DateTime?
+
+  /// Set when this event was created by accepting a meeting request, so both
+  /// sides' copies can be updated or removed together.
+  meetingRequestId String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user           User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  meetingRequest MeetingRequest? @relation(fields: [meetingRequestId], references: [id], onDelete: Cascade)
+
+  @@index([userId, startAt])
+  @@index([meetingRequestId])
+  @@map("calendar_events")
+}
+
+model MeetingRequest {
+  id         String @id @default(cuid())
+  senderId   String
+  receiverId String
+
+  /// Required: it becomes the title of the calendar events created on accept,
+  /// and a calendar event must have one.
+  title       String
+  description String?
+  startAt     DateTime
+  endAt       DateTime
+  timezone    String   @default("UTC")
+
+  status      MeetingStatus @default(PENDING)
+  respondedAt DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  sender   User @relation("MeetingSender", fields: [senderId], references: [id], onDelete: Cascade)
+  receiver User @relation("MeetingReceiver", fields: [receiverId], references: [id], onDelete: Cascade)
+
+  /// The calendar events created on both sides when the request was accepted.
+  events CalendarEvent[]
+
+  @@index([receiverId, status])
+  @@index([senderId, status])
+  @@index([startAt])
+  @@map("meeting_requests")
+}
+
+/// A live grant: `viewer` may see `owner`'s calendar.
+model CalendarAccess {
+  id       String              @id @default(cuid())
+  ownerId  String
+  viewerId String
+  level    CalendarAccessLevel @default(FREE_BUSY)
+
+  createdAt DateTime @default(now())
+
+  owner  User @relation("CalendarOwner", fields: [ownerId], references: [id], onDelete: Cascade)
+  viewer User @relation("CalendarViewer", fields: [viewerId], references: [id], onDelete: Cascade)
+
+  @@unique([ownerId, viewerId])
+  @@index([viewerId])
+  @@map("calendar_access")
+}
+
+/// A request for the grant above. Kept separate so the history of requests and
+/// rejections survives after a grant is revoked.
+model CalendarAccessRequest {
+  id          String              @id @default(cuid())
+  requesterId String
+  targetId    String
+  status      AccessRequestStatus @default(PENDING)
+  message     String?
+  respondedAt DateTime?
+
+  createdAt DateTime @default(now())
+
+  requester User @relation("AccessRequester", fields: [requesterId], references: [id], onDelete: Cascade)
+  target    User @relation("AccessTarget", fields: [targetId], references: [id], onDelete: Cascade)
+
+  @@index([targetId, status])
+  @@index([requesterId, status])
+  @@map("calendar_access_requests")
+}
+
+// ============================================================================
+//  NOTIFICATIONS & REMINDERS
+// ============================================================================
+
+model Notification {
+  id      String           @id @default(cuid())
+  userId  String
+  type    NotificationType
+  title   String
+  message String?
+  /// In-app path the notification links to, e.g. "/calendar?event=abc".
+  link    String?
+
+  readAt DateTime?
+
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, readAt, createdAt])
+  @@map("notifications")
+}
+
+model EmailPreference {
+  id     String @id @default(cuid())
+  userId String @unique
+
+  deadlineRemindersEnabled Boolean @default(true)
+  dailyAgendaEnabled       Boolean @default(true)
+  meetingRequestsEnabled   Boolean @default(true)
+
+  /// Days ahead of a deadline to send a reminder, e.g. [1, 3, 5].
+  reminderDaysBefore Int[]  @default([1, 3, 5])
+  /// Local wall-clock time of day to deliver, "HH:mm" in the user's timezone.
+  notificationTime   String @default("09:00")
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("email_preferences")
+}
+
+/// Delivery ledger. The unique constraint is what makes reminder sending
+/// idempotent: a worker that runs twice, or restarts mid-batch, cannot send the
+/// same reminder again.
+model SentReminder {
+  id       String           @id @default(cuid())
+  userId   String
+  itemType ReminderItemType
+  itemId   String
+  /// The local calendar day the reminder was for.
+  sentFor  DateTime         @db.Date
+  sentAt   DateTime         @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, itemType, itemId, sentFor])
+  @@index([sentFor])
+  @@map("sent_reminders")
+}
+
+// ============================================================================
+//  BILLING
+// ============================================================================
+
+/// One row per Razorpay order. Amounts are integers in the smallest currency
+/// unit (paise) — never floats.
+model Payment {
+  id     String @id @default(cuid())
+  userId String
+
+  razorpayOrderId   String  @unique
+  razorpayPaymentId String? @unique
+  /// Kept for auditing a disputed payment; never used to grant access.
+  razorpaySignature String?
+
+  plan     BillingPlan
+  amount   Int
+  currency String        @default("INR")
+  status   PaymentStatus @default(CREATED)
+
+  /// The subscription window this payment bought, set on capture.
+  periodStart DateTime?
+  periodEnd   DateTime?
+
+  failureReason String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt])
+  @@index([status])
+  @@map("payments")
+}
+
+/// Idempotency ledger for incoming Razorpay webhooks. Razorpay retries
+/// deliveries, so an event id that has already been processed is skipped rather
+/// than applied twice.
+model WebhookEvent {
+  id          String   @id @default(cuid())
+  provider    String   @default("razorpay")
+  eventId     String
+  eventType   String
+  payload     Json
+  processedAt DateTime @default(now())
+
+  @@unique([provider, eventId])
+  @@map("webhook_events")
+}
+
+// ============================================================================
+//  SUPPORT
+// ============================================================================
+
+model Report {
+  id     String  @id @default(cuid())
+  /// Null when the reporter's account has since been deleted; the report itself
+  /// is still useful to the maintainers.
+  userId String?
+
+  type        ReportType
+  featurePage String?
+  title       String?
+  description String
+
+  status       ReportStatus @default(OPEN)
+  resolvedById String?
+  resolvedAt   DateTime?
+  resolution   String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user       User? @relation("ReportAuthor", fields: [userId], references: [id], onDelete: SetNull)
+  resolvedBy User? @relation("ReportResolver", fields: [resolvedById], references: [id], onDelete: SetNull)
+
+  @@index([status, createdAt])
+  @@index([userId])
+  @@map("reports")
+}
+
+/// A testimonial written by a user, shown on the landing page once approved.
+model Review {
+  id     String @id @default(cuid())
+  userId String @unique
+
+  /// 1–5. Validated at the API boundary.
+  rating Int
+  /// The role shown beside the quote, e.g. "Postdoctoral Researcher".
+  role   String?
+  body   String
+
+  status ReviewStatus @default(PENDING)
+
+  /// Who acted on it, and when. Null until an admin has looked at it.
+  reviewedAt   DateTime?
+  reviewedById String?
+  /// Why it was rejected. Shown back to the author so they can revise it.
+  adminNote    String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user       User  @relation("ReviewAuthor", fields: [userId], references: [id], onDelete: Cascade)
+  reviewedBy User? @relation("ReviewModerator", fields: [reviewedById], references: [id], onDelete: SetNull)
+
+  @@index([status, createdAt])
+  @@map("reviews")
+}
