@@ -376,6 +376,8 @@ export interface CalendarEvent {
    * event of the user's own. Not editable here — the log is where it changes.
    */
   project?: { id: string; name: string; meetingId: string };
+  /** Set when this is one of the user's deadlines, read from that section. */
+  deadline?: { id: string; status: DeadlineStatus; priority: Priority };
 }
 
 export interface MeetingRequest {

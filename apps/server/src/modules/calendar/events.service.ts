@@ -37,6 +37,69 @@ export interface EventOccurrence extends Omit<EventRow, 'startAt' | 'endAt'> {
    * into the calendar, so it cannot drift from the log and is edited there.
    */
   project?: { id: string; name: string; meetingId: string };
+  /**
+   * Set when this is one of the user's deadlines, shown on the day it falls.
+   * Read from the deadlines table the same way; changed there.
+   */
+  deadline?: { id: string; status: string; priority: string };
+}
+
+/**
+ * The user's deadlines falling in the window, dressed as occurrences.
+ *
+ * A deadline is a moment, not a span, so it starts and ends at the same
+ * instant. Cancelled ones stay off the calendar — they are not going to
+ * happen — but completed ones stay on it, marked, since the day they fell on
+ * is part of the record.
+ */
+async function deadlinesInRange(userId: string, query: RangeQuery): Promise<EventOccurrence[]> {
+  const rows = await prisma.deadline.findMany({
+    where: {
+      userId,
+      dueAt: { gte: query.from, lte: query.to },
+      status: { not: 'CANCELLED' },
+    },
+    select: {
+      id: true,
+      title: true,
+      description: true,
+      dueAt: true,
+      timezone: true,
+      status: true,
+      priority: true,
+      createdAt: true,
+      updatedAt: true,
+    },
+    orderBy: { dueAt: 'asc' },
+  });
+
+  return rows.map((d) => ({
+    id: `deadline:${d.id}`,
+    userId,
+    title: d.title,
+    description: d.description,
+    location: null,
+    startAt: d.dueAt,
+    endAt: d.dueAt,
+    timezone: d.timezone,
+    isAllDay: false,
+    category: 'Deadline',
+    priority: d.priority,
+    showAs: 'FREE',
+    visibility: 'PRIVATE',
+    isOnline: false,
+    meetingLink: null,
+    attendees: [],
+    reminderMinutes: null,
+    recurrence: 'NONE',
+    recurrenceEndAt: null,
+    meetingRequestId: null,
+    createdAt: d.createdAt,
+    updatedAt: d.updatedAt,
+    seriesId: `deadline:${d.id}`,
+    isRecurrence: false,
+    deadline: { id: d.id, status: d.status, priority: d.priority },
+  }));
 }
 
 /** How long a project meeting blocks out when the log gives no end time. */
@@ -155,12 +218,16 @@ export async function listRange(userId: string, query: RangeQuery): Promise<Even
     })),
   );
 
-  // A category filter is about the user's own events; project meetings carry
-  // the project's name there and are not what a category means.
-  const meetings = query.category ? [] : await projectMeetingsInRange(userId, query);
+  // A category filter is about the user's own events; what is read in from
+  // the other sections is not what a category means, so it is left out then.
+  const [meetings, deadlines] = query.category
+    ? [[], []]
+    : await Promise.all([projectMeetingsInRange(userId, query), deadlinesInRange(userId, query)]);
 
   // Expansion interleaves series, so the flattened result needs a final sort.
-  return [...occurrences, ...meetings].sort((a, b) => a.startAt.getTime() - b.startAt.getTime());
+  return [...occurrences, ...meetings, ...deadlines].sort(
+    (a, b) => a.startAt.getTime() - b.startAt.getTime(),
+  );
 }
 
 /** Flat list of stored events. Used by management screens, not the grid. */

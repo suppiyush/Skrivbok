@@ -220,9 +220,11 @@ export default function Calendar() {
 
         <span className="flex-1" />
 
-        {/* The redacted state needs explaining once, here. */}
+        {/* One entry per kind on the grid, in the colour the grid uses. */}
         <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-[12.5px] text-ink-3">
-          <Legend colour="var(--color-brand)" label="Event" />
+          {(Object.keys(CHIP) as ChipKind[]).map((kind) => (
+            <Legend key={kind} colour={CHIP[kind].palette().brand} label={CHIP[kind].label} />
+          ))}
           <Legend colour="var(--color-ink-5)" label="Busy — details private" />
           <span className="flex items-center gap-1.5">
             <Icon name="repeat" size={14} /> Recurring
@@ -286,12 +288,17 @@ export default function Calendar() {
                           event={event}
                           // A project meeting is changed in its project's log,
                           // so opening it goes there rather than to the editor.
+                          // What came from another section is changed there:
+                          // a team meeting in its project's log, a deadline in
+                          // Deadlines — opened searching for it by name.
                           onOpen={() =>
                             event.redacted
                               ? undefined
                               : event.project
                                 ? navigate(`/projects/${event.project.id}/meetings`)
-                                : setEditing(event)
+                                : event.deadline
+                                  ? navigate('/deadlines', { state: { search: event.title } })
+                                  : setEditing(event)
                           }
                         />
                       ))}
@@ -460,6 +467,46 @@ function Legend({ colour, label }: { colour: string; label: string }) {
   );
 }
 
+/**
+ * What kind of thing a chip is, and how it is drawn.
+ *
+ * Four kinds share the grid and each wears the colour of the section it came
+ * from, so the calendar reads as a view over the workspace rather than a
+ * section of its own: a deadline is red because Deadlines is red, a team
+ * meeting amber because Projects is. The legend above the grid lists the
+ * same four in the same colours.
+ */
+type ChipKind = 'event' | 'deadline' | 'team' | 'meeting';
+
+function chipKind(event: CalendarEvent): ChipKind {
+  if (event.deadline) return 'deadline';
+  if (event.project) return 'team';
+  if (event.meetingRequestId) return 'meeting';
+  return 'event';
+}
+
+const CHIP: Record<
+  ChipKind,
+  {
+    label: string;
+    icon: string | null;
+    palette: () => { tint: string; deep: string; brand: string };
+  }
+> = {
+  event: {
+    label: 'Event',
+    icon: null,
+    palette: () => ({
+      tint: 'var(--color-brand-tint)',
+      deep: 'var(--color-brand-deep)',
+      brand: 'var(--color-brand)',
+    }),
+  },
+  deadline: { label: 'Deadline', icon: 'flag', palette: () => paletteFor('/deadlines')! },
+  team: { label: 'Team meeting', icon: 'groups', palette: () => paletteFor('/projects')! },
+  meeting: { label: 'Meeting', icon: 'handshake', palette: () => paletteFor('/meetings')! },
+};
+
 function EventChip({ event, onOpen }: { event: CalendarEvent; onOpen: () => void }) {
   if (event.redacted) {
     return (
@@ -477,23 +524,28 @@ function EventChip({ event, onOpen }: { event: CalendarEvent; onOpen: () => void
     );
   }
 
-  // A project meeting wears the project's colour, so it reads as belonging to
-  // that section rather than to the calendar — and its title says which.
-  const projectPalette = event.project ? paletteFor('/projects') : null;
+  const kind = chipKind(event);
+  const { icon, palette } = CHIP[kind];
+  const colours = palette();
+  const done = event.deadline?.status === 'COMPLETED';
+
+  const title = event.project
+    ? `${event.project.name} · ${event.title}`
+    : event.deadline
+      ? `Deadline · ${event.title}${done ? ' (completed)' : ''}`
+      : event.title;
 
   return (
     <button
       type="button"
       onClick={onOpen}
-      title={event.project ? `${event.project.name} · ${event.title}` : event.title}
-      className="press flex w-full items-center gap-1 truncate rounded-md px-1.5 py-1 text-left text-[11px] font-medium transition hover:brightness-95"
-      style={
-        projectPalette
-          ? { background: projectPalette.tint, color: projectPalette.deep }
-          : { background: 'var(--color-brand-tint)', color: 'var(--color-brand-deep)' }
-      }
+      title={title}
+      className={`press flex w-full items-center gap-1 truncate rounded-md px-1.5 py-1 text-left text-[11px] font-medium transition hover:brightness-95 ${
+        done ? 'line-through opacity-60' : ''
+      }`}
+      style={{ background: colours.tint, color: colours.deep }}
     >
-      {event.project ? <Icon name="groups" size={11} className="flex-none" /> : null}
+      {icon ? <Icon name={icon} size={11} className="flex-none" /> : null}
       {!event.isAllDay ? (
         <span className="flex-none font-mono text-[10px]">{timeOnly(event.startAt)}</span>
       ) : null}

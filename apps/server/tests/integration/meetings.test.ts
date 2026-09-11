@@ -231,3 +231,29 @@ describe('on the calendar', () => {
     expect(titles((await range(viewer)).body)).not.toContain('Sampling plan');
   });
 });
+
+describe('deadlines on the calendar', () => {
+  it('shows a deadline on its day, marked as one, and leaves a cancelled one off', async () => {
+    const mine = (body: object) =>
+      request(app).post('/api/v1/deadlines').set('Cookie', owner.cookie).send(body).expect(201);
+
+    await mine({ title: 'Submit abstract', dueAt: '2027-04-05T17:00:00Z' });
+    const cancelled = await mine({ title: 'Old plan', dueAt: '2027-04-06T17:00:00Z' });
+    await request(app)
+      .patch(`/api/v1/deadlines/${(cancelled.body as { id: string }).id}`)
+      .set('Cookie', owner.cookie)
+      .send({ status: 'CANCELLED' })
+      .expect(200);
+
+    const response = await request(app)
+      .get('/api/v1/calendar/events/range?from=2027-04-01T00:00:00Z&to=2027-04-30T00:00:00Z')
+      .set('Cookie', owner.cookie)
+      .expect(200);
+
+    const events = (response.body as { events: { title: string; deadline?: { status: string } }[] })
+      .events;
+    const shown = events.filter((e) => e.deadline !== undefined).map((e) => e.title);
+    expect(shown).toEqual(['Submit abstract']);
+    expect(events.find((e) => e.title === 'Submit abstract')?.deadline?.status).toBe('PENDING');
+  });
+});
