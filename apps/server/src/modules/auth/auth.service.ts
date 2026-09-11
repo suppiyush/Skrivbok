@@ -9,6 +9,7 @@
  */
 import { prisma } from '../../db/prisma.js';
 import { entitled } from '../billing/limits.service.js';
+import { notify } from '../notifications/notify.js';
 import { createLogger } from '../../config/logger.js';
 import { BadRequestError, NotFoundError } from '../../utils/errors.js';
 import { sendWelcome } from '../../emails/index.js';
@@ -151,6 +152,15 @@ export async function findOrCreateGoogleUser(identity: GoogleIdentity): Promise<
   // This is now the only moment an account comes into existence, so the welcome
   // email is sent from here rather than from a registration handler.
   sendWelcome(created.email, created.name ?? created.email);
+
+  // The most common reason reminders "arrive at the wrong time" is a timezone
+  // still set to UTC. One nudge, once, where they will see it.
+  await notify(created.id, {
+    type: 'SYSTEM',
+    title: 'Welcome — set your timezone',
+    message: 'Reminders arrive at the hour you choose, in your own timezone. Pick it in Settings.',
+    link: '/settings',
+  });
 
   log.info({ userId: created.id }, 'User registered via Google');
   return created;

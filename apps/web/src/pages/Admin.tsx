@@ -7,7 +7,9 @@
  * sign-in is delegated to Google.
  */
 import { useEffect, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { AppShell } from '../components/layout/AppShell';
+import { Alert } from '../components/ui/Alert';
 import { Button } from '../components/ui/Button';
 import { Icon } from '../components/ui/Icon';
 import { Card, PageHeader, Pagination, Pill, SearchInput, Toolbar } from '../components/ui/Layout';
@@ -16,7 +18,13 @@ import { Field } from '../components/ui/Field';
 import { Skeleton } from '../components/ui/Skeleton';
 import { Modal } from '../components/ui/Modal';
 import { useToast } from '../components/ui/Toast';
-import { ApiError, type AdminReport, type AdminUser, type ReportStatus } from '../lib/api';
+import {
+  ApiError,
+  type AdminReport,
+  type AdminUser,
+  type PlatformStats,
+  type ReportStatus,
+} from '../lib/api';
 import { useAuth } from '../lib/auth';
 import { longDate, relative, rupees } from '../lib/format';
 import {
@@ -40,8 +48,15 @@ const REPORT_TONE = {
   DISMISSED: 'neutral',
 } as const;
 
+const TABS: Tab[] = ['overview', 'users', 'subscriptions', 'reports', 'reviews'];
+
 export default function Admin() {
-  const [tab, setTab] = useState<Tab>('overview');
+  // A notification links straight to a tab ("new report" → reports), so the
+  // tab lives in the URL and the bell can name it.
+  const [params, setParams] = useSearchParams();
+  const fromUrl = params.get('tab');
+  const tab: Tab = TABS.includes(fromUrl as Tab) ? (fromUrl as Tab) : 'overview';
+  const setTab = (next: Tab) => setParams(next === 'overview' ? {} : { tab: next });
 
   const pendingQueue = useAdminReviews({ status: 'PENDING', limit: 1 });
   const pendingReviews = pendingQueue.data?.pagination.total ?? 0;
@@ -135,6 +150,55 @@ const n = (value: number) => value.toLocaleString();
  * — a session start, not activity as such — and the revenue figure is the
  * captured payments of the last thirty days, summed from the daily series.
  */
+/**
+ * Whether the parts that send things are alive.
+ *
+ * Presence only: a key is "set" or "not set", never shown. The worker's last
+ * pulse is the one that matters — reminders that silently stopped look
+ * exactly like reminders that are working, until someone checks.
+ */
+function SystemHealth({ system }: { system: PlatformStats['system'] }) {
+  const lastTick = system.workerLastTickAt ? new Date(system.workerLastTickAt) : null;
+  const ageMinutes = lastTick ? (Date.now() - lastTick.getTime()) / 60_000 : null;
+  // Two hours is generous for a five-minute cron; it should never be reached.
+  const workerStale = ageMinutes === null || ageMinutes > 120;
+
+  const missing = [
+    !system.mailConfigured ? 'email (SMTP)' : null,
+    !system.uploadsConfigured ? 'uploads (Cloudinary)' : null,
+    !system.billingConfigured ? 'billing (Razorpay)' : null,
+  ].filter((x): x is string => x !== null);
+
+  if (!workerStale && missing.length === 0) {
+    return (
+      <p className="flex items-center gap-2 text-[12.5px] text-ink-3">
+        <Icon name="check_circle" size={15} className="text-[#2e7d55]" />
+        Reminders last ran {relative(system.workerLastTickAt as string)} · email, uploads and
+        billing configured
+      </p>
+    );
+  }
+
+  return (
+    <div className="flex flex-col gap-2">
+      {workerStale ? (
+        <Alert tone="danger" title="The reminder worker is not running">
+          {lastTick
+            ? `Its last pass was ${relative(lastTick.toISOString())}. Nothing has been reminded since.`
+            : 'It has never run. Start it with npm run worker; reminders, agendas and meeting nudges all come from it.'}
+        </Alert>
+      ) : null}
+      {missing.length > 0 ? (
+        <Alert tone="warning" title={`Not configured: ${missing.join(', ')}`}>
+          {system.mailConfigured
+            ? 'The features that need these keys hide themselves until they are set.'
+            : 'Without SMTP, every email is logged by the server instead of delivered. In-app notifications still work.'}
+        </Alert>
+      ) : null}
+    </div>
+  );
+}
+
 function Overview() {
   const stats = useAdminStats();
   const analytics = useAdminAnalytics(30);
@@ -158,7 +222,7 @@ function Overview() {
     );
   }
 
-  const { users, content, engagement } = stats.data;
+  const { users, content, engagement, system } = stats.data;
   const revenue30 = analytics.data.revenue.reduce((sum, d) => sum + d.paise, 0);
   const signups30 = analytics.data.signups.reduce((sum, d) => sum + d.count, 0);
 
@@ -191,6 +255,8 @@ function Overview() {
 
   return (
     <>
+      <SystemHealth system={system} />
+
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         {headline.map((s) => (
           <Card key={s.label}>

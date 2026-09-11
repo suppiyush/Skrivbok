@@ -33,6 +33,8 @@
 import { randomUUID } from 'node:crypto';
 import { fromZonedTime } from 'date-fns-tz';
 import { prisma } from '../../db/prisma.js';
+import { sendMeetingCancelled, sendMeetingRequest } from '../../emails/index.js';
+import { notify, notifyMany } from '../notifications/notify.js';
 import { createLogger } from '../../config/logger.js';
 import { BadRequestError, ForbiddenError, NotFoundError } from '../../utils/errors.js';
 import type { CreateGroupMeetInput } from './meetings.schema.js';
@@ -161,19 +163,34 @@ export async function create(
       });
       requestIds.push(request.id);
 
-      await tx.notification.create({
-        data: {
-          userId: attendee.id,
+      await notify(
+        attendee.id,
+        {
           type: 'MEETING_REQUEST',
           title: `${sender.name ?? sender.email} asked you to a meet`,
           message: input.title,
           link: `/meetings?request=${request.id}`,
         },
-      });
+        tx,
+      );
     }
 
     return { groupId, eventId: event.id, requestIds };
   });
+
+  // The same email a one-to-one request sends, once per attendee and under
+  // the same preference. Sent after the transaction so a slow mail server
+  // cannot hold the rows open.
+  for (const attendee of attendees) {
+    sendMeetingRequest(attendee.id, attendee.email, {
+      senderName: sender.name ?? sender.email,
+      title: input.title,
+      startAt,
+      endAt,
+      timezone: input.timezone,
+      description: input.description ?? null,
+    });
+  }
 
   log.info({ groupId, attendees: attendees.length }, 'Group meet requested');
   return result;
@@ -189,7 +206,17 @@ export async function create(
 export async function cancel(userId: string, groupId: string): Promise<void> {
   const requests = await prisma.meetingRequest.findMany({
     where: { groupId },
-    select: { id: true, senderId: true, receiverId: true, status: true, title: true },
+    select: {
+      id: true,
+      senderId: true,
+      receiverId: true,
+      status: true,
+      title: true,
+      startAt: true,
+      timezone: true,
+      sender: { select: { name: true, email: true } },
+      receiver: { select: { email: true } },
+    },
   });
 
   if (requests.length === 0) throw new NotFoundError('Meet');
@@ -205,16 +232,27 @@ export async function cancel(userId: string, groupId: string): Promise<void> {
       data: { status: 'CANCELLED', respondedAt: new Date() },
     }),
     prisma.calendarEvent.deleteMany({ where: { meetingGroupId: groupId } }),
-    prisma.notification.createMany({
-      data: open.map((r) => ({
-        userId: r.receiverId,
-        type: 'MEETING_REJECTED' as const,
-        title: 'Meet cancelled',
-        message: r.title,
-        link: '/meetings',
-      })),
-    }),
   ]);
+
+  await notifyMany(
+    open.map((r) => r.receiverId),
+    {
+      type: 'MEETING_REJECTED',
+      title: 'Meet cancelled',
+      message: requests[0]?.title ?? null,
+      link: '/meetings',
+    },
+  );
+
+  // Those who had accepted had it on their calendar; they get the email too.
+  for (const r of open.filter((r) => r.status === 'ACCEPTED')) {
+    sendMeetingCancelled(r.receiverId, r.receiver.email, {
+      byName: r.sender.name ?? r.sender.email,
+      title: r.title,
+      startAt: r.startAt,
+      timezone: r.timezone,
+    });
+  }
 
   log.info({ groupId, cancelled: open.length }, 'Group meet cancelled');
 }

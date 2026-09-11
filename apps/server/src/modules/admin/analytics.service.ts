@@ -10,6 +10,8 @@
  * string concatenation.
  */
 import { prisma } from '../../db/prisma.js';
+import { env } from '../../config/env.js';
+import { isUploadEnabled } from '../uploads/uploads.service.js';
 
 export interface PlatformStats {
   users: {
@@ -28,6 +30,18 @@ export interface PlatformStats {
     refundedCount: number;
   };
   engagement: { withProjects: number; withProfile: number; neverLoggedIn: number };
+  /**
+   * Whether the parts that send things are alive. Presence only — a key is
+   * "set" or "not set", never shown — and the worker's last pulse, so the
+   * panel can say reminders are running rather than assume it.
+   */
+  system: {
+    mailConfigured: boolean;
+    uploadsConfigured: boolean;
+    billingConfigured: boolean;
+    workerLastTickAt: string | null;
+    workerLastResult: Record<string, number> | null;
+  };
 }
 
 /** The admin dashboard headline numbers. */
@@ -108,6 +122,23 @@ export async function platformStats(): Promise<PlatformStats> {
       refundedCount,
     },
     engagement: { withProjects, withProfile, neverLoggedIn },
+    system: await systemHealth(),
+  };
+}
+
+async function systemHealth(): Promise<PlatformStats['system']> {
+  const worker = await prisma.workerStatus.findUnique({ where: { key: 'reminders' } });
+  const lastResult =
+    worker?.lastResult && typeof worker.lastResult === 'object' && !Array.isArray(worker.lastResult)
+      ? (worker.lastResult as Record<string, number>)
+      : null;
+
+  return {
+    mailConfigured: env.mail.enabled,
+    uploadsConfigured: isUploadEnabled(),
+    billingConfigured: env.billing.enabled,
+    workerLastTickAt: worker?.lastTickAt.toISOString() ?? null,
+    workerLastResult: lastResult,
   };
 }
 

@@ -167,7 +167,7 @@ function layout(options: LayoutOptions): { html: string; text: string } {
           ${
             options.preferencesLink === false
               ? ''
-              : `<a href="${escapeHtml(appUrl('/settings'))}" style="color:${FAINT};text-decoration:underline">Email preferences</a>
+              : `<a href="${escapeHtml(appUrl('/settings#notifications'))}" style="color:${FAINT};text-decoration:underline">Email preferences</a>
           &nbsp;·&nbsp;`
           }
           <a href="mailto:${escapeHtml(env.mail.supportEmail)}" style="color:${FAINT};text-decoration:underline">Contact support</a>
@@ -191,7 +191,7 @@ function layout(options: LayoutOptions): { html: string; text: string } {
     '',
     '—',
     footerNote,
-    `Email preferences: ${appUrl('/settings')}`,
+    `Email preferences: ${appUrl('/settings#notifications')}`,
     `Support: ${env.mail.supportEmail}`,
   ]
     .filter((line) => line !== '')
@@ -446,11 +446,16 @@ export function meetingRequest(
     endAt: Date;
     timezone: string;
     description: string | null;
+    /** True when a pending request was moved rather than newly sent. */
+    rescheduled?: boolean;
   },
 ): Mail {
+  const heading = data.rescheduled ? 'A meeting request was rescheduled' : 'New meeting request';
   const { html, text } = layout({
-    heading: 'New meeting request',
-    intro: `${data.senderName} would like to meet.`,
+    heading,
+    intro: data.rescheduled
+      ? `${data.senderName} moved the meeting they proposed.`
+      : `${data.senderName} would like to meet.`,
     bodyHtml:
       panel(
         `<strong style="font-size:15px">${escapeHtml(data.title)}</strong><br>` +
@@ -466,7 +471,12 @@ export function meetingRequest(
     actionPath: '/calendar',
   });
 
-  return { to, subject: `Meeting request: ${data.title}`, html, text };
+  return {
+    to,
+    subject: data.rescheduled ? `Rescheduled: ${data.title}` : `Meeting request: ${data.title}`,
+    html,
+    text,
+  };
 }
 
 export function meetingResponse(
@@ -519,4 +529,289 @@ export function welcome(to: string, data: { name: string }): Mail {
   });
 
   return { to, subject: 'Welcome to Skrivbok', html, text };
+}
+
+// ── Meetings and calendars ────────────────────────────────────────────────────
+
+export function meetingCancelled(
+  to: string,
+  data: { byName: string; title: string; startAt: Date; timezone: string },
+): Mail {
+  const { html, text } = layout({
+    heading: 'Meeting cancelled',
+    intro: `${data.byName} cancelled a meeting that was on your calendar.`,
+    bodyHtml: table([
+      row('Subject', data.title),
+      row('Was', formatInZone(data.startAt, data.timezone)),
+    ]),
+    bodyText: `Subject: ${data.title}\nWas: ${formatInZone(data.startAt, data.timezone)}`,
+    actionLabel: 'Open calendar',
+    actionPath: '/calendar',
+  });
+
+  return { to, subject: `Cancelled: ${data.title}`, html, text };
+}
+
+export function calendarAccessRequest(
+  to: string,
+  data: { requesterName: string; message: string | null },
+): Mail {
+  const { html, text } = layout({
+    heading: 'Someone asked to see your calendar',
+    intro: `${data.requesterName} would like to see when you are free.`,
+    bodyHtml:
+      (data.message ? panel(escapeHtml(data.message.slice(0, 500))) : '') +
+      `<p style="margin:0;font-family:${FONT};font-size:14px;line-height:1.6;color:${MUTED}">
+        You choose what they see — free/busy only, or event details — and you can take it back at
+        any time. Nothing is shared until you approve.
+      </p>`,
+    bodyText:
+      (data.message ? `"${data.message.slice(0, 500)}"\n\n` : '') +
+      'You choose what they see, and you can take it back at any time. Nothing is shared until you approve.',
+    actionLabel: 'Review the request',
+    actionPath: '/calendar',
+  });
+
+  return { to, subject: `${data.requesterName} asked to see your calendar`, html, text };
+}
+
+// ── Projects ──────────────────────────────────────────────────────────────────
+
+export function ownershipTransferred(
+  to: string,
+  data: { projectName: string; fromName: string; projectId: string },
+): Mail {
+  const { html, text } = layout({
+    heading: 'You now own a project',
+    intro: `${data.fromName} made you the owner of a project.`,
+    bodyHtml:
+      panel(`<strong style="font-size:15px">${escapeHtml(data.projectName)}</strong>`) +
+      `<p style="margin:0;font-family:${FONT};font-size:14px;line-height:1.6;color:${MUTED}">
+        As owner you decide who is on the project, and it now counts towards your own plan.
+        ${escapeHtml(data.fromName)} stays on as an editor.
+      </p>`,
+    bodyText:
+      `Project: ${data.projectName}\n\n` +
+      `As owner you decide who is on the project, and it now counts towards your own plan. ` +
+      `${data.fromName} stays on as an editor.`,
+    actionLabel: 'Open project',
+    actionPath: `/projects/${data.projectId}`,
+  });
+
+  return { to, subject: `You now own “${data.projectName}”`, html, text };
+}
+
+// ── Billing ───────────────────────────────────────────────────────────────────
+
+/** ₹4,990.00 from 499000 paise. Email has no access to the app's formatter. */
+function money(paise: number, currency: string): string {
+  return new Intl.NumberFormat('en-IN', { style: 'currency', currency }).format(paise / 100);
+}
+
+export interface ReceiptData {
+  name: string;
+  plan: string;
+  amountPaise: number;
+  currency: string;
+  periodStart: Date;
+  periodEnd: Date;
+  orderId: string;
+  paymentId: string | null;
+  timezone: string;
+}
+
+export function subscriptionReceipt(to: string, data: ReceiptData): Mail {
+  const { html, text } = layout({
+    heading: 'Your Skrivbok PRO receipt',
+    intro: `Thank you, ${data.name}. Your payment went through and PRO is active.`,
+    bodyHtml: table([
+      row('Plan', `PRO, ${data.plan.toLowerCase()}`),
+      row('Amount', money(data.amountPaise, data.currency)),
+      row(
+        'Period',
+        `${formatInZone(data.periodStart, data.timezone, false)} – ${formatInZone(data.periodEnd, data.timezone, false)}`,
+      ),
+      row('Order', data.orderId),
+      ...(data.paymentId ? [row('Payment', data.paymentId)] : []),
+    ]),
+    bodyText:
+      `Plan: PRO, ${data.plan.toLowerCase()}\n` +
+      `Amount: ${money(data.amountPaise, data.currency)}\n` +
+      `Period: ${formatInZone(data.periodStart, data.timezone, false)} – ${formatInZone(data.periodEnd, data.timezone, false)}\n` +
+      `Order: ${data.orderId}` +
+      (data.paymentId ? `\nPayment: ${data.paymentId}` : ''),
+    actionLabel: 'View your plan',
+    actionPath: '/upgrade',
+    footerNote:
+      'You are receiving this because you paid for Skrivbok PRO. Keep it for your records.',
+  });
+
+  return {
+    to,
+    subject: `Receipt — Skrivbok PRO (${money(data.amountPaise, data.currency)})`,
+    html,
+    text,
+  };
+}
+
+export function paymentFailed(to: string, data: { name: string; reason: string | null }): Mail {
+  const { html, text } = layout({
+    heading: 'Your payment did not go through',
+    intro: `Hello ${data.name}, a payment for Skrivbok PRO failed and nothing was charged.`,
+    bodyHtml:
+      (data.reason ? table([row('Reason', data.reason)]) : '') +
+      `<p style="margin:12px 0 0;font-family:${FONT};font-size:14px;line-height:1.6;color:${MUTED}">
+        Your account is unchanged. You can try again whenever you like.
+      </p>`,
+    bodyText:
+      (data.reason ? `Reason: ${data.reason}\n\n` : '') +
+      'Your account is unchanged. You can try again whenever you like.',
+    actionLabel: 'Try again',
+    actionPath: '/upgrade',
+    footerNote: 'You are receiving this because a payment was attempted on your Skrivbok account.',
+  });
+
+  return { to, subject: 'Your Skrivbok payment did not go through', html, text };
+}
+
+export function subscriptionEnding(
+  to: string,
+  data: { name: string; endsAt: Date; daysLeft: number; timezone: string },
+): Mail {
+  const when = data.daysLeft <= 1 ? 'tomorrow' : `in ${data.daysLeft} days`;
+  const { html, text } = layout({
+    heading: `Your PRO plan ends ${when}`,
+    intro: `Hello ${data.name}, your Skrivbok PRO subscription runs out on ${formatInZone(data.endsAt, data.timezone, false)}.`,
+    bodyHtml: panel(
+      'After that, the free limits apply again — five projects, five career goals and twenty ' +
+        'literature entries. Nothing you have made is removed; you just cannot add past the caps.',
+    ),
+    bodyText:
+      'After that, the free limits apply again — five projects, five career goals and twenty ' +
+      'literature entries. Nothing you have made is removed; you just cannot add past the caps.',
+    actionLabel: 'Renew PRO',
+    actionPath: '/upgrade',
+    footerNote: 'You are receiving this because you have a Skrivbok PRO subscription.',
+  });
+
+  return { to, subject: `Your Skrivbok PRO plan ends ${when}`, html, text };
+}
+
+export function subscriptionExpired(to: string, data: { name: string }): Mail {
+  const { html, text } = layout({
+    heading: 'Your PRO plan has ended',
+    intro: `Hello ${data.name}, your Skrivbok PRO subscription has run out.`,
+    bodyHtml: panel(
+      'Everything you made is still there. The free limits now apply, so you may not be able to ' +
+        'add more projects, goals or literature until you renew.',
+    ),
+    bodyText:
+      'Everything you made is still there. The free limits now apply, so you may not be able to ' +
+      'add more projects, goals or literature until you renew.',
+    actionLabel: 'Renew PRO',
+    actionPath: '/upgrade',
+    footerNote: 'You are receiving this because you had a Skrivbok PRO subscription.',
+  });
+
+  return { to, subject: 'Your Skrivbok PRO plan has ended', html, text };
+}
+
+/** A plan set by hand from the admin panel — comped, extended, or removed. */
+export function planChanged(
+  to: string,
+  data: { name: string; plan: 'FREE' | 'PRO'; endsAt: Date | null; timezone: string },
+): Mail {
+  const pro = data.plan === 'PRO';
+  const until = data.endsAt ? ` until ${formatInZone(data.endsAt, data.timezone, false)}` : '';
+  const { html, text } = layout({
+    heading: pro ? 'PRO has been added to your account' : 'Your plan was changed to Free',
+    intro: pro
+      ? `Hello ${data.name}, you now have Skrivbok PRO${until}. There is nothing to pay.`
+      : `Hello ${data.name}, your account is now on the Free plan.`,
+    bodyHtml: panel(
+      pro
+        ? 'Every cap is lifted for as long as it lasts.'
+        : 'Everything you made is still there; the free limits apply from now on.',
+    ),
+    bodyText: pro
+      ? 'Every cap is lifted for as long as it lasts.'
+      : 'Everything you made is still there; the free limits apply from now on.',
+    actionLabel: 'View your plan',
+    actionPath: '/upgrade',
+    footerNote: 'You are receiving this because an administrator changed your Skrivbok plan.',
+  });
+
+  return {
+    to,
+    subject: pro ? `You now have Skrivbok PRO${until}` : 'Your Skrivbok plan was changed',
+    html,
+    text,
+  };
+}
+
+// ── Account ───────────────────────────────────────────────────────────────────
+
+export function sessionsRevoked(to: string, data: { name: string }): Mail {
+  const { html, text } = layout({
+    heading: 'You were signed out of every device',
+    intro: `Hello ${data.name}, an administrator ended all of your Skrivbok sessions.`,
+    bodyHtml: panel(
+      'This is done when there is reason to think an account may be open somewhere it should ' +
+        'not be. Sign in again with Google to continue; nothing in your workspace has changed.',
+    ),
+    bodyText:
+      'This is done when there is reason to think an account may be open somewhere it should ' +
+      'not be. Sign in again with Google to continue; nothing in your workspace has changed.',
+    actionLabel: 'Sign in',
+    actionPath: '/login',
+    footerNote: 'You are receiving this because of a security action on your Skrivbok account.',
+    preferencesLink: false,
+  });
+
+  return { to, subject: 'You were signed out of Skrivbok everywhere', html, text };
+}
+
+export function accountDeleted(to: string, data: { name: string }): Mail {
+  const { html, text } = layout({
+    heading: 'Your Skrivbok account has been deleted',
+    intro: `Hello ${data.name}, your account and everything in it has been removed.`,
+    bodyHtml: `<p style="margin:0;font-family:${FONT};font-size:14px;line-height:1.6;color:${MUTED}">
+        Projects, notes, deadlines and calendar entries are gone. Feedback you sent us is kept
+        without your name on it. If this was not expected, reply to this email.
+      </p>`,
+    bodyText:
+      'Projects, notes, deadlines and calendar entries are gone. Feedback you sent us is kept ' +
+      'without your name on it. If this was not expected, reply to this email.',
+    footerNote: 'You are receiving this because a Skrivbok account with this address was deleted.',
+    preferencesLink: false,
+  });
+
+  return { to, subject: 'Your Skrivbok account has been deleted', html, text };
+}
+
+// ── Reports ───────────────────────────────────────────────────────────────────
+
+export function reportUpdate(
+  to: string,
+  data: {
+    name: string;
+    title: string;
+    status: 'RESOLVED' | 'DISMISSED';
+    resolution: string | null;
+  },
+): Mail {
+  const resolved = data.status === 'RESOLVED';
+  const { html, text } = layout({
+    heading: resolved ? 'Your report was resolved' : 'Your report was closed',
+    intro: `Hello ${data.name}, ${resolved ? 'we fixed or answered' : 'we looked at'} the report you sent.`,
+    bodyHtml:
+      table([row('Report', data.title)]) +
+      (data.resolution ? panel(escapeHtml(data.resolution)) : ''),
+    bodyText: `Report: ${data.title}` + (data.resolution ? `\n\n${data.resolution}` : ''),
+    actionLabel: 'View your reports',
+    actionPath: '/help',
+    footerNote: 'You are receiving this because you sent feedback through Skrivbok.',
+  });
+
+  return { to, subject: `${resolved ? 'Resolved' : 'Closed'}: ${data.title}`, html, text };
 }

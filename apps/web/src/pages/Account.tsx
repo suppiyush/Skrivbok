@@ -6,29 +6,35 @@
  * into an eleven-section record with a résumé printed from it; it is in
  * `Profile.tsx` and `Resume.tsx` now.
  */
-import { useState, type FormEvent } from 'react';
+import { useEffect, useState, type FormEvent } from 'react';
+import { Link } from 'react-router-dom';
 import { AppShell } from '../components/layout/AppShell';
 import { Alert } from '../components/ui/Alert';
 import { Button } from '../components/ui/Button';
 import { EmptyState } from '../components/ui/EmptyState';
 import { Field } from '../components/ui/Field';
-import { FieldRow, Select, Textarea } from '../components/ui/Form';
+import { Checkbox, FieldRow, Select, Textarea } from '../components/ui/Form';
+import { Modal } from '../components/ui/Modal';
 import { Icon } from '../components/ui/Icon';
 import { Card, PageHeader, Pagination, Pill, Toolbar } from '../components/ui/Layout';
 import { Reveal } from '../components/ui/Motion';
 import { Skeleton } from '../components/ui/Skeleton';
 import { useToast } from '../components/ui/Toast';
-import { ApiError, auth, type LimitStatus } from '../lib/api';
+import { ApiError, auth, type LimitStatus, type NotificationType } from '../lib/api';
 import { dateTime, humanise, longDate, relative, rupees } from '../lib/format';
 import { useAuth } from '../lib/auth';
 import {
   useCreateReport,
   useNotificationActions,
+  useNotificationPreferences,
   useNotifications,
+  useOwnReview,
   usePayments,
   usePlans,
   useReports,
+  useReviewActions,
   useSubscription,
+  useUpdateNotificationPreferences,
   useUsage,
 } from '../lib/queries';
 
@@ -348,19 +354,66 @@ function PlanFeatures({ items }: { items: string[] }) {
 
 /* ── Notifications ────────────────────────────────────────────────────────── */
 
+/**
+ * How each kind of notification is drawn. The icon says what it is about
+ * before the title is read, and the filter groups the kinds a person is
+ * likely to want on their own — "just the meetings", "just the team".
+ */
+const NOTIFICATION_KINDS: {
+  key: string;
+  label: string;
+  icon: string;
+  types: NotificationType[];
+}[] = [
+  { key: 'deadline', label: 'Deadlines', icon: 'flag', types: ['DEADLINE_DUE'] },
+  {
+    key: 'meetings',
+    label: 'Meetings',
+    icon: 'groups',
+    types: ['MEETING_REQUEST', 'MEETING_ACCEPTED', 'MEETING_REJECTED', 'PROJECT_MEETING'],
+  },
+  { key: 'events', label: 'Events', icon: 'event', types: ['EVENT_REMINDER'] },
+  { key: 'team', label: 'Team', icon: 'folder_shared', types: ['PROJECT_INVITE', 'TEAM'] },
+  {
+    key: 'calendar',
+    label: 'Calendar sharing',
+    icon: 'calendar_month',
+    types: ['CALENDAR_ACCESS_REQUEST', 'CALENDAR_ACCESS_GRANTED'],
+  },
+  {
+    key: 'account',
+    label: 'Account',
+    icon: 'workspace_premium',
+    types: ['SUBSCRIPTION', 'SYSTEM'],
+  },
+  { key: 'reports', label: 'Reports', icon: 'rate_review', types: ['REPORT'] },
+  { key: 'admin', label: 'Admin', icon: 'shield_person', types: ['ADMIN'] },
+];
+
+function iconFor(type: NotificationType): string {
+  return NOTIFICATION_KINDS.find((k) => k.types.includes(type))?.icon ?? 'notifications';
+}
+
 export function Notifications() {
   const toast = useToast();
   const [unreadOnly, setUnreadOnly] = useState(false);
+  const [kind, setKind] = useState<string | null>(null);
   const [page, setPage] = useState(1);
 
+  // The API filters by one type; a kind with several is fetched unfiltered
+  // and narrowed here. The lists are small enough that this is fine.
+  const kindTypes = NOTIFICATION_KINDS.find((k) => k.key === kind)?.types ?? null;
   const list = useNotifications({
     page,
     limit: 25,
     ...(unreadOnly ? { unreadOnly: 'true' } : {}),
+    ...(kindTypes && kindTypes.length === 1 ? { type: kindTypes[0] } : {}),
   });
   const { markAllRead, markRead, remove, clearRead } = useNotificationActions();
 
-  const items = list.data?.data ?? [];
+  const items = (list.data?.data ?? []).filter(
+    (item) => !kindTypes || kindTypes.includes(item.type),
+  );
   const meta = list.data?.pagination;
 
   return (
@@ -424,6 +477,33 @@ export function Notifications() {
             </button>
           ))}
         </div>
+        <div className="flex flex-wrap gap-1.5">
+          {NOTIFICATION_KINDS.map((k) => (
+            <button
+              key={k.key}
+              type="button"
+              aria-pressed={kind === k.key}
+              onClick={() => {
+                setKind(kind === k.key ? null : k.key);
+                setPage(1);
+              }}
+              className={`press inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[12.5px] font-semibold transition ${
+                kind === k.key
+                  ? 'border-brand bg-brand-tint text-brand-deep'
+                  : 'border-line bg-surface text-ink-3 hover:text-ink'
+              }`}
+            >
+              <Icon name={k.icon} size={14} />
+              {k.label}
+            </button>
+          ))}
+        </div>
+        <Link
+          to="/settings#notifications"
+          className="ml-auto text-[12.5px] font-semibold text-brand-ink hover:underline"
+        >
+          Notification settings
+        </Link>
       </Toolbar>
 
       {list.isPending ? (
@@ -449,8 +529,23 @@ export function Notifications() {
                       background: item.readAt === null ? 'var(--color-brand-tint-2)' : undefined,
                     }}
                   >
+                    <span className="mt-0.5 grid size-8 flex-none place-items-center rounded-lg bg-brand-tint text-brand-ink">
+                      <Icon name={iconFor(item.type)} size={17} />
+                    </span>
                     <span className="min-w-0 flex-1">
-                      <span className="block text-[14px] font-semibold">{item.title}</span>
+                      {item.link ? (
+                        <Link
+                          to={item.link}
+                          onClick={() => {
+                            if (item.readAt === null) markRead.mutate([item.id]);
+                          }}
+                          className="block text-[14px] font-semibold hover:underline"
+                        >
+                          {item.title}
+                        </Link>
+                      ) : (
+                        <span className="block text-[14px] font-semibold">{item.title}</span>
+                      )}
                       {item.message ? (
                         <span className="mt-0.5 block text-[13px] text-ink-3">{item.message}</span>
                       ) : null}
@@ -663,7 +758,213 @@ export function Help() {
           )}
         </Card>
       </Reveal>
+
+      <ReviewPanel />
     </AppShell>
+  );
+}
+
+/* ── Review ───────────────────────────────────────────────────────────────── */
+
+const REVIEW_STATUS = {
+  PENDING: { tone: 'warning', label: 'Waiting for approval' },
+  APPROVED: { tone: 'success', label: 'Published' },
+  REJECTED: { tone: 'danger', label: 'Not published' },
+} as const;
+
+/**
+ * Write a review that appears on the public landing page.
+ *
+ * Lives on the Help page: it is feedback, and it sits beside the other kind.
+ * The status is shown plainly, including that it is not live until an admin
+ * approves it. Leaving that implicit would have people wondering why their
+ * words never appeared.
+ */
+function ReviewPanel() {
+  const toast = useToast();
+  const { data, isPending } = useOwnReview();
+  const { save, remove } = useReviewActions();
+  const [open, setOpen] = useState(false);
+  const [rating, setRating] = useState(5);
+  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
+
+  const review = data?.review ?? null;
+
+  useEffect(() => {
+    if (review) setRating(review.rating);
+  }, [review]);
+
+  async function onSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setFieldErrors({});
+    const form = new FormData(event.currentTarget);
+
+    try {
+      await save.mutateAsync({
+        rating,
+        role: String(form.get('role') ?? '').trim() || null,
+        body: String(form.get('body') ?? '').trim(),
+      });
+      toast.success('Thank you — your review has been sent for approval');
+      setOpen(false);
+    } catch (error) {
+      if (error instanceof ApiError && error.details.length > 0) setFieldErrors(error.fieldErrors);
+      else toast.error(error instanceof ApiError ? error.message : 'Could not save your review.');
+    }
+  }
+
+  if (isPending) return null;
+
+  const status = review ? REVIEW_STATUS[review.status] : null;
+
+  return (
+    <>
+      <Reveal delay={120}>
+        <Card>
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div className="min-w-0">
+              <h2 className="text-[15px] font-bold">Your review</h2>
+              <p className="mt-1 max-w-[62ch] text-[13.5px] leading-relaxed text-ink-3">
+                Tell other researchers what Skrivbok changed for you. Approved reviews appear on the
+                public homepage with your name and role.
+              </p>
+            </div>
+            {status ? <Pill tone={status.tone}>{status.label}</Pill> : null}
+          </div>
+
+          {review ? (
+            <>
+              <div className="mt-4 flex gap-0.5" aria-label={`Rated ${review.rating} out of 5`}>
+                {Array.from({ length: 5 }, (_, i) => (
+                  <Icon
+                    key={i}
+                    name="star"
+                    size={17}
+                    className={i < review.rating ? 'text-accent' : 'text-line-3'}
+                  />
+                ))}
+              </div>
+              <blockquote className="mt-2.5 max-w-[76ch] text-[14px] leading-[1.7] text-ink-2">
+                “{review.body}”
+              </blockquote>
+
+              {review.status === 'REJECTED' && review.adminNote ? (
+                <div className="mt-4">
+                  <Alert tone="warning" title="Not published">
+                    {review.adminNote}
+                  </Alert>
+                </div>
+              ) : null}
+
+              <div className="mt-5 flex flex-wrap gap-2">
+                <Button variant="secondary" size="sm" icon="edit" onClick={() => setOpen(true)}>
+                  Edit review
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  icon="delete"
+                  className="text-danger-ink"
+                  loading={remove.isPending}
+                  onClick={() =>
+                    void remove
+                      .mutateAsync()
+                      .then(() => toast.success('Review deleted'))
+                      .catch(() => toast.error('Could not delete that review.'))
+                  }
+                >
+                  Delete
+                </Button>
+              </div>
+            </>
+          ) : (
+            <Button
+              variant="brand"
+              size="sm"
+              icon="rate_review"
+              className="mt-4"
+              onClick={() => setOpen(true)}
+            >
+              Write a review
+            </Button>
+          )}
+        </Card>
+      </Reveal>
+
+      <Modal
+        open={open}
+        onClose={() => setOpen(false)}
+        title={review ? 'Edit your review' : 'Write a review'}
+        description="An admin approves reviews before they appear on the homepage."
+        onSubmit={onSubmit}
+        busy={save.isPending}
+        footer={
+          <>
+            <Button
+              variant="secondary"
+              size="sm"
+              onClick={() => setOpen(false)}
+              disabled={save.isPending}
+            >
+              Cancel
+            </Button>
+            <Button type="submit" variant="brand" size="sm" loading={save.isPending}>
+              Send for approval
+            </Button>
+          </>
+        }
+      >
+        <div className="flex flex-col gap-4">
+          <div className="flex flex-col gap-1.5">
+            <span className="text-[13px] font-semibold text-ink-2">Rating</span>
+            <div className="flex gap-1">
+              {Array.from({ length: 5 }, (_, i) => (
+                <button
+                  key={i}
+                  type="button"
+                  aria-label={`${i + 1} out of 5`}
+                  aria-pressed={rating === i + 1}
+                  onClick={() => setRating(i + 1)}
+                  className="press rounded-lg p-1"
+                >
+                  <Icon
+                    name="star"
+                    size={28}
+                    className={i < rating ? 'text-accent' : 'text-line-3'}
+                  />
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <Field
+            label="Your role"
+            name="role"
+            placeholder="Postdoctoral Researcher"
+            hint="Shown beside your quote on the homepage."
+            defaultValue={review?.role ?? ''}
+            error={fieldErrors['role']}
+          />
+
+          <Textarea
+            label="Your review"
+            name="body"
+            rows={6}
+            required
+            placeholder="What changed for you, and what you would tell a colleague."
+            hint="At least 40 characters."
+            defaultValue={review?.body ?? ''}
+            error={fieldErrors['body']}
+          />
+
+          {review?.status === 'APPROVED' ? (
+            <Alert tone="info" title="Editing sends this back for approval">
+              Your published review stays live until the edited version is approved.
+            </Alert>
+          ) : null}
+        </div>
+      </Modal>
+    </>
   );
 }
 
@@ -777,7 +1078,136 @@ export function Settings() {
           </div>
         </Card>
       </Reveal>
+
+      <NotificationSettings timezone={user?.timezone ?? 'UTC'} />
     </AppShell>
+  );
+}
+
+/** Days-before choices. "0" is the day itself. */
+const REMINDER_DAYS = [0, 1, 2, 3, 5, 7, 14];
+
+/**
+ * How and when this person is told things.
+ *
+ * Every email Skrivbok sends links here from its footer, so this is the one
+ * place a person can stop it — the emails promised the page long before it
+ * existed. The in-app bell follows the same switches: one decision, not two.
+ */
+function NotificationSettings({ timezone }: { timezone: string }) {
+  const toast = useToast();
+  const { data, isPending } = useNotificationPreferences();
+  const update = useUpdateNotificationPreferences();
+  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
+
+  const prefs = data?.preferences;
+
+  async function onSave(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setFieldErrors({});
+    const form = new FormData(event.currentTarget);
+
+    try {
+      await update.mutateAsync({
+        deadlineRemindersEnabled: form.get('deadlineRemindersEnabled') === 'on',
+        dailyAgendaEnabled: form.get('dailyAgendaEnabled') === 'on',
+        meetingRequestsEnabled: form.get('meetingRequestsEnabled') === 'on',
+        reminderDaysBefore: form.getAll('reminderDaysBefore').map(Number),
+        notificationTime: String(form.get('notificationTime') ?? '09:00'),
+      });
+      toast.success('Notification settings saved');
+    } catch (error) {
+      if (error instanceof ApiError && error.details.length > 0) setFieldErrors(error.fieldErrors);
+      else
+        toast.error(error instanceof ApiError ? error.message : 'Could not save those settings.');
+    }
+  }
+
+  return (
+    <Reveal delay={90} className="mx-auto mt-4 w-full max-w-[760px]">
+      <Card>
+        <h2 id="notifications" className="scroll-mt-24 text-[15px] font-bold">
+          Notifications
+        </h2>
+        <p className="mt-1 text-[13px] leading-relaxed text-ink-3">
+          Reminders arrive in the bell and by email, at the time you choose, in your timezone (
+          {timezone}). Receipts and security notices are always sent.
+        </p>
+
+        {isPending || !prefs ? (
+          <div className="shimmer mt-4 flex flex-col gap-3">
+            <Skeleton h={22} radius={8} />
+            <Skeleton h={22} radius={8} />
+            <Skeleton h={22} radius={8} />
+          </div>
+        ) : (
+          <form onSubmit={onSave} className="mt-4 flex flex-col gap-5" noValidate>
+            <Checkbox
+              name="deadlineRemindersEnabled"
+              label="Deadline reminders"
+              hint="A reminder ahead of each deadline that asked for one, and a note when one is overdue."
+              defaultChecked={prefs.deadlineRemindersEnabled}
+            />
+            <fieldset className="ml-6 flex flex-col gap-2">
+              <legend className="text-[12.5px] font-semibold text-ink-3">Remind me</legend>
+              <div className="flex flex-wrap gap-x-4 gap-y-2">
+                {REMINDER_DAYS.map((d) => (
+                  <label key={d} className="flex cursor-pointer items-center gap-1.5 text-[13px]">
+                    <input
+                      type="checkbox"
+                      name="reminderDaysBefore"
+                      value={d}
+                      defaultChecked={prefs.reminderDaysBefore.includes(d)}
+                      className="size-3.5 accent-[var(--color-brand)]"
+                    />
+                    {d === 0 ? 'on the day' : d === 1 ? '1 day before' : `${d} days before`}
+                  </label>
+                ))}
+              </div>
+              {fieldErrors['reminderDaysBefore'] ? (
+                <span className="text-[12.5px] text-danger-ink">
+                  {fieldErrors['reminderDaysBefore']}
+                </span>
+              ) : null}
+            </fieldset>
+
+            <Checkbox
+              name="dailyAgendaEnabled"
+              label="Daily agenda email"
+              hint="Your events, team meetings and deadlines for the day. Not sent on an empty day."
+              defaultChecked={prefs.dailyAgendaEnabled}
+            />
+
+            <Checkbox
+              name="meetingRequestsEnabled"
+              label="Emails about other people"
+              hint="Meeting requests and responses, calendar sharing, and changes to your projects. The bell always shows these."
+              defaultChecked={prefs.meetingRequestsEnabled}
+            />
+
+            <div className="max-w-[220px]">
+              <Field
+                label="Deliver at"
+                name="notificationTime"
+                type="time"
+                defaultValue={prefs.notificationTime}
+                hint="Local time for reminders and the agenda."
+                error={fieldErrors['notificationTime']}
+              />
+            </div>
+
+            <Button
+              type="submit"
+              variant="primary"
+              loading={update.isPending}
+              className="self-start"
+            >
+              Save
+            </Button>
+          </form>
+        )}
+      </Card>
+    </Reveal>
   );
 }
 

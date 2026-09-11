@@ -38,6 +38,16 @@ import { eventHooks, useEventRange, useMeetingActions, useMeetings } from '../li
 
 const WEEKDAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
 
+const REMINDER_OPTIONS = [
+  { value: '', label: 'Never' },
+  { value: '5', label: '5 minutes before' },
+  { value: '15', label: '15 minutes before' },
+  { value: '30', label: '30 minutes before' },
+  { value: '60', label: '1 hour before' },
+  { value: '120', label: '2 hours before' },
+  { value: '1440', label: '1 day before' },
+];
+
 const VISIBILITIES = [
   { value: 'PRIVATE', label: 'Private — nobody else sees it' },
   { value: 'BUSY', label: 'Busy — others see the slot only' },
@@ -147,6 +157,8 @@ export default function Calendar() {
       category: String(form.get('category') ?? '').trim() || 'Work',
       visibility: String(form.get('visibility') ?? 'PRIVATE') as EventVisibility,
       recurrence: String(form.get('recurrence') ?? 'NONE') as Recurrence,
+      // "" is "no reminder"; anything else is minutes before the start.
+      reminderMinutes: form.get('reminderMinutes') ? Number(form.get('reminderMinutes')) : null,
     };
 
     try {
@@ -426,6 +438,13 @@ export default function Calendar() {
               options={RECURRENCES}
             />
           </FieldRow>
+          <Select
+            label="Remind me"
+            name="reminderMinutes"
+            defaultValue={editing ? String(editing.reminderMinutes ?? '') : '15'}
+            options={REMINDER_OPTIONS}
+            hint="A notification in Skrivbok before it starts. All-day events are not reminded."
+          />
           <Textarea
             label="Description"
             name="description"

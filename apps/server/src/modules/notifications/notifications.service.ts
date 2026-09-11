@@ -16,7 +16,7 @@ import { prisma } from '../../db/prisma.js';
 import type { Pagination } from '../../middleware/validate.js';
 import { NotFoundError } from '../../utils/errors.js';
 import { paginate, toSkipTake, type Paginated } from '../../utils/pagination.js';
-import type { ListNotificationsQuery } from './notifications.schema.js';
+import type { ListNotificationsQuery, UpdatePreferencesInput } from './notifications.schema.js';
 
 type Notification = Prisma.NotificationGetPayload<Record<string, never>>;
 
@@ -85,4 +85,41 @@ export async function clearRead(userId: string): Promise<number> {
     where: { userId, readAt: { not: null } },
   });
   return result.count;
+}
+
+// ── Preferences ───────────────────────────────────────────────────────────────
+
+const preferenceSelect = {
+  deadlineRemindersEnabled: true,
+  dailyAgendaEnabled: true,
+  meetingRequestsEnabled: true,
+  reminderDaysBefore: true,
+  notificationTime: true,
+} as const;
+
+/**
+ * The row is created with the account, but an account from before that was
+ * true may not have one. `upsert` with empty `update` returns the existing row
+ * or creates the defaults, so the caller never sees "no preferences".
+ */
+export async function getPreferences(userId: string) {
+  return prisma.emailPreference.upsert({
+    where: { userId },
+    create: { userId },
+    update: {},
+    select: preferenceSelect,
+  });
+}
+
+export async function updatePreferences(userId: string, input: UpdatePreferencesInput) {
+  // Only the keys that were sent: `undefined` would otherwise be read by
+  // Prisma as "set to undefined" under exact optional types.
+  const changes = Object.fromEntries(Object.entries(input).filter(([, v]) => v !== undefined));
+
+  return prisma.emailPreference.upsert({
+    where: { userId },
+    create: { userId, ...changes },
+    update: changes,
+    select: preferenceSelect,
+  });
 }

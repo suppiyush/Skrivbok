@@ -39,7 +39,14 @@ async function tick(): Promise<void> {
 
     // Only worth a line when something happened; otherwise this logs every few
     // minutes for ever and buries anything useful.
-    if (result.deadlineEmails > 0 || result.agendaEmails > 0 || result.skipped > 0) {
+    const sent =
+      result.deadlineEmails +
+      result.agendaEmails +
+      result.overdueNotices +
+      result.eventReminders +
+      result.meetingReminders +
+      result.subscriptionNotices;
+    if (sent > 0 || result.skipped > 0) {
       log.info({ ...result, durationMs: Date.now() - startedAt }, 'Reminder pass complete');
     } else {
       log.debug({ ...result, durationMs: Date.now() - startedAt }, 'Reminder pass — nothing due');

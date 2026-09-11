@@ -14,7 +14,8 @@ import type { ProjectRole } from '@prisma/client';
 import { prisma } from '../../db/prisma.js';
 import { createLogger } from '../../config/logger.js';
 import { BadRequestError, ConflictError, ErrorCode, NotFoundError } from '../../utils/errors.js';
-import { sendProjectInvite } from '../../emails/index.js';
+import { sendOwnershipTransferred, sendProjectInvite } from '../../emails/index.js';
+import { notify } from '../notifications/notify.js';
 import { requireProjectRole } from './projects.access.js';
 import type { AddMemberInput } from './projects.schema.js';
 
@@ -50,13 +51,11 @@ async function announceInvite(
   if (!context) return;
 
   if (invitee.userId) {
-    await prisma.notification.create({
-      data: {
-        userId: invitee.userId,
-        type: 'PROJECT_INVITE',
-        title: 'You were added to a project',
-        link: `/projects/${projectId}`,
-      },
+    await notify(invitee.userId, {
+      type: 'PROJECT_INVITE',
+      title: `You were added to ${context.name}`,
+      message: `${context.owner.name ?? context.owner.email} added you as ${invitee.role.toLowerCase()}.`,
+      link: `/projects/${projectId}`,
     });
   }
 
@@ -170,11 +169,36 @@ export async function updateRole(
     throw new BadRequestError('The owner role cannot be changed here — transfer ownership instead');
   }
 
-  return prisma.projectMember.update({
+  const updated = await prisma.projectMember.update({
     where: { id: memberId },
     data: { role },
     select: memberSelect,
   });
+
+  if (updated.user && member.role !== role) {
+    const project = await projectName(projectId);
+    await notify(updated.user.id, {
+      type: 'TEAM',
+      title: `You are now ${article(role)} on ${project}`,
+      link: `/projects/${projectId}`,
+    });
+  }
+
+  return updated;
+}
+
+/** "an editor", "a viewer" — for a sentence, not a badge. */
+function article(role: ProjectRole): string {
+  const word = role.toLowerCase();
+  return `${/^[aeiou]/.test(word) ? 'an' : 'a'} ${word}`;
+}
+
+async function projectName(projectId: string): Promise<string> {
+  const project = await prisma.project.findUnique({
+    where: { id: projectId },
+    select: { name: true },
+  });
+  return project?.name ?? 'a project';
 }
 
 /**
@@ -205,6 +229,16 @@ export async function remove(userId: string, projectId: string, memberId: string
   }
 
   await prisma.projectMember.delete({ where: { id: memberId } });
+
+  // Someone who left on their own knows. Someone removed by the owner would
+  // otherwise just find the project gone, and wonder whether it was deleted.
+  if (!removingSelf && member.userId) {
+    await notify(member.userId, {
+      type: 'TEAM',
+      title: `You were removed from ${await projectName(projectId)}`,
+      // No link: they can no longer open it.
+    });
+  }
 }
 
 /** Accept an invitation. Only the invited person can accept their own. */
@@ -217,11 +251,25 @@ export async function accept(userId: string, projectId: string) {
   if (!member) throw new NotFoundError('Invitation');
   if (member.acceptedAt) return member;
 
-  return prisma.projectMember.update({
+  const accepted = await prisma.projectMember.update({
     where: { id: member.id },
     data: { acceptedAt: new Date() },
     select: memberSelect,
   });
+
+  const project = await prisma.project.findUnique({
+    where: { id: projectId },
+    select: { name: true, ownerId: true },
+  });
+  if (project && project.ownerId !== userId) {
+    await notify(project.ownerId, {
+      type: 'TEAM',
+      title: `${accepted.user?.name ?? accepted.name ?? accepted.email} joined ${project.name}`,
+      link: `/projects/${projectId}`,
+    });
+  }
+
+  return accepted;
 }
 
 /**
@@ -261,6 +309,24 @@ export async function transferOwnership(userId: string, projectId: string, membe
   ]);
 
   log.info({ projectId, from: userId, to: target.userId }, 'Project ownership transferred');
+
+  // Ownership carries the delete right and counts against the new owner's
+  // plan, so it goes out on both channels rather than only the bell.
+  const [project, from, to] = await Promise.all([
+    prisma.project.findUnique({ where: { id: projectId }, select: { name: true } }),
+    prisma.user.findUnique({ where: { id: userId }, select: { name: true, email: true } }),
+    prisma.user.findUnique({ where: { id: target.userId }, select: { email: true } }),
+  ]);
+  if (project && from && to) {
+    const fromName = from.name ?? from.email;
+    await notify(target.userId, {
+      type: 'TEAM',
+      title: `You now own ${project.name}`,
+      message: `${fromName} transferred the project to you.`,
+      link: `/projects/${projectId}`,
+    });
+    sendOwnershipTransferred(to.email, { projectName: project.name, fromName, projectId });
+  }
 }
 
 /**
@@ -270,14 +336,28 @@ export async function transferOwnership(userId: string, projectId: string, membe
  * someone invited before they had an account finds the project waiting.
  */
 export async function claimPendingInvites(userId: string, email: string): Promise<number> {
+  const waiting = await prisma.projectMember.findMany({
+    where: { email, userId: null },
+    select: { projectId: true, role: true, project: { select: { name: true } } },
+  });
+  if (waiting.length === 0) return 0;
+
   const result = await prisma.projectMember.updateMany({
     where: { email, userId: null },
     data: { userId },
   });
 
-  if (result.count > 0) {
-    log.info({ userId, claimed: result.count }, 'Claimed pending project invitations');
+  // The invitation email is what brought them here; the bell confirms it
+  // worked, one entry per project so each can be opened.
+  for (const invite of waiting) {
+    await notify(userId, {
+      type: 'PROJECT_INVITE',
+      title: `${invite.project.name} was waiting for you`,
+      message: `You were invited as ${invite.role.toLowerCase()} before you had an account.`,
+      link: `/projects/${invite.projectId}`,
+    });
   }
 
+  log.info({ userId, claimed: result.count }, 'Claimed pending project invitations');
   return result.count;
 }

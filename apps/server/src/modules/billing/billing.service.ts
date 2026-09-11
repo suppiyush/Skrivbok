@@ -15,6 +15,8 @@
 import { addMonths, addYears } from 'date-fns';
 import type { BillingPlan, Payment, Prisma } from '@prisma/client';
 import { prisma } from '../../db/prisma.js';
+import { sendPaymentFailed, sendReceipt } from '../../emails/index.js';
+import { notify, notifyAdmins } from '../notifications/notify.js';
 import { createLogger } from '../../config/logger.js';
 import type { Pagination } from '../../middleware/validate.js';
 import { BadRequestError, ForbiddenError, NotFoundError } from '../../utils/errors.js';
@@ -144,7 +146,7 @@ async function capturePayment(
 
   const user = await prisma.user.findUniqueOrThrow({
     where: { id: payment.userId },
-    select: { subscriptionEndsAt: true },
+    select: { subscriptionEndsAt: true, email: true, name: true, timezone: true },
   });
 
   const now = new Date();
@@ -167,16 +169,26 @@ async function capturePayment(
       where: { id: payment.userId },
       data: { plan: 'PRO', subscriptionEndsAt: periodEnd },
     }),
-    prisma.notification.create({
-      data: {
-        userId: payment.userId,
-        type: 'SUBSCRIPTION',
-        title: 'Welcome to Skrivbok PRO',
-        message: `Your subscription runs until ${periodEnd.toISOString().slice(0, 10)}.`,
-        link: '/upgrade',
-      },
-    }),
   ]);
+
+  await notify(payment.userId, {
+    type: 'SUBSCRIPTION',
+    title: 'Welcome to Skrivbok PRO',
+    message: `Your subscription runs until ${periodEnd.toISOString().slice(0, 10)}.`,
+    link: '/upgrade',
+  });
+  // A paid product without a receipt is a support ticket waiting to happen.
+  sendReceipt(user.email, {
+    name: user.name ?? user.email,
+    plan: payment.plan,
+    amountPaise: payment.amount,
+    currency: payment.currency,
+    periodStart: now,
+    periodEnd,
+    orderId,
+    paymentId,
+    timezone: user.timezone,
+  });
 
   log.info({ orderId, userId: payment.userId, periodEnd }, 'Subscription activated');
   return { applied: true, payment: updated };
@@ -284,14 +296,33 @@ export async function handleWebhook(
 
     case 'payment.failed': {
       if (!orderId) return { processed: false, reason: 'missing order id' };
+      const reason =
+        typeof entity?.error_description === 'string' ? entity.error_description : null;
+      const failed = await prisma.payment.findUnique({
+        where: { razorpayOrderId: orderId },
+        select: { status: true, user: { select: { id: true, email: true, name: true } } },
+      });
       await prisma.payment.updateMany({
         where: { razorpayOrderId: orderId, status: { in: ['CREATED', 'AUTHORIZED'] } },
-        data: {
-          status: 'FAILED',
-          failureReason:
-            typeof entity?.error_description === 'string' ? entity.error_description : null,
-        },
+        data: { status: 'FAILED', failureReason: reason },
       });
+      if (failed && (failed.status === 'CREATED' || failed.status === 'AUTHORIZED')) {
+        await notify(failed.user.id, {
+          type: 'SUBSCRIPTION',
+          title: 'Your payment did not go through',
+          message: reason ?? 'Nothing was charged. You can try again.',
+          link: '/upgrade',
+        });
+        sendPaymentFailed(failed.user.email, {
+          name: failed.user.name ?? failed.user.email,
+          reason,
+        });
+        await notifyAdmins({
+          title: `Payment failed for ${failed.user.email}`,
+          message: reason,
+          link: '/admin?tab=subscriptions',
+        });
+      }
       return { processed: true };
     }
 
@@ -315,6 +346,12 @@ export async function handleWebhook(
           data: { plan: 'FREE', subscriptionEndsAt: null },
         }),
       ]);
+      await notify(payment.userId, {
+        type: 'SUBSCRIPTION',
+        title: 'Your payment was refunded',
+        message: 'PRO has ended and the free limits apply again.',
+        link: '/upgrade',
+      });
 
       log.info({ paymentId: refundedPaymentId }, 'Refund processed; subscription ended');
       return { processed: true };

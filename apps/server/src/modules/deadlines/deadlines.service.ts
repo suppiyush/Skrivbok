@@ -91,7 +91,6 @@ export async function create(userId: string, input: CreateDeadlineInput): Promis
       priority: input.priority,
       status: input.status,
       reminderEnabled: input.reminderEnabled,
-      remindAt: input.remindAt ?? null,
       completedAt: input.status === 'COMPLETED' ? new Date() : null,
     },
   });
@@ -121,7 +120,6 @@ export async function update(
     ...(input.priority !== undefined ? { priority: input.priority } : {}),
     ...(input.status !== undefined ? { status: input.status } : {}),
     ...(input.reminderEnabled !== undefined ? { reminderEnabled: input.reminderEnabled } : {}),
-    ...(input.remindAt !== undefined ? { remindAt: input.remindAt ?? null } : {}),
     ...(completedAt !== undefined ? { completedAt } : {}),
   };
 

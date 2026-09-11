@@ -14,6 +14,8 @@
 import type { CalendarAccessLevel, Prisma } from '@prisma/client';
 import { prisma } from '../../db/prisma.js';
 import { createLogger } from '../../config/logger.js';
+import { sendCalendarAccessRequest } from '../../emails/index.js';
+import { notify } from '../notifications/notify.js';
 import type { Pagination } from '../../middleware/validate.js';
 import {
   BadRequestError,
@@ -144,14 +146,18 @@ export async function createRequest(
     select: requestSelect,
   });
 
-  await prisma.notification.create({
-    data: {
-      userId: target.id,
-      type: 'CALENDAR_ACCESS_REQUEST',
-      title: 'Someone asked to see your calendar',
-      message: input.message ?? null,
-      link: `/calendar?accessRequest=${request.id}`,
-    },
+  const requesterName = request.requester.name ?? request.requester.email;
+  await notify(target.id, {
+    type: 'CALENDAR_ACCESS_REQUEST',
+    title: `${requesterName} asked to see your calendar`,
+    message: input.message ?? null,
+    link: `/calendar?accessRequest=${request.id}`,
+  });
+  // The target may not sign in for days; a request that sits unseen looks
+  // ignored, so it goes by email as well.
+  sendCalendarAccessRequest(target.id, request.target.email, {
+    requesterName,
+    message: input.message ?? null,
   });
 
   log.info({ requestId: request.id }, 'Calendar access requested');
@@ -233,15 +239,14 @@ export async function approveRequest(
       create: { ownerId: userId, viewerId: request.requesterId, level },
       update: { level },
     }),
-    prisma.notification.create({
-      data: {
-        userId: request.requesterId,
-        type: 'CALENDAR_ACCESS_GRANTED',
-        title: 'Calendar access granted',
-        link: `/calendar?shared=${request.target.email}`,
-      },
-    }),
   ]);
+
+  await notify(request.requesterId, {
+    type: 'CALENDAR_ACCESS_GRANTED',
+    title: `${request.target.name ?? request.target.email} shared their calendar with you`,
+    message: level === 'VIEW' ? 'You can see event details.' : 'You can see when they are busy.',
+    link: `/calendar?shared=${request.target.email}`,
+  });
 
   log.info({ requestId: id, level }, 'Calendar access granted');
   return decorate(await getOwnedRequest(userId, id), userId);
@@ -260,6 +265,12 @@ export async function rejectRequest(userId: string, id: string): Promise<AccessR
   await prisma.calendarAccessRequest.update({
     where: { id },
     data: { status: 'REJECTED', respondedAt: new Date() },
+  });
+
+  await notify(request.requesterId, {
+    type: 'CALENDAR_ACCESS_REQUEST',
+    title: `${request.target.name ?? request.target.email} declined to share their calendar`,
+    link: '/calendar',
   });
 
   return decorate(await getOwnedRequest(userId, id), userId);
@@ -308,7 +319,21 @@ export async function updateGrant(userId: string, id: string, level: CalendarAcc
 
   if (!grant) throw new NotFoundError('Calendar access grant');
 
-  return prisma.calendarAccess.update({ where: { id }, data: { level }, select: grantSelect });
+  const updated = await prisma.calendarAccess.update({
+    where: { id },
+    data: { level },
+    select: grantSelect,
+  });
+
+  await notify(updated.viewer.id, {
+    type: 'CALENDAR_ACCESS_GRANTED',
+    title: `${updated.owner.name ?? updated.owner.email} changed what you can see`,
+    message:
+      level === 'VIEW' ? 'You can now see event details.' : 'You now see only when they are busy.',
+    link: `/calendar?shared=${updated.owner.email}`,
+  });
+
+  return updated;
 }
 
 /**
@@ -321,7 +346,7 @@ export async function updateGrant(userId: string, id: string, level: CalendarAcc
 export async function revokeGrant(userId: string, id: string): Promise<void> {
   const grant = await prisma.calendarAccess.findFirst({
     where: { id, OR: [{ ownerId: userId }, { viewerId: userId }] },
-    select: { id: true, ownerId: true, viewerId: true },
+    select: { id: true, ownerId: true, viewerId: true, owner: party, viewer: party },
   });
 
   if (!grant) throw new NotFoundError('Calendar access grant');
@@ -333,6 +358,17 @@ export async function revokeGrant(userId: string, id: string): Promise<void> {
       data: { status: 'REVOKED', respondedAt: new Date() },
     }),
   ]);
+
+  // Whichever side ended it, the other is told. The viewer losing access would
+  // otherwise see a calendar vanish; the owner would not know a viewer left.
+  const ownerEnded = grant.ownerId === userId;
+  await notify(ownerEnded ? grant.viewerId : grant.ownerId, {
+    type: 'CALENDAR_ACCESS_GRANTED',
+    title: ownerEnded
+      ? `${grant.owner.name ?? grant.owner.email} stopped sharing their calendar`
+      : `${grant.viewer.name ?? grant.viewer.email} no longer sees your calendar`,
+    link: '/calendar',
+  });
 
   log.info({ ownerId: grant.ownerId, viewerId: grant.viewerId }, 'Calendar access revoked');
 }

@@ -38,6 +38,7 @@ import {
   type MeetingInput,
   type Paginated,
   type ReportStatus,
+  type NotificationPreferences,
 } from './api';
 
 /**
@@ -261,6 +262,20 @@ export const useUnreadCount = () =>
     // meeting request arrived without reloading.
     refetchInterval: 60_000,
   });
+
+export const useNotificationPreferences = () =>
+  useQuery({
+    queryKey: [...keys.notifications, 'preferences'],
+    queryFn: notifications.preferences,
+  });
+
+export function useUpdateNotificationPreferences() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (input: Partial<NotificationPreferences>) => notifications.updatePreferences(input),
+    onSuccess: (data) => qc.setQueryData([...keys.notifications, 'preferences'], data),
+  });
+}
 
 export function useNotificationActions() {
   const qc = useQueryClient();

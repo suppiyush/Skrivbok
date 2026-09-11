@@ -143,6 +143,16 @@ enum NotificationType {
   PROJECT_INVITE
   SUBSCRIPTION
   SYSTEM
+  /// Someone joined, changed role, left or now owns a project you are on.
+  TEAM
+  /// A project meeting was scheduled, moved or cancelled, or is about to start.
+  PROJECT_MEETING
+  /// A calendar event of your own is about to start.
+  EVENT_REMINDER
+  /// Something happened to a bug report or review you wrote.
+  REPORT
+  /// For administrators only: a new report, a failed payment, a rejected webhook.
+  ADMIN
 }
 
 /// Which kind of record a sent reminder refers to. Used with `itemId` to make
@@ -152,6 +162,7 @@ enum ReminderItemType {
   CALENDAR_EVENT
   MEETING
   DAILY_AGENDA
+  SUBSCRIPTION
 }
 
 enum BillingPlan {
@@ -582,10 +593,9 @@ model Deadline {
   priority Priority       @default(MEDIUM)
   status   DeadlineStatus @default(PENDING)
 
+  /// Reminders come from the user's EmailPreference (days before, delivery
+  /// time); this only opts a single deadline out of them.
   reminderEnabled Boolean   @default(true)
-  /// When the reminder should fire. Null means "derive from `dueAt` and the
-  /// user's EmailPreference".
-  remindAt        DateTime?
 
   completedAt DateTime?
   createdAt   DateTime  @default(now())
@@ -594,7 +604,6 @@ model Deadline {
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId, dueAt])
-  @@index([remindAt], map: "idx_deadlines_remind_at")
   @@map("deadlines")
 }
 
@@ -913,6 +922,19 @@ model Payment {
 }
 
 /// Idempotency ledger for incoming Razorpay webhooks. Razorpay retries
+/// The worker's pulse. One row, written at the end of every reminder pass, so
+/// the admin panel can say when reminders last ran instead of assuming they do.
+model WorkerStatus {
+  /// Which worker. There is one today; the key leaves room for more.
+  key        String   @id
+  lastTickAt DateTime
+  /// What the last pass did — counts, mostly. Shown, never interpreted.
+  lastResult Json?
+  updatedAt  DateTime @updatedAt
+
+  @@map("worker_status")
+}
+
 /// deliveries, so an event id that has already been processed is skipped rather
 /// than applied twice.
 model WebhookEvent {

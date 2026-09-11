@@ -240,7 +240,6 @@ export interface Deadline {
   priority: Priority;
   status: DeadlineStatus;
   reminderEnabled: boolean;
-  remindAt: string | null;
   completedAt: string | null;
   createdAt: string;
   updatedAt: string;
@@ -400,14 +399,42 @@ export interface MeetingRequest {
   receiver?: { id: string; name: string | null; email: string };
 }
 
+export type NotificationType =
+  | 'DEADLINE_DUE'
+  | 'MEETING_REQUEST'
+  | 'MEETING_ACCEPTED'
+  | 'MEETING_REJECTED'
+  | 'CALENDAR_ACCESS_REQUEST'
+  | 'CALENDAR_ACCESS_GRANTED'
+  | 'PROJECT_INVITE'
+  | 'SUBSCRIPTION'
+  | 'SYSTEM'
+  | 'TEAM'
+  | 'PROJECT_MEETING'
+  | 'EVENT_REMINDER'
+  | 'REPORT'
+  | 'ADMIN';
+
 export interface Notification {
   id: string;
-  type: string;
+  type: NotificationType;
   title: string;
   message: string | null;
   link: string | null;
   readAt: string | null;
   createdAt: string;
+}
+
+/** How and when a person is told things. Edited on Settings. */
+export interface NotificationPreferences {
+  deadlineRemindersEnabled: boolean;
+  dailyAgendaEnabled: boolean;
+  /** Meeting requests, calendar sharing and other people's actions, by email. */
+  meetingRequestsEnabled: boolean;
+  /** Days ahead of a deadline to be reminded; 0 is the day itself. */
+  reminderDaysBefore: number[];
+  /** "HH:mm", in the account's timezone. */
+  notificationTime: string;
 }
 
 /* The repeating sections of the academic record. Shapes fixed by the API. */
@@ -842,6 +869,10 @@ export const notifications = {
   markAllRead: () => api.post<{ marked: number }>('/notifications/read-all'),
   remove: (id: string) => api.delete<void>(`/notifications/${id}`),
   clearRead: () => api.delete<{ deleted: number }>('/notifications/read'),
+  preferences: () =>
+    api.get<{ preferences: NotificationPreferences }>('/notifications/preferences'),
+  updatePreferences: (input: Partial<NotificationPreferences>) =>
+    api.patch<{ preferences: NotificationPreferences }>('/notifications/preferences', input),
 };
 
 export const profile = {
@@ -941,6 +972,14 @@ export interface PlatformStats {
     refundedCount: number;
   };
   engagement: { withProjects: number; withProfile: number; neverLoggedIn: number };
+  /** Presence of the parts that send things, and the worker's last pulse. */
+  system: {
+    mailConfigured: boolean;
+    uploadsConfigured: boolean;
+    billingConfigured: boolean;
+    workerLastTickAt: string | null;
+    workerLastResult: Record<string, number> | null;
+  };
 }
 
 /** A user as the admin list shows them, with their content counted. */

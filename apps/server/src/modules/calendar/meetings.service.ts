@@ -27,7 +27,12 @@ import {
   NotFoundError,
 } from '../../utils/errors.js';
 import { paginate, toSkipTake, type Paginated } from '../../utils/pagination.js';
-import { sendMeetingRequest, sendMeetingResponse } from '../../emails/index.js';
+import {
+  sendMeetingCancelled,
+  sendMeetingRequest,
+  sendMeetingResponse,
+} from '../../emails/index.js';
+import { notify } from '../notifications/notify.js';
 import { expandOccurrences } from './recurrence.js';
 import type {
   CreateMeetingRequestInput,
@@ -242,14 +247,11 @@ export async function create(
     select: requestSelect,
   });
 
-  await prisma.notification.create({
-    data: {
-      userId: receiver.id,
-      type: 'MEETING_REQUEST',
-      title: 'New meeting request',
-      message: input.title,
-      link: `/calendar?request=${request.id}`,
-    },
+  await notify(receiver.id, {
+    type: 'MEETING_REQUEST',
+    title: `${request.sender.name ?? request.sender.email} asked to meet`,
+    message: input.title,
+    link: `/calendar?request=${request.id}`,
   });
 
   sendMeetingRequest(receiver.id, request.receiver.email, {
@@ -293,14 +295,21 @@ export async function reschedule(
     select: requestSelect,
   });
 
-  await prisma.notification.create({
-    data: {
-      userId: request.receiverId,
-      type: 'MEETING_REQUEST',
-      title: 'A meeting request was rescheduled',
-      message: request.title,
-      link: `/calendar?request=${id}`,
-    },
+  await notify(request.receiverId, {
+    type: 'MEETING_REQUEST',
+    title: 'A meeting request was rescheduled',
+    message: request.title,
+    link: `/calendar?request=${id}`,
+  });
+  // The time they were weighing up has changed, so the mail goes again.
+  sendMeetingRequest(request.receiverId, updated.receiver.email, {
+    senderName: updated.sender.name ?? updated.sender.email,
+    title: updated.title,
+    startAt: updated.startAt,
+    endAt: updated.endAt,
+    timezone: updated.timezone,
+    description: updated.description,
+    rescheduled: true,
   });
 
   return decorate(updated, userId);
@@ -366,23 +375,22 @@ export async function accept(userId: string, id: string): Promise<MeetingRequest
         attendees: [request.sender.email],
       },
     }),
-    prisma.notification.create({
-      data: {
-        userId: request.senderId,
-        type: 'MEETING_ACCEPTED',
-        title: group ? 'Someone accepted your meet' : 'Meeting request accepted',
-        message: group
-          ? `${request.receiver.name ?? request.receiver.email} · ${request.title}`
-          : request.title,
-        link: group ? '/meetings' : `/calendar?request=${id}`,
-      },
-    }),
   ]);
 
-  // A group meet notifies in the app only, by request.
+  const responderName = request.receiver.name ?? request.receiver.email;
+  await notify(request.senderId, {
+    type: 'MEETING_ACCEPTED',
+    title: group ? `${responderName} accepted your meet` : 'Meeting request accepted',
+    message: request.title,
+    link: group ? '/meetings' : `/calendar?request=${id}`,
+  });
+
+  // One email per response would be a lot for a six-person meet, and the
+  // requester's bell already names each person; a pair request mails as it
+  // always has.
   if (!group) {
     sendMeetingResponse(request.senderId, request.sender.email, {
-      responderName: request.receiver.name ?? request.receiver.email,
+      responderName,
       title: request.title,
       accepted: true,
       startAt: request.startAt,
@@ -405,29 +413,29 @@ export async function decline(userId: string, id: string): Promise<MeetingReques
     throw new ConflictError(`This request has already been ${request.status.toLowerCase()}`);
   }
 
-  await prisma.$transaction([
-    prisma.meetingRequest.update({
-      where: { id },
-      data: { status: 'REJECTED', respondedAt: new Date() },
-    }),
-    prisma.notification.create({
-      data: {
-        userId: request.senderId,
-        type: 'MEETING_REJECTED',
-        title: 'Meeting request declined',
-        message: request.title,
-        link: `/calendar?request=${id}`,
-      },
-    }),
-  ]);
-
-  sendMeetingResponse(request.senderId, request.sender.email, {
-    responderName: request.receiver.name ?? request.receiver.email,
-    title: request.title,
-    accepted: false,
-    startAt: request.startAt,
-    timezone: request.timezone,
+  await prisma.meetingRequest.update({
+    where: { id },
+    data: { status: 'REJECTED', respondedAt: new Date() },
   });
+
+  const group = request.groupId !== null;
+  const responderName = request.receiver.name ?? request.receiver.email;
+  await notify(request.senderId, {
+    type: 'MEETING_REJECTED',
+    title: group ? `${responderName} declined your meet` : 'Meeting request declined',
+    message: request.title,
+    link: group ? '/meetings' : `/calendar?request=${id}`,
+  });
+
+  if (!group) {
+    sendMeetingResponse(request.senderId, request.sender.email, {
+      responderName,
+      title: request.title,
+      accepted: false,
+      startAt: request.startAt,
+      timezone: request.timezone,
+    });
+  }
 
   return getById(userId, id);
 }
@@ -449,7 +457,9 @@ export async function cancel(userId: string, id: string): Promise<MeetingRequest
     throw new ConflictError('This request was already declined');
   }
 
-  const otherPartyId = request.senderId === userId ? request.receiverId : request.senderId;
+  const cancelledBySender = request.senderId === userId;
+  const otherParty = cancelledBySender ? request.receiver : request.sender;
+  const by = cancelledBySender ? request.sender : request.receiver;
 
   await prisma.$transaction([
     prisma.meetingRequest.update({
@@ -458,16 +468,25 @@ export async function cancel(userId: string, id: string): Promise<MeetingRequest
     }),
     // Removes both sides at once, because both carry the same link.
     prisma.calendarEvent.deleteMany({ where: { meetingRequestId: id } }),
-    prisma.notification.create({
-      data: {
-        userId: otherPartyId,
-        type: 'MEETING_REJECTED',
-        title: 'Meeting cancelled',
-        message: request.title,
-        link: `/calendar?request=${id}`,
-      },
-    }),
   ]);
+
+  await notify(otherParty.id, {
+    type: 'MEETING_REJECTED',
+    title: 'Meeting cancelled',
+    message: request.title,
+    link: `/calendar?request=${id}`,
+  });
+  // Something was removed from their calendar; a bell they may not open for
+  // a day is not enough for that. Only once it had been accepted, though — a
+  // withdrawn proposal is not a cancelled plan.
+  if (request.status === 'ACCEPTED') {
+    sendMeetingCancelled(otherParty.id, otherParty.email, {
+      byName: by.name ?? by.email,
+      title: request.title,
+      startAt: request.startAt,
+      timezone: request.timezone,
+    });
+  }
 
   log.info({ requestId: id }, 'Meeting cancelled; paired events removed');
   return getById(userId, id);

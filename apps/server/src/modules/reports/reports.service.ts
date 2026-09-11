@@ -10,6 +10,7 @@
 import type { Prisma } from '@prisma/client';
 import { prisma } from '../../db/prisma.js';
 import { createLogger } from '../../config/logger.js';
+import { notifyAdmins } from '../notifications/notify.js';
 import type { Pagination } from '../../middleware/validate.js';
 import { paginate, toSkipTake, type Paginated } from '../../utils/pagination.js';
 import type { CreateReportInput, ListOwnReportsQuery } from './reports.schema.js';
@@ -27,6 +28,18 @@ export async function create(userId: string, input: CreateReportInput): Promise<
       title: input.title ?? null,
       description: input.description,
     },
+  });
+
+  // The people who can act on it are told; the submitter can already see it
+  // on the Help page, so they are not.
+  const author = await prisma.user.findUnique({
+    where: { id: userId },
+    select: { name: true, email: true },
+  });
+  await notifyAdmins({
+    title: `New ${input.type.toLowerCase().replace('feature', 'feature request')} from ${author?.name ?? author?.email ?? 'a user'}`,
+    message: input.title ?? input.description.slice(0, 140),
+    link: `/admin?tab=reports&report=${report.id}`,
   });
 
   log.info({ reportId: report.id, type: input.type }, 'Report submitted');

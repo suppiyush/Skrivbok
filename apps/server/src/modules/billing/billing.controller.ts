@@ -1,5 +1,6 @@
 /** Billing: HTTP in, HTTP out. */
 import type { RequestHandler } from 'express';
+import { notifyAdmins } from '../notifications/notify.js';
 import { createLogger } from '../../config/logger.js';
 import { currentUser } from '../../middleware/auth.js';
 import { BadRequestError, ErrorCode, ForbiddenError } from '../../utils/errors.js';
@@ -71,6 +72,13 @@ export const webhook: RequestHandler = async (req, res) => {
 
   if (!signature || !verifyWebhookSignature(req.rawBody, signature)) {
     log.warn({ ip: req.ip }, 'Webhook signature verification failed');
+    // Either someone is probing the endpoint or the secret is wrong; both
+    // deserve a person looking, and neither shows up anywhere else.
+    void notifyAdmins({
+      title: 'A payment webhook was rejected',
+      message: 'Its signature did not verify. Check the webhook secret, or who is calling it.',
+      link: '/admin',
+    });
     throw new ForbiddenError('Invalid webhook signature', ErrorCode.FORBIDDEN);
   }
 

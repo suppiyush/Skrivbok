@@ -113,6 +113,13 @@ describe('membership', () => {
 
     const body = projects.body as { data: { id: string; myRole: string }[] };
     expect(body.data.find((p) => p.id === projectId)?.myRole).toBe('EDITOR');
+
+    // The invitation email is what brought them here; the bell confirms it
+    // worked, with somewhere to go.
+    const bell = await prisma.notification.findFirst({
+      where: { userId: claimed.id, type: 'PROJECT_INVITE', link: `/projects/${projectId}` },
+    });
+    expect(bell?.title).toMatch(/waiting for you/);
   });
 
   /**
@@ -144,10 +151,15 @@ describe('membership', () => {
     // the sign-up template rather than the "already in your workspace" one.
     //
     // Three people were invited at creation and two of them had accounts, so
-    // exactly two notifications is the proof that the third was skipped rather
-    // than failed.
+    // exactly two "you were added" notifications is the proof that the third
+    // was skipped rather than failed. (The third person is told later, when
+    // they sign up and the invite is claimed — a different message.)
     const count = await prisma.notification.count({
-      where: { type: 'PROJECT_INVITE', link: `/projects/${projectId}` },
+      where: {
+        type: 'PROJECT_INVITE',
+        link: `/projects/${projectId}`,
+        title: { startsWith: 'You were added' },
+      },
     });
 
     expect(count).toBe(2);

@@ -18,6 +18,13 @@
  */
 import type { Prisma } from '@prisma/client';
 import { prisma } from '../../db/prisma.js';
+import {
+  sendAccountDeleted,
+  sendPlanChanged,
+  sendReportUpdate,
+  sendSessionsRevoked,
+} from '../../emails/index.js';
+import { notify } from '../notifications/notify.js';
 import { createLogger } from '../../config/logger.js';
 import type { Pagination } from '../../middleware/validate.js';
 import { BadRequestError, ConflictError, NotFoundError } from '../../utils/errors.js';
@@ -122,7 +129,15 @@ async function adminCount(): Promise<number> {
 export async function updateUser(actingAdminId: string, id: string, input: UpdateUserInput) {
   const target = await prisma.user.findUnique({
     where: { id },
-    select: { id: true, role: true, email: true },
+    select: {
+      id: true,
+      role: true,
+      email: true,
+      name: true,
+      plan: true,
+      subscriptionEndsAt: true,
+      timezone: true,
+    },
   });
 
   if (!target) throw new NotFoundError('User');
@@ -153,6 +168,53 @@ export async function updateUser(actingAdminId: string, id: string, input: Updat
     'Admin modified a user account',
   );
 
+  // The person whose account it is hears about it — in the bell for a role,
+  // on both channels for a plan, since a plan is something they may have paid
+  // for. Their own admin changes are not announced to themselves.
+  if (id !== actingAdminId) {
+    if (input.role !== undefined && input.role !== target.role) {
+      await notify(id, {
+        type: 'SYSTEM',
+        title:
+          input.role === 'ADMIN'
+            ? 'You are now an administrator'
+            : 'You are no longer an administrator',
+        message:
+          input.role === 'ADMIN'
+            ? 'The Admin panel is in your sidebar. Sign out and back in to see it.'
+            : 'Your account is a regular one again. Sign out and back in to refresh it.',
+        link: input.role === 'ADMIN' ? '/admin' : '/dashboard',
+      });
+    }
+
+    const planChanged = input.plan !== undefined && input.plan !== target.plan;
+    const endChanged =
+      input.subscriptionEndsAt !== undefined &&
+      (input.subscriptionEndsAt?.getTime() ?? null) !==
+        (target.subscriptionEndsAt?.getTime() ?? null);
+    if (planChanged || endChanged) {
+      const plan = updated.plan;
+      const endsAt = updated.subscriptionEndsAt;
+      await notify(id, {
+        type: 'SUBSCRIPTION',
+        title: plan === 'PRO' ? 'PRO was added to your account' : 'Your plan was changed to Free',
+        message:
+          plan === 'PRO'
+            ? endsAt
+              ? `It runs until ${endsAt.toISOString().slice(0, 10)}. There is nothing to pay.`
+              : 'There is no end date and nothing to pay.'
+            : 'The free limits apply from now on.',
+        link: '/upgrade',
+      });
+      sendPlanChanged(target.email, {
+        name: target.name ?? target.email,
+        plan,
+        endsAt,
+        timezone: target.timezone,
+      });
+    }
+  }
+
   return updated;
 }
 
@@ -170,7 +232,7 @@ export async function deleteUser(actingAdminId: string, id: string): Promise<voi
 
   const target = await prisma.user.findUnique({
     where: { id },
-    select: { id: true, email: true, role: true },
+    select: { id: true, email: true, name: true, role: true },
   });
 
   if (!target) throw new NotFoundError('User');
@@ -179,6 +241,10 @@ export async function deleteUser(actingAdminId: string, id: string): Promise<voi
     throw new ConflictError('This is the only administrator and cannot be deleted');
   }
 
+  // Sent before the row goes: after, there is no account to send it to. The
+  // dispatch is fire-and-forget, and the address is captured above.
+  sendAccountDeleted(target.email, target.name ?? target.email);
+
   await prisma.user.delete({ where: { id } });
 
   log.warn({ actingAdminId, deletedUserId: id, email: target.email }, 'Admin deleted a user');
@@ -186,8 +252,19 @@ export async function deleteUser(actingAdminId: string, id: string): Promise<voi
 
 /** Sign a user out everywhere — for a compromised account. */
 export async function revokeUserSessions(actingAdminId: string, id: string): Promise<number> {
+  const target = await prisma.user.findUnique({
+    where: { id },
+    select: { email: true, name: true },
+  });
+  if (!target) throw new NotFoundError('User');
+
   const result = await prisma.session.deleteMany({ where: { userId: id } });
   log.warn({ actingAdminId, targetUserId: id, revoked: result.count }, 'Admin revoked sessions');
+
+  // A security action they will notice. Told by email, since they are no
+  // longer signed in to see a bell — and so it does not look like a bug.
+  if (result.count > 0) sendSessionsRevoked(target.email, target.name ?? target.email);
+
   return result.count;
 }
 
@@ -332,7 +409,16 @@ export async function getReport(id: string) {
 }
 
 export async function updateReport(actingAdminId: string, id: string, input: UpdateReportInput) {
-  const existing = await prisma.report.findUnique({ where: { id }, select: { status: true } });
+  const existing = await prisma.report.findUnique({
+    where: { id },
+    select: {
+      status: true,
+      title: true,
+      type: true,
+      description: true,
+      user: { select: { id: true, email: true, name: true } },
+    },
+  });
   if (!existing) throw new NotFoundError('Report');
 
   // Closing a report stamps who closed it and when; reopening clears both, so
@@ -341,7 +427,7 @@ export async function updateReport(actingAdminId: string, id: string, input: Upd
   const reopening =
     input.status !== undefined && !closing && ['RESOLVED', 'DISMISSED'].includes(existing.status);
 
-  return prisma.report.update({
+  const updated = await prisma.report.update({
     where: { id },
     data: {
       ...(input.status !== undefined ? { status: input.status } : {}),
@@ -351,4 +437,29 @@ export async function updateReport(actingAdminId: string, id: string, input: Upd
     },
     select: reportSelect,
   });
+
+  // The submitter hears when it is closed — always in the bell, and by email
+  // when the admin wrote something, since the note is the reply and would
+  // otherwise be invisible to them. Reopening and taking on are silent.
+  const justClosed = closing && input.status !== existing.status;
+  if (justClosed && existing.user) {
+    const status = input.status as 'RESOLVED' | 'DISMISSED';
+    const title = existing.title ?? `Your ${existing.type.toLowerCase()} report`;
+    await notify(existing.user.id, {
+      type: 'REPORT',
+      title: status === 'RESOLVED' ? `Resolved: ${title}` : `Closed: ${title}`,
+      message: updated.resolution,
+      link: '/help',
+    });
+    if (updated.resolution) {
+      sendReportUpdate(existing.user.email, {
+        name: existing.user.name ?? existing.user.email,
+        title,
+        status,
+        resolution: updated.resolution,
+      });
+    }
+  }
+
+  return updated;
 }

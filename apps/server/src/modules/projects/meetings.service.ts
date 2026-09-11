@@ -1,16 +1,21 @@
 /**
  * Project meetings: the log of who met, when, and what was said.
  *
- * This is the project's own record. It puts nothing on anyone's calendar and
- * sends nothing — the one outward action, writing to the attendees, is done
- * by the client opening the user's own mail with the addresses filled in, so
- * the mail comes from them and not from us.
+ * This is the project's own record. Attendees see it on their calendar (read
+ * through, not copied) and hear about it in the bell when it is scheduled,
+ * moved or called off — but only while it is still to come. A meeting logged
+ * after the fact is history, and nobody is told about history.
+ *
+ * No email goes out from here. The one outward action, writing to the
+ * attendees, is done by the client opening the user's own mail with the
+ * addresses filled in, so the mail comes from them and not from us.
  *
  * Reading needs VIEWER; writing needs EDITOR. A viewer can see the history of
  * a project they are on but cannot rewrite it, which matches the brief.
  */
 import { prisma } from '../../db/prisma.js';
 import { BadRequestError, NotFoundError } from '../../utils/errors.js';
+import { notifyMany } from '../notifications/notify.js';
 import { requireProjectRole } from './projects.access.js';
 import type { CreateMeetingInput, UpdateMeetingInput } from './projects.schema.js';
 
@@ -58,6 +63,35 @@ function shape(row: MeetingRow) {
 }
 
 export type ProjectMeeting = ReturnType<typeof shape>;
+
+/** Attendees who have an account, minus the person acting — they already know. */
+async function attendeeUserIds(memberIds: string[], except: string): Promise<string[]> {
+  if (memberIds.length === 0) return [];
+  const members = await prisma.projectMember.findMany({
+    where: { id: { in: memberIds }, userId: { not: null } },
+    select: { userId: true },
+  });
+  return members.map((m) => m.userId).filter((id): id is string => id !== null && id !== except);
+}
+
+function whenLabel(heldAt: Date): string {
+  return new Intl.DateTimeFormat('en-GB', {
+    timeZone: 'UTC',
+    weekday: 'short',
+    day: 'numeric',
+    month: 'short',
+    hour: '2-digit',
+    minute: '2-digit',
+  }).format(heldAt);
+}
+
+async function projectName(projectId: string): Promise<string> {
+  const project = await prisma.project.findUnique({
+    where: { id: projectId },
+    select: { name: true },
+  });
+  return project?.name ?? 'a project';
+}
 
 /**
  * Every attendee must be on this project.
@@ -115,6 +149,15 @@ export async function create(
     select: meetingSelect,
   });
 
+  if (created.heldAt > new Date()) {
+    await notifyMany(await attendeeUserIds(attendeeIds, userId), {
+      type: 'PROJECT_MEETING',
+      title: `Meeting: ${created.title}`,
+      message: `${whenLabel(created.heldAt)} UTC · ${await projectName(projectId)}`,
+      link: `/projects/${projectId}/meetings`,
+    });
+  }
+
   return shape(created);
 }
 
@@ -154,12 +197,85 @@ export async function update(
     select: meetingSelect,
   });
 
+  await announceChanges(userId, projectId, existing, updated, input);
+
   return shape(updated);
+}
+
+/**
+ * Tell attendees what changed about an upcoming meeting.
+ *
+ * Three audiences, told three different things: people newly added hear it as
+ * a fresh invitation, people taken off hear it was cancelled for them, and
+ * people who stay hear only when the time moved. A change to the notes or the
+ * title alone is silent — that is editing the record, not the plan.
+ */
+async function announceChanges(
+  actorId: string,
+  projectId: string,
+  before: MeetingRow,
+  after: MeetingRow,
+  input: UpdateMeetingInput,
+): Promise<void> {
+  const upcoming = after.heldAt > new Date();
+  const wasUpcoming = before.heldAt > new Date();
+  if (!upcoming && !wasUpcoming) return;
+
+  const beforeIds = new Set(before.attendees.map((a) => a.member.id));
+  const afterIds = new Set(after.attendees.map((a) => a.member.id));
+  const added = [...afterIds].filter((id) => !beforeIds.has(id));
+  const removed = [...beforeIds].filter((id) => !afterIds.has(id));
+  const kept = [...afterIds].filter((id) => beforeIds.has(id));
+  const link = `/projects/${projectId}/meetings`;
+  const project = await projectName(projectId);
+
+  if (upcoming && added.length > 0) {
+    await notifyMany(await attendeeUserIds(added, actorId), {
+      type: 'PROJECT_MEETING',
+      title: `Meeting: ${after.title}`,
+      message: `${whenLabel(after.heldAt)} UTC · ${project}`,
+      link,
+    });
+  }
+  if (wasUpcoming && removed.length > 0) {
+    await notifyMany(await attendeeUserIds(removed, actorId), {
+      type: 'PROJECT_MEETING',
+      title: `You are no longer on: ${after.title}`,
+      message: project,
+      link,
+    });
+  }
+  const moved = input.heldAt !== undefined && before.heldAt.getTime() !== after.heldAt.getTime();
+  if (upcoming && moved && kept.length > 0) {
+    await notifyMany(await attendeeUserIds(kept, actorId), {
+      type: 'PROJECT_MEETING',
+      title: `Moved: ${after.title}`,
+      message: `Now ${whenLabel(after.heldAt)} UTC · ${project}`,
+      link,
+    });
+  }
 }
 
 export async function remove(userId: string, projectId: string, meetingId: string): Promise<void> {
   await requireProjectRole(userId, projectId, 'EDITOR');
 
-  const result = await prisma.projectMeeting.deleteMany({ where: { id: meetingId, projectId } });
-  if (result.count === 0) throw new NotFoundError('Meeting');
+  const existing = await fetchOne(projectId, meetingId);
+  if (!existing) throw new NotFoundError('Meeting');
+
+  await prisma.projectMeeting.delete({ where: { id: meetingId } });
+
+  if (existing.heldAt > new Date()) {
+    await notifyMany(
+      await attendeeUserIds(
+        existing.attendees.map((a) => a.member.id),
+        userId,
+      ),
+      {
+        type: 'PROJECT_MEETING',
+        title: `Cancelled: ${existing.title}`,
+        message: `Was ${whenLabel(existing.heldAt)} UTC · ${await projectName(projectId)}`,
+        link: `/projects/${projectId}/meetings`,
+      },
+    );
+  }
 }

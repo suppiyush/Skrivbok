@@ -12,6 +12,7 @@
 import type { Prisma } from '@prisma/client';
 import { prisma } from '../../db/prisma.js';
 import { createLogger } from '../../config/logger.js';
+import { notify, notifyAdmins } from '../notifications/notify.js';
 import { NotFoundError } from '../../utils/errors.js';
 import type { Pagination } from '../../middleware/validate.js';
 import { paginate, toSkipTake, type Paginated } from '../../utils/pagination.js';
@@ -70,6 +71,13 @@ export async function upsertOwn(userId: string, input: UpsertReviewInput) {
     select: ownSelect,
   });
 
+  // Reviews sit until someone approves them; the someone has to know.
+  await notifyAdmins({
+    title: 'A review is waiting for approval',
+    message: `${input.rating}/5 — ${input.body.slice(0, 120)}`,
+    link: '/admin?tab=reviews',
+  });
+
   log.info({ userId }, 'Review submitted for moderation');
   return review;
 }
@@ -114,7 +122,10 @@ export async function listAll(query: ListReviewsQuery): Promise<Paginated<unknow
 }
 
 export async function moderate(adminId: string, id: string, input: ModerateReviewInput) {
-  const existing = await prisma.review.findUnique({ where: { id }, select: { id: true } });
+  const existing = await prisma.review.findUnique({
+    where: { id },
+    select: { id: true, userId: true, status: true },
+  });
   if (!existing) throw new NotFoundError('Review');
 
   const review = await prisma.review.update({
@@ -127,6 +138,20 @@ export async function moderate(adminId: string, id: string, input: ModerateRevie
     },
     select: ownSelect,
   });
+
+  if (input.status !== existing.status) {
+    await notify(existing.userId, {
+      type: 'REPORT',
+      title:
+        input.status === 'APPROVED'
+          ? 'Your review is on the homepage'
+          : input.status === 'REJECTED'
+            ? 'Your review was not published'
+            : 'Your review is waiting for approval again',
+      message: input.status === 'REJECTED' ? (input.adminNote ?? null) : null,
+      link: '/help',
+    });
+  }
 
   log.info({ id, status: input.status, adminId }, 'Review moderated');
   return review;

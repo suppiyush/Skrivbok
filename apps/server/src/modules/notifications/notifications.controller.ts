@@ -1,7 +1,11 @@
 /** Notifications: HTTP in, HTTP out. Read and mark only — nothing creates one. */
 import type { RequestHandler } from 'express';
 import { currentUser } from '../../middleware/auth.js';
-import type { ListNotificationsQuery, MarkReadInput } from './notifications.schema.js';
+import type {
+  ListNotificationsQuery,
+  MarkReadInput,
+  UpdatePreferencesInput,
+} from './notifications.schema.js';
 import * as service from './notifications.service.js';
 
 export const list: RequestHandler = async (req, res) => {
@@ -34,4 +38,16 @@ export const remove: RequestHandler = async (req, res) => {
 export const clearRead: RequestHandler = async (req, res) => {
   const user = currentUser(req);
   res.json({ deleted: await service.clearRead(user.id) });
+};
+
+export const getPreferences: RequestHandler = async (req, res) => {
+  const user = currentUser(req);
+  res.json({ preferences: await service.getPreferences(user.id) });
+};
+
+export const updatePreferences: RequestHandler = async (req, res) => {
+  const user = currentUser(req);
+  res.json({
+    preferences: await service.updatePreferences(user.id, req.body as UpdatePreferencesInput),
+  });
 };

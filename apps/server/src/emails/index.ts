@@ -78,6 +78,7 @@ export function sendMeetingRequest(
     endAt: Date;
     timezone: string;
     description: string | null;
+    rescheduled?: boolean;
   },
 ): void {
   dispatch(
@@ -103,4 +104,75 @@ export function sendMeetingResponse(
       ok ? sendMail(templates.meetingResponse(to, data)) : undefined,
     ),
   );
+}
+
+// ── Added with the notification pass ─────────────────────────────────────────
+
+export function sendMeetingCancelled(
+  userId: string,
+  to: string,
+  data: { byName: string; title: string; startAt: Date; timezone: string },
+): void {
+  dispatch(
+    wants(userId, 'meetingRequestsEnabled').then((ok) =>
+      ok ? sendMail(templates.meetingCancelled(to, data)) : undefined,
+    ),
+  );
+}
+
+export function sendCalendarAccessRequest(
+  userId: string,
+  to: string,
+  data: { requesterName: string; message: string | null },
+): void {
+  dispatch(
+    wants(userId, 'meetingRequestsEnabled').then((ok) =>
+      ok ? sendMail(templates.calendarAccessRequest(to, data)) : undefined,
+    ),
+  );
+}
+
+export function sendOwnershipTransferred(
+  to: string,
+  data: { projectName: string; fromName: string; projectId: string },
+): void {
+  dispatch(sendMail(templates.ownershipTransferred(to, data)));
+}
+
+/* Billing and account mail is transactional: it goes regardless of
+   preferences, because the person needs it whether or not they want reminders. */
+
+export function sendReceipt(to: string, data: templates.ReceiptData): void {
+  dispatch(sendMail(templates.subscriptionReceipt(to, data)));
+}
+
+export function sendPaymentFailed(to: string, data: { name: string; reason: string | null }): void {
+  dispatch(sendMail(templates.paymentFailed(to, data)));
+}
+
+export function sendPlanChanged(
+  to: string,
+  data: { name: string; plan: 'FREE' | 'PRO'; endsAt: Date | null; timezone: string },
+): void {
+  dispatch(sendMail(templates.planChanged(to, data)));
+}
+
+export function sendSessionsRevoked(to: string, name: string): void {
+  dispatch(sendMail(templates.sessionsRevoked(to, { name })));
+}
+
+export function sendAccountDeleted(to: string, name: string): void {
+  dispatch(sendMail(templates.accountDeleted(to, { name })));
+}
+
+export function sendReportUpdate(
+  to: string,
+  data: {
+    name: string;
+    title: string;
+    status: 'RESOLVED' | 'DISMISSED';
+    resolution: string | null;
+  },
+): void {
+  dispatch(sendMail(templates.reportUpdate(to, data)));
 }
