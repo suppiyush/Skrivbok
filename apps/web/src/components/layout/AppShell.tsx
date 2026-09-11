@@ -116,7 +116,7 @@ function useDismiss(onDismiss: () => void) {
   return ref;
 }
 
-export function AppShell({ children }: { children: ReactNode }) {
+export function AppShell({ children, fill = false }: { children: ReactNode; fill?: boolean }) {
   const { user, signOut } = useAuth();
   const navigate = useNavigate();
   const { pathname } = useLocation();
@@ -395,13 +395,22 @@ export function AppShell({ children }: { children: ReactNode }) {
           with no second source of truth. This replaced a <style> element that
           rewrote a global rule on every toggle — a stylesheet reparse landing
           in the middle of the very animation it was driving. */}
+      {/* `fill` hands the whole region below the header to the page, at exactly
+          the viewport's remaining height and with no padding of its own. For a
+          screen that manages its own scrolling — a two-pane editor, say — the
+          centred, padded column above is the wrong container: it would let the
+          page grow past the fold and put a second scrollbar on the window. */}
       <main className="with-sidebar sidebar-motion pt-16">
-        <div
-          className="mx-auto flex max-w-[1180px] flex-col px-4 py-6 sm:px-6 sm:py-8"
-          style={{ gap: compact ? 18 : 24 }}
-        >
-          {children}
-        </div>
+        {fill ? (
+          <div className="h-[calc(100dvh-64px)] overflow-hidden">{children}</div>
+        ) : (
+          <div
+            className="mx-auto flex max-w-[1180px] flex-col px-4 py-6 sm:px-6 sm:py-8"
+            style={{ gap: compact ? 18 : 24 }}
+          >
+            {children}
+          </div>
+        )}
       </main>
     </div>
   );

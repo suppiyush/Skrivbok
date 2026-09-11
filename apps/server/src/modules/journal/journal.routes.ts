@@ -20,7 +20,10 @@ export const journalRouter: Router = Router();
 
 journalRouter.use(requireAuth);
 
+// All three are declared before '/:id', or their names would be parsed as ids.
 journalRouter.get('/activity', validate({ query: activityQuerySchema }), controller.activity);
+journalRouter.get('/tags', controller.tags);
+journalRouter.get('/stats', controller.stats);
 
 journalRouter.get('/', validate({ query: listJournalSchema }), controller.list);
 journalRouter.post('/', validate({ body: createJournalEntrySchema }), controller.create);

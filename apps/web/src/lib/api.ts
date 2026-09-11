@@ -223,6 +223,8 @@ export interface JournalEntry {
   content: string;
   entryDate: string;
   mood: string | null;
+  /** Lowercased on the server, so these are already normalised. */
+  tags: string[];
   createdAt: string;
   updatedAt: string;
 }
@@ -522,12 +524,22 @@ export const notes = {
 export const journal = {
   ...resource<
     JournalEntry,
-    { title?: string | null; content: string; entryDate?: string; mood?: string | null }
+    {
+      title?: string | null;
+      content: string;
+      entryDate?: string;
+      mood?: string | null;
+      tags?: string[];
+    }
   >('/journal'),
   activity: (from: string, to: string) =>
     api.get<{ activity: { date: string; count: number }[] }>(
       `/journal/activity${qs({ from, to })}`,
     ),
+  /** Every tag with a count, for the filter row. */
+  tags: () => api.get<{ tags: { tag: string; count: number }[] }>('/journal/tags'),
+  /** How much has been written, and how many days in a row. */
+  stats: () => api.get<{ entries: number; streak: number }>('/journal/stats'),
 };
 
 export const deadlines = {

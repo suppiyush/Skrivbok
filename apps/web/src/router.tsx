@@ -15,15 +15,8 @@ import { chunks } from './lib/preload';
 import Landing from './pages/Landing';
 import AuthPage from './pages/Auth';
 import Dashboard from './pages/Dashboard';
-import {
-  CareerGoals,
-  Deadlines,
-  FutureWork,
-  Ideas,
-  Journal,
-  Literature,
-  Notes,
-} from './pages/screens';
+import { Journal } from './pages/Journal';
+import { CareerGoals, Deadlines, FutureWork, Ideas, Literature, Notes } from './pages/screens';
 
 // Screens a signed-out visitor never reaches are split out of the first load.
 // The loaders come from `lib/preload` so that a link can start fetching one of

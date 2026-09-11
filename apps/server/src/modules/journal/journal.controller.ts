@@ -13,6 +13,16 @@ export const list: RequestHandler = async (req, res) => {
   res.json(await service.list(user.id, req.query as unknown as ListJournalQuery));
 };
 
+export const tags: RequestHandler = async (req, res) => {
+  const user = currentUser(req);
+  res.json({ tags: await service.tagCounts(user.id) });
+};
+
+export const stats: RequestHandler = async (req, res) => {
+  const user = currentUser(req);
+  res.json(await service.stats(user.id));
+};
+
 export const activity: RequestHandler = async (req, res) => {
   const user = currentUser(req);
   const { from, to } = req.query as unknown as { from: Date; to: Date };

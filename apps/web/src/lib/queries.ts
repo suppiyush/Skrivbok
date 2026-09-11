@@ -170,6 +170,12 @@ export const useNoteCategories = () =>
 export const useLiteratureTags = () =>
   useQuery({ queryKey: [...keys.literature, 'tags'], queryFn: literature.tags });
 
+export const useJournalTags = () =>
+  useQuery({ queryKey: [...keys.journal, 'tags'], queryFn: journal.tags });
+
+export const useJournalStats = () =>
+  useQuery({ queryKey: [...keys.journal, 'stats'], queryFn: journal.stats });
+
 export const useJournalActivity = (from: string, to: string) =>
   useQuery({
     queryKey: [...keys.journal, 'activity', from, to],

@@ -18,7 +18,6 @@ import type {
   Deadline,
   FutureWork as FutureWorkItem,
   Idea,
-  JournalEntry,
   Literature as LiteratureEntry,
   Note,
 } from '../lib/api';
@@ -28,7 +27,6 @@ import {
   deadlineHooks,
   futureWorkHooks,
   ideaHooks,
-  journalHooks,
   literatureHooks,
   noteHooks,
   useCareerQuota,
@@ -362,72 +360,6 @@ const notesConfig: ResourceConfig<Note> = {
   }),
   emptyTitle: 'No notes yet',
   emptyBody: 'Notes hold the longer writing — a method, a summary, a half-finished argument.',
-};
-
-/* ── Journal ──────────────────────────────────────────────────────────────── */
-
-const journalConfig: ResourceConfig<JournalEntry> = {
-  title: 'Journal',
-  icon: 'menu_book',
-  noun: 'entry',
-  blurb:
-    'A dated record of what you actually did. Entries belong to the day they are about, not the day they were typed.',
-  createLabel: 'New entry',
-  hooks: journalHooks as never,
-  sorts: [
-    { value: 'newest', label: 'Newest' },
-    { value: 'oldest', label: 'Oldest' },
-  ],
-  row: (entry) => ({
-    primary: entry.title || new Date(entry.entryDate).toDateString(),
-    secondary: entry.content,
-    tag: entry.mood ?? undefined,
-    meta: shortAge(entry.entryDate),
-  }),
-  form: (entry) => (
-    <>
-      <FieldRow>
-        <Field
-          label="Date"
-          name="entryDate"
-          type="date"
-          defaultValue={dateInputValue(entry?.entryDate ?? new Date())}
-          error={Err('entryDate')}
-        />
-        <Field
-          label="Mood"
-          name="mood"
-          defaultValue={entry?.mood ?? ''}
-          placeholder="Optional"
-          error={Err('mood')}
-        />
-      </FieldRow>
-      <Field
-        label="Title"
-        name="title"
-        defaultValue={entry?.title ?? ''}
-        placeholder="Optional"
-        error={Err('title')}
-      />
-      <Textarea
-        label="Entry"
-        name="content"
-        rows={9}
-        defaultValue={entry?.content ?? ''}
-        required
-        error={Err('content')}
-      />
-    </>
-  ),
-  toInput: (form) => ({
-    title: text(form, 'title'),
-    content: required(form, 'content'),
-    entryDate: text(form, 'entryDate') ?? undefined,
-    mood: text(form, 'mood'),
-  }),
-  emptyTitle: 'The journal is empty',
-  emptyBody:
-    'A few lines a day is enough. It is the record you will want when you write the progress report.',
 };
 
 /* ── Deadlines ────────────────────────────────────────────────────────────── */
@@ -873,7 +805,6 @@ const careerGoalsConfig: ResourceConfig<CareerGoal> = {
 
 export const Ideas = () => <ResourceScreen config={ideasConfig} />;
 export const Notes = () => <ResourceScreen config={notesConfig} />;
-export const Journal = () => <ResourceScreen config={journalConfig} />;
 export const Deadlines = () => <ResourceScreen config={deadlinesConfig} />;
 export const FutureWork = () => <ResourceScreen config={futureWorkConfig} />;
 export const Literature = () => <ResourceScreen config={literatureConfig} />;
