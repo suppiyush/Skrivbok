@@ -196,7 +196,7 @@ Shared shape: list/grid + create modal + edit modal + delete confirm + filters +
 
 | Screen             | Requirements                                                                                                                                                   |
 | ------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **Projects list**  | Cards w/ progress bar, member avatars, owner. Tabs: **All / Owned / Shared with me**. Archived filter. **Quota indicator "3 of 5 used"**                       |
+| **Projects list**  | Cards w/ progress bar, member avatars, owner. Tabs: **All / Owned / Shared with me**. **Quota indicator "3 of 5 used"**                                        |
 | **Project detail** | Header (name, progress, members), member list with roles                                                                                                       |
 | **Members panel**  | Add by email, role selector, **pending-invite state** (invited but not registered), accept-invite banner, remove, **transfer ownership** (destructive confirm) |
 | **Project brief**  | **25-field form** — needs sectioning into steps/accordion. Sections: project info · client contact · your contact · brief content · sign-off                   |

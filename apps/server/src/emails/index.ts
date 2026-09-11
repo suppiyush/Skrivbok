@@ -42,11 +42,30 @@ export function sendWelcome(to: string, name: string): void {
   dispatch(sendMail(templates.welcome(to, { name })));
 }
 
+/**
+ * A project invitation.
+ *
+ * Two templates behind one call: someone with an account is told the project
+ * is already in their workspace, someone without is told how to get one. The
+ * caller knows which applies, because it has just looked the address up.
+ */
 export function sendProjectInvite(
   to: string,
-  data: { projectName: string; inviterName: string; role: string; projectId: string },
+  data: {
+    projectName: string;
+    inviterName: string;
+    role: string;
+    projectId: string;
+    registered: boolean;
+  },
 ): void {
-  dispatch(sendMail(templates.projectInvite(to, data)));
+  dispatch(
+    sendMail(
+      data.registered
+        ? templates.projectInvite(to, data)
+        : templates.projectInviteNewUser(to, data),
+    ),
+  );
 }
 
 export function sendMeetingRequest(

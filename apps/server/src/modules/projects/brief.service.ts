@@ -1,37 +1,80 @@
 /**
  * The project brief.
  *
- * 25 fields that used to live as columns on the `projects` table, so every
- * project list query dragged them along. They are now a separate one-to-one
- * record, loaded only by the description screen.
+ * A document the team writes themselves: an ordered list of headings and prose,
+ * rather than the 25 fixed fields this replaced. Those decided in advance what
+ * a project was allowed to say about itself, and a project that did not fit the
+ * shape left most of them null.
  *
- * `upsert` rather than create/update: the brief is conceptually part of the
- * project, so the client should not have to know whether a row exists yet.
+ * Saved whole rather than section by section. An editing pass can add, delete
+ * and reorder at once, and expressing that as patches would mean inventing ids
+ * on the client and reconciling them here. Replacing the set is one round trip,
+ * it is idempotent, and the array's order is the document's order.
  */
 import { prisma } from '../../db/prisma.js';
 import { requireProjectRole } from './projects.access.js';
 import type { UpsertBriefInput } from './projects.schema.js';
 
+const briefSelect = {
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+  sections: {
+    select: { id: true, heading: true, body: true, position: true },
+    orderBy: { position: 'asc' },
+  },
+} as const;
+
 /**
- * Requires VIEWER. Returns null when nothing has been filled in — an empty
- * brief is a normal state, not a 404.
+ * Requires VIEWER. Returns null when the brief has never been opened — an
+ * unwritten brief is a normal state, not a 404.
  */
 export async function get(userId: string, projectId: string) {
   await requireProjectRole(userId, projectId, 'VIEWER');
-  return prisma.projectBrief.findUnique({ where: { projectId } });
+
+  return prisma.projectBrief.findUnique({
+    where: { projectId },
+    select: briefSelect,
+  });
 }
 
-/** Requires EDITOR. */
+/**
+ * Requires EDITOR.
+ *
+ * The delete and the re-create run in one transaction: a failure half way
+ * through would otherwise leave the brief holding whichever sections happened
+ * to be written before it, which is a document nobody wrote.
+ */
 export async function upsert(userId: string, projectId: string, input: UpsertBriefInput) {
   await requireProjectRole(userId, projectId, 'EDITOR');
 
-  // Only the keys the client actually sent are written, so a screen that
-  // submits one section cannot blank the others.
-  const data = Object.fromEntries(Object.entries(input).filter(([, value]) => value !== undefined));
+  const rows = input.sections.map((section, index) => ({
+    heading: section.heading,
+    body: section.body,
+    position: index,
+  }));
 
-  return prisma.projectBrief.upsert({
-    where: { projectId },
-    create: { projectId, ...data },
-    update: data,
+  return prisma.$transaction(async (tx) => {
+    // `update: {}` still touches `updatedAt`, so an existing brief records
+    // when it was last edited even though no column of its own changed.
+    const brief = await tx.projectBrief.upsert({
+      where: { projectId },
+      create: { projectId },
+      update: {},
+      select: { id: true },
+    });
+
+    await tx.briefSection.deleteMany({ where: { briefId: brief.id } });
+
+    if (rows.length > 0) {
+      await tx.briefSection.createMany({
+        data: rows.map((row) => ({ ...row, briefId: brief.id })),
+      });
+    }
+
+    return tx.projectBrief.findUniqueOrThrow({
+      where: { id: brief.id },
+      select: briefSelect,
+    });
   });
 }

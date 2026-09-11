@@ -25,6 +25,7 @@ export const chunks = {
   calendar: () => import('../pages/Calendar'),
   legal: () => import('../pages/Legal'),
   projects: () => import('../pages/Projects'),
+  projectDetail: () => import('../pages/ProjectDetail'),
 };
 
 /**

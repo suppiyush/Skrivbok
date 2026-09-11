@@ -29,7 +29,6 @@ export const createProjectSchema = projectFields.extend({
 
 /** Built from a defaults-free base — see the note in `ideas.schema.ts`. */
 export const updateProjectSchema = projectFields
-  .extend({ archived: z.boolean() })
   .partial()
   .refine((v) => Object.keys(v).length > 0, {
     message: 'Provide at least one field to update',
@@ -38,10 +37,6 @@ export const updateProjectSchema = projectFields
 export const listProjectsSchema = paginationSchema.extend({
   /** `owned` and `shared` split the list into "mine" and "invited to". */
   scope: z.enum(['all', 'owned', 'shared']).default('all'),
-  archived: z
-    .enum(['true', 'false'])
-    .transform((v) => v === 'true')
-    .optional(),
   search: z.string().trim().min(1).max(200).optional(),
   sort: z.enum(['recent', 'name', 'progress', 'newest']).default('recent'),
 });
@@ -66,52 +61,27 @@ export const transferOwnershipSchema = z.object({ memberId: z.string().min(20).m
 
 // ── Brief ─────────────────────────────────────────────────────────────────────
 
-const text = z.string().max(10_000).nullish();
-const short = z.string().trim().max(300).nullish();
-
 /**
- * The 25-field creative brief, carried over from the legacy `projects` table
- * where these were columns on the project itself. Every field is optional: the
- * brief is filled in gradually.
+ * The brief is saved whole, not field by field.
+ *
+ * Sections can be added, removed and reordered in one editing pass, and a
+ * patch-shaped API would have to describe all three as separate operations
+ * against ids the client has only just invented. Sending the finished document
+ * makes the array's order the document's order, and makes a save idempotent.
+ *
+ * An empty `sections` array is valid: it means the author deleted everything,
+ * which is a state they are allowed to be in.
  */
-export const upsertBriefSchema = z
-  .object({
-    projectTitle: short,
-    notes: text,
-
-    colleagueName: short,
-    colleaguePhone: short,
-    colleagueEmail: short,
-    colleagueAddress1: short,
-    colleagueAddress2: short,
-    colleagueAddress3: short,
-
-    yourName: short,
-    yourPhone: short,
-    yourEmail: short,
-    yourAddress1: short,
-    yourAddress2: short,
-    yourAddress3: short,
-
-    objectives: text,
-    timeline: text,
-    primaryAudience: text,
-    secondaryAudience: text,
-    callToAction: text,
-    competition: text,
-    graphics: text,
-    photography: text,
-    multimedia: text,
-    otherInfo: text,
-
-    clientName: short,
-    clientComments: text,
-    approvalDate: z.coerce.date().nullish(),
-    approvalSignature: short,
-  })
-  .refine((v) => Object.keys(v).length > 0, {
-    message: 'Provide at least one field to save',
-  });
+export const upsertBriefSchema = z.object({
+  sections: z
+    .array(
+      z.object({
+        heading: z.string().trim().min(1, 'A section needs a heading').max(200),
+        body: z.string().max(50_000).default(''),
+      }),
+    )
+    .max(100, 'A brief cannot have more than 100 sections'),
+});
 
 export type CreateProjectInput = z.infer<typeof createProjectSchema>;
 export type UpdateProjectInput = z.infer<typeof updateProjectSchema>;

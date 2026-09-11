@@ -10,6 +10,7 @@ import type { Pagination } from '../../middleware/validate.js';
 import { NotFoundError } from '../../utils/errors.js';
 import { paginate, toSkipTake, type Paginated } from '../../utils/pagination.js';
 import { assertWithinLimit } from '../billing/limits.service.js';
+import { announceInvites } from './members.service.js';
 import { requireProjectRole } from './projects.access.js';
 import type {
   CreateProjectInput,
@@ -23,7 +24,6 @@ const listSelect = {
   name: true,
   description: true,
   progress: true,
-  archivedAt: true,
   createdAt: true,
   updatedAt: true,
   ownerId: true,
@@ -45,11 +45,6 @@ function buildWhere(userId: string, query: ListProjectsQuery): Prisma.ProjectWhe
     members: { some: { userId } },
     ...(query.scope === 'owned' ? { ownerId: userId } : {}),
     ...(query.scope === 'shared' ? { NOT: { ownerId: userId } } : {}),
-    ...(query.archived === undefined
-      ? {}
-      : query.archived
-        ? { archivedAt: { not: null } }
-        : { archivedAt: null }),
     ...(query.search
       ? {
           OR: [
@@ -146,7 +141,7 @@ export async function create(userId: string, input: CreateProjectInput) {
     : [];
   const userIdByEmail = new Map(existingUsers.map((u) => [u.email, u.id]));
 
-  return prisma.project.create({
+  const project = await prisma.project.create({
     data: {
       ownerId: userId,
       name: input.name,
@@ -172,9 +167,24 @@ export async function create(userId: string, input: CreateProjectInput) {
     },
     select: listSelect,
   });
+
+  // People named while the project is being created are invited exactly as
+  // people added to it afterwards are. Creation used to write the membership
+  // rows and tell nobody, so an invitation sent this way reached its recipient
+  // only if they happened to sign in and find the project themselves.
+  await announceInvites(
+    project.id,
+    invites.map((m) => ({
+      email: m.email,
+      userId: userIdByEmail.get(m.email) ?? null,
+      role: m.role,
+    })),
+  );
+
+  return project;
 }
 
-/** Requires EDITOR. Progress and archival are ordinary edits. */
+/** Requires EDITOR. Progress is an ordinary edit. */
 export async function update(userId: string, projectId: string, input: UpdateProjectInput) {
   await requireProjectRole(userId, projectId, 'EDITOR');
 
@@ -184,7 +194,6 @@ export async function update(userId: string, projectId: string, input: UpdatePro
       ...(input.name !== undefined ? { name: input.name } : {}),
       ...(input.description !== undefined ? { description: input.description ?? null } : {}),
       ...(input.progress !== undefined ? { progress: input.progress } : {}),
-      ...(input.archived !== undefined ? { archivedAt: input.archived ? new Date() : null } : {}),
     },
     select: listSelect,
   });

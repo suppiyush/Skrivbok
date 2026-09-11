@@ -20,6 +20,72 @@ import type { AddMemberInput } from './projects.schema.js';
 
 const log = createLogger('projects');
 
+/**
+ * Tell an invitee they have been invited.
+ *
+ * Shared by both paths that create a membership — adding someone to an
+ * existing project, and naming them while the project is being created. They
+ * drifted apart once already: creation invited people and told them nothing at
+ * all, so the invitation existed only in the database.
+ *
+ * Two things go out, and which depends on whether the person exists yet:
+ *   - registered: an in-app notification and the "you were added" email
+ *   - not registered: only an email, and a different one — there is no
+ *     notification to deliver to an account that does not exist, and no
+ *     workspace to send them to
+ *
+ * Nothing here is awaited into the caller's transaction. A mail server being
+ * slow or a notification failing must not roll back the membership itself, and
+ * `dispatch` inside the mail layer already swallows and logs its own errors.
+ */
+async function announceInvite(
+  projectId: string,
+  invitee: { email: string; userId: string | null; role: ProjectRole },
+): Promise<void> {
+  const context = await prisma.project.findUnique({
+    where: { id: projectId },
+    select: { name: true, owner: { select: { name: true, email: true } } },
+  });
+
+  if (!context) return;
+
+  if (invitee.userId) {
+    await prisma.notification.create({
+      data: {
+        userId: invitee.userId,
+        type: 'PROJECT_INVITE',
+        title: 'You were added to a project',
+        link: `/projects/${projectId}`,
+      },
+    });
+  }
+
+  sendProjectInvite(invitee.email, {
+    projectName: context.name,
+    inviterName: context.owner.name ?? context.owner.email,
+    role: invitee.role,
+    projectId,
+    registered: invitee.userId !== null,
+  });
+}
+
+/**
+ * Announce a batch of invitations, one project, without letting a single
+ * failure stop the rest. Exported for `projects.service.create`.
+ */
+export async function announceInvites(
+  projectId: string,
+  invitees: { email: string; userId: string | null; role: ProjectRole }[],
+): Promise<void> {
+  await Promise.all(
+    invitees.map((invitee) =>
+      announceInvite(projectId, invitee).catch((error: unknown) =>
+        log.error({ projectId, err: error }, 'Could not announce a project invitation'),
+      ),
+    ),
+  );
+}
+
 const memberSelect = {
   id: true,
   email: true,
@@ -61,48 +127,24 @@ export async function add(userId: string, projectId: string, input: AddMemberInp
     select: { id: true },
   });
 
-  const [member] = await prisma.$transaction([
-    prisma.projectMember.create({
-      data: {
-        projectId,
-        userId: invitee?.id ?? null,
-        email: input.email,
-        name: input.name ?? null,
-        role: input.role,
-      },
-      select: memberSelect,
-    }),
-    // Registered invitees get an in-app notification immediately. Part 12 adds
-    // the email that goes with it.
-    ...(invitee
-      ? [
-          prisma.notification.create({
-            data: {
-              userId: invitee.id,
-              type: 'PROJECT_INVITE' as const,
-              title: 'You were added to a project',
-              link: `/projects/${projectId}`,
-            },
-          }),
-        ]
-      : []),
+  const member = await prisma.projectMember.create({
+    data: {
+      projectId,
+      userId: invitee?.id ?? null,
+      email: input.email,
+      name: input.name ?? null,
+      role: input.role,
+    },
+    select: memberSelect,
+  });
+
+  // Everyone invited is told, registered or not. This used to notify only
+  // people who already had an account — who are precisely the ones who would
+  // have seen the project anyway on their next visit — and left a stranger
+  // with no way to learn the invitation existed.
+  await announceInvites(projectId, [
+    { email: input.email, userId: invitee?.id ?? null, role: input.role },
   ]);
-
-  if (invitee) {
-    const context = await prisma.project.findUnique({
-      where: { id: projectId },
-      select: { name: true, owner: { select: { name: true, email: true } } },
-    });
-
-    if (context) {
-      sendProjectInvite(input.email, {
-        projectName: context.name,
-        inviterName: context.owner.name ?? context.owner.email,
-        role: input.role,
-        projectId,
-      });
-    }
-  }
 
   log.info({ projectId, pending: !invitee }, 'Project member added');
   return member;

@@ -8,13 +8,13 @@
  * Cards rather than rows, because a project carries a progress bar and a member
  * strip that a single line cannot hold.
  */
-import { useEffect, useMemo, useState, type FormEvent } from 'react';
-import { useLocation, useNavigate } from 'react-router-dom';
+import { useEffect, useId, useMemo, useState, type FormEvent } from 'react';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { AppShell } from '../components/layout/AppShell';
 import { Button } from '../components/ui/Button';
 import { EmptyState } from '../components/ui/EmptyState';
 import { Field } from '../components/ui/Field';
-import { Textarea } from '../components/ui/Form';
+import { Select, Textarea } from '../components/ui/Form';
 import { Icon } from '../components/ui/Icon';
 import { Card, PageHeader, Pagination, Pill, SearchInput, Toolbar } from '../components/ui/Layout';
 import { ConfirmDialog, Modal } from '../components/ui/Modal';
@@ -22,7 +22,7 @@ import { Reveal } from '../components/ui/Motion';
 import { Skeleton, useSlowLoad } from '../components/ui/Skeleton';
 import { useToast } from '../components/ui/Toast';
 import { ApiError, type Project } from '../lib/api';
-import { initials, relative } from '../lib/format';
+import { humanise, initials, relative } from '../lib/format';
 import {
   projectHooks,
   useAcceptInvite,
@@ -30,7 +30,6 @@ import {
   useProjectMembers,
   useProjectQuota,
 } from '../lib/queries';
-import { QuotaMeter } from './ResourceScreen';
 
 const SCOPES = [
   { value: 'all', label: 'All' },
@@ -44,7 +43,6 @@ export default function Projects() {
   const navigate = useNavigate();
 
   const [scope, setScope] = useState('all');
-  const [archived, setArchived] = useState(false);
   const [searchInput, setSearchInput] = useState('');
   const [search, setSearch] = useState('');
   const [page, setPage] = useState(1);
@@ -64,6 +62,9 @@ export default function Projects() {
   const [deleting, setDeleting] = useState<Project | null>(null);
   const [managing, setManaging] = useState<Project | null>(null);
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
+  // Invitations typed on the create form. Held here rather than read out of
+  // FormData on submit, because the rows are added and removed as you go.
+  const [members, setMembers] = useState<MemberDraft[]>([BLANK_MEMBER]);
 
   // Acted on, so the flag is dropped from history: left in place, a refresh or
   // a back navigation would reopen the dialog.
@@ -84,10 +85,9 @@ export default function Projects() {
       page,
       limit: 12,
       scope,
-      ...(archived ? { archived: 'true' } : {}),
       ...(search ? { search } : {}),
     }),
-    [page, scope, archived, search],
+    [page, scope, search],
   );
 
   const list = projectHooks.useList(query);
@@ -103,18 +103,17 @@ export default function Projects() {
   const atLimit = limit?.limited === true && limit.remaining === 0;
   const saving = create.isPending || update.isPending;
 
-  /**
-   * The quota is waited on as well as the list.
-   *
-   * It decides whether the header carries a usage meter, and it answers on its
-   * own schedule — so showing the list first means the meter drops in
-   * afterwards and shoves everything below it down the page. Holding the body
-   * until both have answered lets the header reach its final height while
-   * there is still nothing underneath to displace.
-   */
-  const loading = list.isPending || quota.isPending;
+  // Only the list gates the body now. The quota used to as well, because the
+  // usage meter it fed sat in the header and would drop in late, shoving
+  // everything below it down the page — with the meter gone it decides nothing
+  // but whether the New button is disabled, which displaces nothing.
+  const loading = list.isPending;
   // Nothing is drawn for a wait too short to read — see `useSlowLoad`.
   const showSkeleton = useSlowLoad(loading);
+
+  // A search that finds nothing is still a search, not an empty inbox: the
+  // "nothing shared yet" wording only holds when nothing is filtering it out.
+  const sharedAndEmpty = scope === 'shared' && search === '';
 
   async function onSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -127,10 +126,19 @@ export default function Projects() {
     };
 
     try {
-      if (editing) await update.mutateAsync({ id: editing.id, input });
-      else await create.mutateAsync(input);
+      if (editing) {
+        await update.mutateAsync({ id: editing.id, input });
+      } else {
+        // A row with no email is an empty row the user never filled in, not an
+        // invitation — the name alone is not something the server can invite.
+        const invites = members
+          .filter((m) => m.email.trim() !== '')
+          .map((m) => ({ email: m.email.trim(), name: m.name.trim() || null, role: m.role }));
+        await create.mutateAsync({ ...input, members: invites });
+      }
       toast.success(editing ? 'Project updated' : 'Project created');
       setEditing(undefined);
+      setMembers([BLANK_MEMBER]);
     } catch (error) {
       if (error instanceof ApiError && error.details.length > 0) setFieldErrors(error.fieldErrors);
       else toast.error(error instanceof ApiError ? error.message : 'Could not save that project.');
@@ -152,8 +160,7 @@ export default function Projects() {
     <AppShell>
       <PageHeader
         title="Projects"
-        description="Each project keeps its own members, progress and notes. Invite colleagues by email with view or edit access."
-        meta={limit?.limited ? <QuotaMeter status={limit} /> : undefined}
+        description="Manage all your projects, track progress, and collaborate with your team"
         actions={
           <Button
             variant="primary"
@@ -167,7 +174,11 @@ export default function Projects() {
         }
       />
 
+      {/* Search first, so it takes the free space on the left and pushes the
+          scope filter to the right edge. */}
       <Toolbar>
+        <SearchInput value={searchInput} onChange={setSearchInput} placeholder="Search projects" />
+
         <div className="flex flex-none rounded-xl border border-line bg-surface p-1">
           {SCOPES.map((s) => (
             <button
@@ -185,24 +196,6 @@ export default function Projects() {
             </button>
           ))}
         </div>
-
-        <SearchInput value={searchInput} onChange={setSearchInput} placeholder="Search projects" />
-
-        <button
-          type="button"
-          onClick={() => {
-            setArchived((v) => !v);
-            setPage(1);
-          }}
-          className={`press flex h-10 flex-none items-center gap-1.5 rounded-xl border px-3.5 text-[13.5px] font-medium transition ${
-            archived
-              ? 'border-brand bg-brand-tint text-brand-deep'
-              : 'border-line bg-surface text-ink-2 hover:bg-surface-2'
-          }`}
-        >
-          <Icon name="inventory_2" size={17} />
-          Archived
-        </button>
       </Toolbar>
 
       {loading ? (
@@ -222,19 +215,28 @@ export default function Projects() {
           </Button>
         </Card>
       ) : projects.length === 0 ? (
-        <EmptyState
-          icon="folder_open"
-          title={search || scope !== 'all' || archived ? 'Nothing matches' : 'No projects yet'}
-          action={
-            <Button variant="primary" icon="add" onClick={() => setEditing(null)}>
-              New project
-            </Button>
-          }
-        >
-          {search || scope !== 'all' || archived
-            ? 'Try a different search, or switch back to All.'
-            : 'A project holds the members, progress and brief for one piece of work.'}
-        </EmptyState>
+        /* "Shared with me" is the one empty view where creating a project is
+           no answer: anything you make is owned by you, so it would never
+           appear here. The offer is dropped rather than left to disappoint. */
+        sharedAndEmpty ? (
+          <EmptyState icon="group" title="Nothing shared with you yet">
+            Projects a colleague invites you to will appear here.
+          </EmptyState>
+        ) : (
+          <EmptyState
+            icon="folder_open"
+            title={search || scope !== 'all' ? 'Nothing matches' : 'No projects yet'}
+            action={
+              <Button variant="primary" icon="add" onClick={() => setEditing(null)}>
+                New project
+              </Button>
+            }
+          >
+            {search || scope !== 'all'
+              ? 'Try a different search, or switch back to All.'
+              : 'A project holds the members, progress and brief for one piece of work.'}
+          </EmptyState>
+        )
       ) : (
         <>
           <div className="grid items-start gap-4 lg:grid-cols-2">
@@ -258,17 +260,6 @@ export default function Projects() {
                   onEdit={() => setEditing(project)}
                   onDelete={() => setDeleting(project)}
                   onMembers={() => setManaging(project)}
-                  onArchive={() =>
-                    void update
-                      .mutateAsync({
-                        id: project.id,
-                        input: { archived: project.archivedAt === null },
-                      })
-                      .then(() =>
-                        toast.success(project.archivedAt ? 'Project restored' : 'Project archived'),
-                      )
-                      .catch(() => toast.error('Could not change that project.'))
-                  }
                 />
               </Reveal>
             ))}
@@ -310,7 +301,11 @@ export default function Projects() {
           </>
         }
       >
-        <div className="flex flex-col gap-4">
+        {/* Keyed on the project so the dialog's fields are rebuilt for each
+            one. `defaultValue` only applies when an input mounts, and this
+            dialog stays mounted between openings — without the key, editing a
+            second project would show the first one's values. */}
+        <div key={editing?.id ?? 'new'} className="flex flex-col gap-4">
           <Field
             label="Name"
             name="name"
@@ -321,20 +316,16 @@ export default function Projects() {
           <Textarea
             label="Description"
             name="description"
-            rows={4}
+            rows={2}
             defaultValue={editing?.description ?? ''}
             error={fieldErrors['description']}
           />
-          <Field
-            label="Progress"
-            name="progress"
-            type="number"
-            min={0}
-            max={100}
-            defaultValue={editing?.progress ?? 0}
-            hint="A whole percentage, 0 to 100."
-            error={fieldErrors['progress']}
-          />
+          <ProgressSlider name="progress" defaultValue={editing?.progress ?? 0} />
+
+          {/* Invitations are part of creating a project, not of editing one:
+              the update endpoint takes no members, and an existing project has
+              the members dialog, which can also change roles and remove people. */}
+          {!editing ? <TeamMembersField members={members} onChange={setMembers} /> : null}
         </div>
       </Modal>
 
@@ -352,6 +343,166 @@ export default function Projects() {
   );
 }
 
+/* ── Create-dialog fields ─────────────────────────────────────────────────── */
+
+type AssignableRole = 'EDITOR' | 'VIEWER';
+
+interface MemberDraft {
+  name: string;
+  email: string;
+  role: AssignableRole;
+}
+
+const BLANK_MEMBER: MemberDraft = { name: '', email: '', role: 'VIEWER' };
+
+/**
+ * The access a colleague gets.
+ *
+ * These are real: every project endpoint routes through `requireProjectRole`,
+ * and an editor may change the project where a viewer is refused. OWNER is not
+ * offered — it follows creation and transfer, and is not something to hand out
+ * from an invite form.
+ */
+function RoleSelect({
+  name,
+  value,
+  defaultValue,
+  onChange,
+}: {
+  name: string;
+  value?: AssignableRole;
+  defaultValue?: AssignableRole;
+  onChange?: (role: AssignableRole) => void;
+}) {
+  return (
+    <Select
+      label="Access"
+      name={name}
+      {...(value !== undefined ? { value } : {})}
+      {...(defaultValue !== undefined ? { defaultValue } : {})}
+      {...(onChange ? { onChange: (e) => onChange(e.target.value as AssignableRole) } : {})}
+      options={[
+        { value: 'VIEWER', label: 'Viewer' },
+        { value: 'EDITOR', label: 'Editor' },
+      ]}
+    />
+  );
+}
+
+/**
+ * Progress, as something you drag.
+ *
+ * A native range input rather than a built one: it already handles the pointer
+ * leaving the element mid-drag, arrow keys, Home/End and touch. What it does
+ * not do is colour the filled part of its own track, so that is painted here
+ * as a gradient that stops at the current value.
+ *
+ * The input keeps its `name`, so the surrounding form still reads it out of
+ * `FormData` exactly as the number box did.
+ */
+function ProgressSlider({ name, defaultValue }: { name: string; defaultValue: number }) {
+  const id = useId();
+  const [value, setValue] = useState(defaultValue);
+
+  return (
+    <div className="flex flex-col gap-1.5">
+      <div className="flex items-baseline justify-between">
+        <label htmlFor={id} className="text-[13px] font-semibold text-ink-2">
+          Progress
+        </label>
+        <span className="text-[13px] font-bold text-brand-deep tabular">{value}%</span>
+      </div>
+      <input
+        id={id}
+        name={name}
+        type="range"
+        min={0}
+        max={100}
+        value={value}
+        onChange={(e) => setValue(Number(e.target.value))}
+        className="range mt-1"
+        style={{
+          background: `linear-gradient(to right, var(--color-brand) ${value}%, var(--color-surface-2) ${value}%)`,
+        }}
+      />
+    </div>
+  );
+}
+
+/**
+ * The people invited along with the project.
+ *
+ * One row per colleague, starting with a single empty one so the fields are
+ * visible without having to ask for them. Rows are kept in state rather than
+ * read from `FormData`, because they are added and removed as the form is
+ * filled in.
+ */
+function TeamMembersField({
+  members,
+  onChange,
+}: {
+  members: MemberDraft[];
+  onChange: (next: MemberDraft[]) => void;
+}) {
+  const set = (index: number, patch: Partial<MemberDraft>) =>
+    onChange(members.map((m, i) => (i === index ? { ...m, ...patch } : m)));
+
+  return (
+    <div className="border-t border-line pt-4">
+      <h3 className="text-[13px] font-semibold text-ink-2">Team members</h3>
+
+      <div className="mt-3 flex flex-col gap-2.5">
+        {members.map((member, i) => (
+          <div
+            key={i}
+            className="flex items-end gap-2 rounded-xl border border-line bg-surface-5 p-3"
+          >
+            <div className="grid min-w-0 flex-1 gap-2.5 sm:grid-cols-2">
+              <Field
+                label="Colleague name"
+                value={member.name}
+                onChange={(e) => set(i, { name: e.target.value })}
+                placeholder="Name"
+              />
+              <Field
+                label="Email"
+                type="email"
+                value={member.email}
+                onChange={(e) => set(i, { email: e.target.value })}
+                placeholder="name@university.edu"
+              />
+              <div className="sm:col-span-2">
+                <RoleSelect
+                  name={`role-${i}`}
+                  value={member.role}
+                  onChange={(role) => set(i, { role })}
+                />
+              </div>
+            </div>
+            {members.length > 1 ? (
+              <IconAction
+                icon="close"
+                label={`Remove member ${i + 1}`}
+                onClick={() => onChange(members.filter((_, index) => index !== i))}
+              />
+            ) : null}
+          </div>
+        ))}
+      </div>
+
+      <Button
+        variant="ghost"
+        size="sm"
+        icon="add"
+        className="mt-2.5"
+        onClick={() => onChange([...members, BLANK_MEMBER])}
+      >
+        Add another member
+      </Button>
+    </div>
+  );
+}
+
 /* ── Card ─────────────────────────────────────────────────────────────────── */
 
 function ProjectCard({
@@ -361,7 +512,6 @@ function ProjectCard({
   onEdit,
   onDelete,
   onMembers,
-  onArchive,
 }: {
   project: Project;
   accepting: boolean;
@@ -369,16 +519,24 @@ function ProjectCard({
   onEdit: () => void;
   onDelete: () => void;
   onMembers: () => void;
-  onArchive: () => void;
 }) {
   const owner = project.myRole === 'OWNER';
-  const archived = project.archivedAt !== null;
 
   return (
-    <Card className={`h-full ${archived ? 'opacity-70' : ''}`}>
+    <Card className="h-full">
       <div className="flex items-start gap-3">
-        <h2 className="min-w-0 flex-1 text-[15.5px] leading-snug font-bold">{project.name}</h2>
-        <Pill tone={owner ? 'brand' : 'neutral'}>{(project.myRole ?? 'VIEWER').toLowerCase()}</Pill>
+        {/* The title is the way in. Only the title, not the whole card: the
+            card carries its own buttons, and nesting them inside a link is
+            both invalid and a source of accidental navigation. */}
+        <h2 className="min-w-0 flex-1 text-[15.5px] leading-snug font-bold">
+          <Link
+            to={`/projects/${project.id}`}
+            className="transition hover:text-brand-ink hover:underline"
+          >
+            {project.name}
+          </Link>
+        </h2>
+        <Pill tone={owner ? 'brand' : 'neutral'}>{humanise(project.myRole ?? 'VIEWER')}</Pill>
       </div>
 
       {project.description ? (
@@ -409,12 +567,17 @@ function ProjectCard({
         </div>
       ) : null}
 
+      {/* Progress is the one number the card exists to report, so it is set to
+          be read at a glance rather than squinted at: the figure carries the
+          brand colour and the track is thick enough to judge by shape alone. */}
       <div className="mt-4">
-        <div className="flex items-center justify-between text-[12px]">
-          <span className="text-ink-3">Progress</span>
-          <span className="font-mono text-ink-3 tabular">{project.progress}%</span>
+        <div className="flex items-baseline justify-between">
+          <span className="text-[12px] font-semibold text-ink-3">Progress</span>
+          <span className="text-[16px] leading-none font-extrabold text-brand-deep tabular">
+            {project.progress}%
+          </span>
         </div>
-        <div className="mt-1.5 h-1.5 overflow-hidden rounded-full bg-surface-2">
+        <div className="mt-2 h-2.5 overflow-hidden rounded-full bg-surface-2">
           <div
             className="h-full rounded-full bg-brand transition-[width] duration-700"
             style={{ width: `${project.progress}%` }}
@@ -439,11 +602,6 @@ function ProjectCard({
         {owner ? (
           <>
             <IconAction icon="edit" label="Edit project" onClick={onEdit} />
-            <IconAction
-              icon={archived ? 'unarchive' : 'inventory_2'}
-              label={archived ? 'Restore project' : 'Archive project'}
-              onClick={onArchive}
-            />
             <IconAction icon="delete" label="Delete project" onClick={onDelete} danger />
           </>
         ) : null}
@@ -492,14 +650,21 @@ function MembersDialog({ project, onClose }: { project: Project | null; onClose:
   async function onAdd(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setError(null);
-    const form = new FormData(event.currentTarget);
+
+    // Both read before the first `await`. React clears `currentTarget` once the
+    // handler yields, so reaching for it afterwards threw — and the throw was
+    // caught by the same `catch` as a failed request, so a member who had in
+    // fact been invited was reported as "Could not add that member".
+    const formEl = event.currentTarget;
+    const form = new FormData(formEl);
 
     try {
       await add.mutateAsync({
         email: String(form.get('email') ?? '').trim(),
-        role: (String(form.get('role') ?? 'VIEWER') as 'EDITOR' | 'VIEWER') ?? 'VIEWER',
+        name: String(form.get('name') ?? '').trim() || null,
+        role: String(form.get('role') ?? 'VIEWER') as 'EDITOR' | 'VIEWER',
       });
-      event.currentTarget.reset();
+      formEl.reset();
       toast.success('Invitation sent');
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'Could not add that member.');
@@ -536,9 +701,9 @@ function MembersDialog({ project, onClose }: { project: Project | null; onClose:
                 <span className="block truncate text-[12px] text-ink-3">{member.email}</span>
               </span>
               <Pill tone={member.role === 'OWNER' ? 'brand' : 'neutral'}>
-                {member.role.toLowerCase()}
+                {humanise(member.role)}
               </Pill>
-              {member.acceptedAt === null ? <Pill tone="warning">pending</Pill> : null}
+              {member.acceptedAt === null ? <Pill tone="warning">Pending</Pill> : null}
               {canManage && member.role !== 'OWNER' ? (
                 <IconAction
                   icon="close"
@@ -561,22 +726,23 @@ function MembersDialog({ project, onClose }: { project: Project | null; onClose:
         <form onSubmit={onAdd} className="mt-5 border-t border-line pt-5" noValidate>
           <p className="text-[13px] font-semibold text-ink-2">Invite someone</p>
           {error ? <p className="mt-1.5 text-[12.5px] text-danger-ink">{error}</p> : null}
-          <div className="mt-2 flex flex-wrap items-center gap-2">
-            <input
+
+          {/* The same three fields as the create dialog, in the same order, so
+              inviting someone is one thing to learn rather than two. */}
+          <div className="mt-2.5 grid gap-2.5 sm:grid-cols-2">
+            <Field label="Colleague name" name="name" placeholder="Name" />
+            <Field
+              label="Email"
               name="email"
               type="email"
               required
-              placeholder="colleague@university.edu"
-              className="h-10 min-w-[200px] flex-1 rounded-xl border border-line-2 bg-surface px-3.5 text-[14px] outline-none focus:border-brand"
+              placeholder="name@university.edu"
             />
-            <select
-              name="role"
-              defaultValue="VIEWER"
-              className="h-10 flex-none cursor-pointer rounded-xl border border-line-2 bg-surface px-3 text-[13.5px] outline-none focus:border-brand"
-            >
-              <option value="VIEWER">Viewer</option>
-              <option value="EDITOR">Editor</option>
-            </select>
+          </div>
+          <div className="mt-2.5 flex flex-wrap items-end gap-2.5">
+            <div className="min-w-[150px] flex-1">
+              <RoleSelect name="role" defaultValue="VIEWER" />
+            </div>
             <Button type="submit" variant="primary" size="sm" loading={add.isPending}>
               Invite
             </Button>

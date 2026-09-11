@@ -100,5 +100,7 @@ export const getBrief: RequestHandler = async (req, res) => {
 
 export const saveBrief: RequestHandler = async (req, res) => {
   const user = currentUser(req);
-  res.json(await briefService.upsert(user.id, projectId(req), req.body as UpsertBriefInput));
+  // Wrapped to match `getBrief`, so the client reads one shape from both.
+  const brief = await briefService.upsert(user.id, projectId(req), req.body as UpsertBriefInput);
+  res.json({ brief });
 };

@@ -249,13 +249,27 @@ export interface ProjectMember {
   createdAt: string;
 }
 
+export interface BriefSection {
+  id: string;
+  heading: string;
+  body: string;
+  position: number;
+}
+
+/** The project's written brief: an ordered set of sections the team chooses. */
+export interface ProjectBrief {
+  id: string;
+  createdAt: string;
+  updatedAt: string;
+  sections: BriefSection[];
+}
+
 export interface Project {
   id: string;
   ownerId: string;
   name: string;
   description: string | null;
   progress: number;
-  archivedAt: string | null;
   createdAt: string;
   updatedAt: string;
   members?: ProjectMember[];
@@ -538,8 +552,15 @@ export const careerGoals = {
 export const projects = {
   ...resource<
     Project,
-    { name: string; description?: string | null; progress?: number },
-    { name?: string; description?: string | null; progress?: number; archived?: boolean }
+    {
+      name: string;
+      description?: string | null;
+      progress?: number;
+      /** Invitations sent as part of creation. Update has no equivalent —
+       *  members are managed through `/projects/:id/members` afterwards. */
+      members?: { email: string; name?: string | null; role?: ProjectRole }[];
+    },
+    { name?: string; description?: string | null; progress?: number }
   >('/projects'),
   quota: () => api.get<LimitStatus>('/projects/quota'),
   members: (id: string) => api.get<{ members: ProjectMember[] }>(`/projects/${id}/members`),
@@ -551,6 +572,12 @@ export const projects = {
   acceptInvite: (id: string) => api.post<ProjectMember>(`/projects/${id}/members/accept`),
   removeMember: (id: string, memberId: string) =>
     api.delete<void>(`/projects/${id}/members/${memberId}`),
+
+  /** `brief` is null until the document has been written for the first time. */
+  brief: (id: string) => api.get<{ brief: ProjectBrief | null }>(`/projects/${id}/brief`),
+  /** Saved whole: the array sent is the document, in order. */
+  saveBrief: (id: string, sections: { heading: string; body: string }[]) =>
+    api.put<{ brief: ProjectBrief }>(`/projects/${id}/brief`, { sections }),
 };
 
 /* ── Calendar ─────────────────────────────────────────────────────────────── */

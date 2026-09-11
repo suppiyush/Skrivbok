@@ -186,7 +186,7 @@ day it was written) · `mood?` (free text) · `createdAt` · `updatedAt`
 
 ### Project
 
-`id` · `name` · `description?` · `progress` (0–100) · `archivedAt?` · `owner` ·
+`id` · `name` · `description?` · `progress` (0–100) · `owner` ·
 `memberCount` · `myRole` (OWNER | EDITOR | VIEWER) · `invitePending` (boolean)
 
 ### ProjectMember
@@ -194,15 +194,17 @@ day it was written) · `mood?` (free text) · `createdAt` · `updatedAt`
 `id` · `email` · `name?` · `role` · `invitedAt` · `acceptedAt?` ·
 `user?` (**null when the person has been invited but has not registered yet**)
 
-### ProjectBrief — 25 fields, grouped
+### ProjectBrief — a document of user-written sections
 
-- **Project**: projectTitle, notes
-- **Their contact**: colleagueName, colleaguePhone, colleagueEmail,
-  colleagueAddress1–3
-- **Your contact**: yourName, yourPhone, yourEmail, yourAddress1–3
-- **The brief**: objectives, timeline, primaryAudience, secondaryAudience,
-  callToAction, competition, graphics, photography, multimedia, otherInfo
-- **Sign-off**: clientName, clientComments, approvalDate, approvalSignature
+`id` · `createdAt` · `updatedAt` · `sections[]`
+
+**BriefSection**: `id` · `heading` · `body` · `position`
+
+Superseded the original 25 fixed fields (objectives, timeline, audience,
+sign-off and the rest). Those decided in advance what a project was allowed to
+say about itself, and a project that did not fit the shape left most of them
+null. The headings are the team's to choose; `position` is the order they
+arranged, not the order they were written.
 
 ### CalendarEvent
 
@@ -610,11 +612,11 @@ most at risk of collapsing under real data.**
 
 - **Tabs:** All · Owned · Shared with me
 - **Card:** name, description, **progress bar**, member avatars (stacked),
-  owner, updated-at, archived flag
+  owner, updated-at
 - **`invitePending` state** — "You've been invited" with an Accept action
 - **Quota meter**: "3 of 5 projects used" — and **disable Create when full**,
   rather than letting the user discover the limit by failing
-- Filters: archived, search. Sorts: recent | name | progress | newest
+- Filters: search. Sorts: recent | name | progress | newest
 
 **Detail screen — `/projects/:id`:**
 
@@ -632,13 +634,19 @@ most at risk of collapsing under real data.**
 - **Transfer ownership** — destructive-feeling confirm; the current owner is
   demoted to EDITOR
 
-**Project Brief — `/projects/:id/brief`:**
+**Project Brief — on `/projects/:id`:**
 
-- **25 fields.** Do **not** design one long form.
-- Group into 5 sections (§3.1) as an accordion, stepper, or tabbed form
-- **Section-by-section save** — the API writes only the fields sent
-- Show completion per section ("4 of 6 filled")
-- Sign-off section includes a date and a signature field
+- A document of **user-written sections**: heading plus prose, in an order the
+  author arranges. No fixed field list.
+- Read and edit on the **same screen** — they are the same activity a minute
+  apart, and another route loses your place in the document.
+- **Saved whole**: the array sent is the document. One pass can add, delete and
+  reorder, which a patch-shaped API cannot express without inventing ids.
+- Suggested headings on an empty brief (Project overview, Objectives,
+  Background, Method, Timeline, Expected outcomes) — a starting point, every
+  one renameable and deletable.
+- **Export is the browser's own print-to-PDF.** `@media print` keeps
+  `.print-document` and hides the shell; no dependency, correct pagination.
 
 ---
 

@@ -443,6 +443,100 @@
   animation: fade-in 0.2s var(--ease-out) 0.08s both;
 }
 
+/* A range slider in the app's own colours.
+
+   The filled part of the track is a gradient painted on the element itself,
+   set inline from the current value. The pseudo-element that would normally
+   do it cannot be addressed from JS, and building the whole control out of
+   divs would throw away the keyboard and touch behaviour the native input
+   already has — arrow keys, Home/End, and a drag target that follows the
+   pointer outside the element. */
+@utility range {
+  appearance: none;
+  width: 100%;
+  height: 6px;
+  border-radius: 999px;
+  outline: none;
+  cursor: pointer;
+
+  &::-webkit-slider-thumb {
+    appearance: none;
+    width: 18px;
+    height: 18px;
+    border-radius: 50%;
+    background: var(--color-surface);
+    border: 2px solid var(--color-brand);
+    box-shadow: var(--shadow-card);
+    transition: transform 0.12s var(--ease-out);
+  }
+
+  &:active::-webkit-slider-thumb {
+    transform: scale(1.12);
+  }
+
+  &::-moz-range-thumb {
+    width: 18px;
+    height: 18px;
+    border: 2px solid var(--color-brand);
+    border-radius: 50%;
+    background: var(--color-surface);
+  }
+
+  &:focus-visible {
+    outline: 2px solid var(--color-brand);
+    outline-offset: 4px;
+  }
+}
+
+/* ── Printing ───────────────────────────────────────────────────────────────
+   The export path. A brief is printed through the browser's own "Save as PDF",
+   which paginates properly, embeds the fonts and needs no dependency — but it
+   prints the page as it stands, so everything that is screen furniture has to
+   be taken away first.
+
+   `.print-document` marks the subtree to keep. Everything outside it is hidden
+   by walking up from that element, rather than by listing the chrome: a rule
+   that names the sidebar and the header goes stale the moment either moves. */
+@media print {
+  /* The fixed shell would otherwise print on every page, and its reserved
+     gutter would indent the document by the width of a sidebar that is not
+     there. */
+  .no-print,
+  header.fixed,
+  aside {
+    display: none !important;
+  }
+
+  body {
+    background: #fff;
+  }
+
+  main,
+  .with-sidebar {
+    padding: 0 !important;
+  }
+
+  /* A section is a unit of reading: a heading stranded at the foot of a page
+     with its text overleaf is the one break worth preventing. */
+  .print-document section {
+    break-inside: avoid;
+  }
+
+  .print-document h2 {
+    break-after: avoid;
+  }
+
+  /* Ink, not screen: shadows and tinted panels cost toner and read as grey
+     smudges on paper. */
+  .print-document * {
+    box-shadow: none !important;
+  }
+
+  @page {
+    margin: 18mm 16mm;
+  }
+}
+
 /* Numbers that change should be seen to change. */
 @utility count-up {
   animation: fade-up 0.45s var(--ease-out) both;

@@ -127,12 +127,25 @@ async function seedDemoData(): Promise<void> {
           { userId: colleague.id, email: colleague.email, name: colleague.name, role: 'EDITOR' },
         ],
       },
+      // The brief is now whatever headings the team writes. These are the ones
+      // the old fixed fields happened to cover, so the demo reads the same.
       brief: {
         create: {
-          projectTitle: 'Verified Consensus',
-          objectives: 'Produce a machine-checked proof of safety and liveness.',
-          timeline: '18 months',
-          primaryAudience: 'Distributed systems researchers',
+          sections: {
+            create: [
+              {
+                position: 0,
+                heading: 'Project overview',
+                body: 'A machine-checked treatment of a consensus protocol, aimed at distributed systems researchers.',
+              },
+              {
+                position: 1,
+                heading: 'Objectives',
+                body: 'Produce a machine-checked proof of safety and liveness.',
+              },
+              { position: 2, heading: 'Timeline', body: '18 months.' },
+            ],
+          },
         },
       },
     },

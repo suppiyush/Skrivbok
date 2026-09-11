@@ -345,9 +345,8 @@ model Project {
   /// 0–100. Validated at the API boundary.
   progress    Int     @default(0)
 
-  archivedAt DateTime?
-  createdAt  DateTime  @default(now())
-  updatedAt  DateTime  @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   owner   User            @relation("ProjectOwner", fields: [ownerId], references: [id], onDelete: Cascade)
   members ProjectMember[]
@@ -385,55 +384,49 @@ model ProjectMember {
   @@map("project_members")
 }
 
-/// The 25-field creative brief. Split out of `Project` because it is large,
-/// optional, and only loaded on the description screen.
+/// The project brief: a document the team writes, section by section.
+///
+/// This replaced 25 fixed columns carried over from the legacy app — objectives,
+/// timeline, audience, sign-off and the rest. Fixed fields decided in advance
+/// what a project was allowed to say about itself, and every project that did
+/// not fit left most of them null. The headings are now the team's to choose.
+///
+/// The row exists so the document has an identity of its own: an `updatedAt`
+/// meaning "brief last edited", and somewhere for document-level settings to
+/// live later without touching every section.
 model ProjectBrief {
   id        String @id @default(cuid())
   projectId String @unique
 
-  projectTitle String?
-  notes        String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
-  // Client / colleague contact
-  colleagueName     String?
-  colleaguePhone    String?
-  colleagueEmail    String?
-  colleagueAddress1 String?
-  colleagueAddress2 String?
-  colleagueAddress3 String?
+  project  Project        @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  sections BriefSection[]
 
-  // Own contact
-  yourName     String?
-  yourPhone    String?
-  yourEmail    String?
-  yourAddress1 String?
-  yourAddress2 String?
-  yourAddress3 String?
+  @@map("project_briefs")
+}
 
-  // Brief content
-  objectives        String?
-  timeline          String?
-  primaryAudience   String?
-  secondaryAudience String?
-  callToAction      String?
-  competition       String?
-  graphics          String?
-  photography       String?
-  multimedia        String?
-  otherInfo         String?
+/// One heading and its prose.
+///
+/// Ordered by `position`, which is the index the client sent rather than
+/// anything the database decides — so the order is a property of the document
+/// the author arranged, not of when each section happened to be written.
+model BriefSection {
+  id      String @id @default(cuid())
+  briefId String
 
-  // Sign-off
-  clientName        String?
-  clientComments    String?
-  approvalDate      DateTime?
-  approvalSignature String?
+  heading  String
+  body     String @db.Text
+  position Int
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  brief ProjectBrief @relation(fields: [briefId], references: [id], onDelete: Cascade)
 
-  @@map("project_briefs")
+  @@index([briefId, position])
+  @@map("brief_sections")
 }
 
 // ============================================================================

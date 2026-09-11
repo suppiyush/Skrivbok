@@ -30,6 +30,7 @@ import {
 // these chunks before the route that needs it is rendered.
 const Legal = lazy(chunks.legal);
 const Projects = lazy(chunks.projects);
+const ProjectDetail = lazy(chunks.projectDetail);
 const Admin = lazy(chunks.admin);
 const Calendar = lazy(chunks.calendar);
 const Meetings = lazy(() => chunks.calendar().then((m) => ({ default: m.Meetings })));
@@ -102,10 +103,10 @@ export const router = createBrowserRouter([
   { path: '/notes', element: guarded(<Notes />) },
   { path: '/journal', element: guarded(<Journal />) },
   { path: '/projects', element: guarded(<Projects />) },
-  // Notifications link to a specific project (`/projects/<id>`). Without this
-  // route the link fell through to the catch-all below and dumped a signed-in
-  // user on the marketing page, which reads exactly like being signed out.
-  { path: '/projects/:id', element: guarded(<Projects />) },
+  // One project and its brief. Notifications link here (`/projects/<id>`), and
+  // before this screen existed the route rendered the list instead — so a
+  // notification about one project opened all of them.
+  { path: '/projects/:id', element: guarded(<ProjectDetail />) },
   { path: '/literature', element: guarded(<Literature />) },
   { path: '/future-work', element: guarded(<FutureWork />) },
   { path: '/deadlines', element: guarded(<Deadlines />) },

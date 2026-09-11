@@ -32,8 +32,7 @@ const BORDER = '#e2e5ec';
 const CANVAS = '#f1f3f7'; // page background
 const SURFACE = '#ffffff'; // card background
 
-const FONT =
-  "-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,'Helvetica Neue',Arial,sans-serif";
+const FONT = "-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,'Helvetica Neue',Arial,sans-serif";
 
 interface LayoutOptions {
   heading: string;
@@ -45,6 +44,14 @@ interface LayoutOptions {
   footerNote?: string;
   /** The grey line shown after the subject in an inbox list. */
   preheader?: string;
+  /**
+   * Whether to offer the email-preferences link.
+   *
+   * Off for a message to someone who has no account: the link goes to a
+   * settings page behind the login wall, so it would offer a stranger control
+   * over preferences they cannot reach.
+   */
+  preferencesLink?: boolean;
 }
 
 /** Absolute link into the web app. Relative links do not work in email. */
@@ -157,8 +164,12 @@ function layout(options: LayoutOptions): { html: string; text: string } {
         <tr><td style="padding:20px 4px 0;font-family:${FONT};font-size:12px;line-height:1.6;
                        color:${FAINT};text-align:center">
           ${escapeHtml(footerNote)}<br>
-          <a href="${escapeHtml(appUrl('/settings'))}" style="color:${FAINT};text-decoration:underline">Email preferences</a>
-          &nbsp;·&nbsp;
+          ${
+            options.preferencesLink === false
+              ? ''
+              : `<a href="${escapeHtml(appUrl('/settings'))}" style="color:${FAINT};text-decoration:underline">Email preferences</a>
+          &nbsp;·&nbsp;`
+          }
           <a href="mailto:${escapeHtml(env.mail.supportEmail)}" style="color:${FAINT};text-decoration:underline">Contact support</a>
         </td></tr>
 
@@ -251,9 +262,7 @@ export function deadlineReminder(to: string, data: DeadlineReminderData): Mail {
 
   const bodyHtml = data.deadlines
     .map(
-      (
-        d,
-      ) => `<div style="border-left:3px solid ${BRAND};padding:2px 0 2px 14px;margin-bottom:20px">
+      (d) => `<div style="border-left:3px solid ${BRAND};padding:2px 0 2px 14px;margin-bottom:20px">
         <div style="font-family:${FONT};font-weight:700;font-size:15px;color:${INK}">${escapeHtml(d.title)}</div>
         ${table([
           row('Due', formatInZone(d.dueAt, data.timezone)),
@@ -386,6 +395,46 @@ export function projectInvite(
   });
 
   return { to, subject: `Added to “${data.projectName}”`, html, text };
+}
+
+/**
+ * The same invitation, for someone who has no account yet.
+ *
+ * Kept separate rather than branching inside `projectInvite`, because almost
+ * every line differs: there is no workspace to open, the project link would
+ * bounce them to a login screen, and the action they need is to sign up. The
+ * footer note is replaced too — the standard one refers to notification
+ * settings the recipient has never seen.
+ */
+export function projectInviteNewUser(
+  to: string,
+  data: { projectName: string; inviterName: string; role: string },
+): Mail {
+  const { html, text } = layout({
+    heading: 'You have been invited to a project',
+    intro: `${data.inviterName} invited you to collaborate on Skrivbok.`,
+    bodyHtml:
+      panel(
+        `<strong style="font-size:15px">${escapeHtml(data.projectName)}</strong><br>` +
+          `You have been invited as ${escapeHtml(data.role.toLowerCase())}.`,
+      ) +
+      table([row('Invited by', data.inviterName), row('Your role', data.role.toLowerCase())]) +
+      `<p style="margin:18px 0 0;font-family:${FONT};font-size:14px;line-height:1.6;color:${MUTED}">
+        Skrivbok is one workspace for research — projects, deadlines, literature and ideas.
+        Sign in with this email address and the project will be waiting for you.
+      </p>`,
+    bodyText:
+      `Project: ${data.projectName}\n` +
+      `Your role: ${data.role.toLowerCase()}\n` +
+      `Invited by: ${data.inviterName}\n\n` +
+      'Sign in with this email address and the project will be waiting for you.',
+    actionLabel: 'Sign in to Skrivbok',
+    actionPath: '/login',
+    footerNote: 'You are receiving this because someone invited you to a project on Skrivbok.',
+    preferencesLink: false,
+  });
+
+  return { to, subject: `${data.inviterName} invited you to “${data.projectName}”`, html, text };
 }
 
 export function meetingRequest(

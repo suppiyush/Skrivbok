@@ -107,7 +107,10 @@ function resourceHooks<T, TCreate, TUpdate>(
 
     useCreate: () => {
       const invalidate = useInvalidate();
-      return useMutation({ mutationFn: (input: TCreate) => client.create(input), onSuccess: invalidate });
+      return useMutation({
+        mutationFn: (input: TCreate) => client.create(input),
+        onSuccess: invalidate,
+      });
     },
 
     useUpdate: () => {
@@ -153,7 +156,10 @@ export const usePlans = () =>
   useQuery({ queryKey: [...keys.billing, 'plans'], queryFn: billing.plans, staleTime: 600_000 });
 
 export const usePayments = (query: Record<string, unknown> = {}) =>
-  useQuery({ queryKey: [...keys.billing, 'payments', query], queryFn: () => billing.payments(query) });
+  useQuery({
+    queryKey: [...keys.billing, 'payments', query],
+    queryFn: () => billing.payments(query),
+  });
 
 export const useIdeaCategories = () =>
   useQuery({ queryKey: [...keys.ideas, 'categories'], queryFn: ideas.categories });
@@ -214,9 +220,18 @@ export function useNotificationActions() {
   const invalidate = () => void qc.invalidateQueries({ queryKey: keys.notifications });
 
   return {
-    markRead: useMutation({ mutationFn: (ids: string[]) => notifications.markRead(ids), onSuccess: invalidate }),
-    markAllRead: useMutation({ mutationFn: () => notifications.markAllRead(), onSuccess: invalidate }),
-    remove: useMutation({ mutationFn: (id: string) => notifications.remove(id), onSuccess: invalidate }),
+    markRead: useMutation({
+      mutationFn: (ids: string[]) => notifications.markRead(ids),
+      onSuccess: invalidate,
+    }),
+    markAllRead: useMutation({
+      mutationFn: () => notifications.markAllRead(),
+      onSuccess: invalidate,
+    }),
+    remove: useMutation({
+      mutationFn: (id: string) => notifications.remove(id),
+      onSuccess: invalidate,
+    }),
     clearRead: useMutation({ mutationFn: () => notifications.clearRead(), onSuccess: invalidate }),
   };
 }
@@ -243,7 +258,10 @@ export function useMeetingActions() {
   return {
     create: useMutation({ mutationFn: meetings.create, onSuccess: invalidate }),
     accept: useMutation({ mutationFn: (id: string) => meetings.accept(id), onSuccess: invalidate }),
-    decline: useMutation({ mutationFn: (id: string) => meetings.decline(id), onSuccess: invalidate }),
+    decline: useMutation({
+      mutationFn: (id: string) => meetings.decline(id),
+      onSuccess: invalidate,
+    }),
     cancel: useMutation({ mutationFn: (id: string) => meetings.cancel(id), onSuccess: invalidate }),
   };
 }
@@ -350,6 +368,24 @@ export function useAcceptInvite() {
       // The invite notification is now answered, so the badge is stale.
       void qc.invalidateQueries({ queryKey: keys.notifications });
     },
+  });
+}
+
+export const useProjectBrief = (id: string | null) =>
+  useQuery({
+    queryKey: [...keys.projects, id, 'brief'],
+    queryFn: () => projects.brief(id as string),
+    enabled: id !== null,
+  });
+
+export function useSaveBrief(projectId: string | null) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (sections: { heading: string; body: string }[]) =>
+      projects.saveBrief(projectId as string, sections),
+    // The brief itself, and the project list — saving stamps the project's
+    // `updatedAt`, which the cards show as "edited 2 minutes ago".
+    onSuccess: () => void qc.invalidateQueries({ queryKey: keys.projects }),
   });
 }
 
