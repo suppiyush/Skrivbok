@@ -10,6 +10,8 @@ export const notesRouter: Router = Router();
 notesRouter.use(requireAuth);
 
 notesRouter.get('/categories', controller.categories);
+notesRouter.get('/voice/config', controller.voiceConfig);
+notesRouter.post('/voice/signature', controller.voiceSignature);
 
 notesRouter.get('/', validate({ query: listNotesSchema }), controller.list);
 notesRouter.post('/', validate({ body: createNoteSchema }), controller.create);

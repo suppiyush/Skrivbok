@@ -2,20 +2,17 @@
 import type { Prisma } from '@prisma/client';
 import { prisma } from '../../db/prisma.js';
 import type { Pagination } from '../../middleware/validate.js';
-import { NotFoundError } from '../../utils/errors.js';
+import { BadRequestError, NotFoundError } from '../../utils/errors.js';
 import { paginate, toSkipTake, type Paginated } from '../../utils/pagination.js';
+import { isOwnStorageUrl } from '../uploads/uploads.service.js';
 import type { CreateNoteInput, ListNotesQuery, UpdateNoteInput } from './notes.schema.js';
 
 type Note = Prisma.NoteGetPayload<Record<string, never>>;
 
-/**
- * Pinned notes always sort first, whatever secondary order is requested — that
- * is what pinning means.
- */
 const ORDER_BY: Record<ListNotesQuery['sort'], Prisma.NoteOrderByWithRelationInput[]> = {
-  newest: [{ pinned: 'desc' }, { createdAt: 'desc' }],
-  oldest: [{ pinned: 'desc' }, { createdAt: 'asc' }],
-  title: [{ pinned: 'desc' }, { title: 'asc' }],
+  newest: [{ createdAt: 'desc' }],
+  oldest: [{ createdAt: 'asc' }],
+  title: [{ title: 'asc' }],
 };
 
 function buildWhere(userId: string, query: ListNotesQuery): Prisma.NoteWhereInput {
@@ -23,7 +20,6 @@ function buildWhere(userId: string, query: ListNotesQuery): Prisma.NoteWhereInpu
     userId,
     ...(query.category ? { category: query.category } : {}),
     ...(query.color ? { color: query.color } : {}),
-    ...(query.pinned !== undefined ? { pinned: query.pinned } : {}),
     ...(query.search
       ? {
           OR: [
@@ -53,6 +49,23 @@ export async function getById(userId: string, id: string): Promise<Note> {
   return note;
 }
 
+/**
+ * A recording URL is only accepted if our own storage issued it.
+ *
+ * The client uploads straight to the provider and reports the URL afterwards,
+ * so this field arrives as whatever the client says. Unchecked, it would let a
+ * caller hang an arbitrary third-party file off a page the product serves.
+ */
+function checkedAudioUrl(url: string | null | undefined): string | null {
+  if (url === undefined || url === null || url === '') return null;
+
+  if (!isOwnStorageUrl(url)) {
+    throw new BadRequestError('That recording did not come from this application');
+  }
+
+  return url;
+}
+
 export async function create(userId: string, input: CreateNoteInput): Promise<Note> {
   return prisma.note.create({
     data: {
@@ -61,7 +74,8 @@ export async function create(userId: string, input: CreateNoteInput): Promise<No
       content: input.content ?? null,
       category: input.category,
       color: input.color,
-      pinned: input.pinned,
+      audioUrl: checkedAudioUrl(input.audioUrl),
+      audioSeconds: input.audioSeconds ?? null,
     },
   });
 }
@@ -72,7 +86,8 @@ export async function update(userId: string, id: string, input: UpdateNoteInput)
     ...(input.content !== undefined ? { content: input.content ?? null } : {}),
     ...(input.category !== undefined ? { category: input.category } : {}),
     ...(input.color !== undefined ? { color: input.color } : {}),
-    ...(input.pinned !== undefined ? { pinned: input.pinned } : {}),
+    ...(input.audioUrl !== undefined ? { audioUrl: checkedAudioUrl(input.audioUrl) } : {}),
+    ...(input.audioSeconds !== undefined ? { audioSeconds: input.audioSeconds ?? null } : {}),
   };
 
   const result = await prisma.note.updateMany({ where: { id, userId }, data });

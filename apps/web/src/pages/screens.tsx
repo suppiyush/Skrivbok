@@ -34,6 +34,7 @@ import {
   useLiteratureTags,
 } from '../lib/queries';
 import { ResourceScreen, useFieldError, type ResourceConfig } from './ResourceScreen';
+import { clock, VoiceNoteButton } from './VoiceNote';
 
 /* ── Shared option lists ──────────────────────────────────────────────────── */
 
@@ -74,7 +75,8 @@ const NOTE_TINT: Record<string, string> = {
 /** The five offered when picking. `NOTE_TINT` renders more than this. */
 const NOTE_COLOURS = ['YELLOW', 'GREEN', 'PINK', 'PURPLE', 'BLUE'];
 
-const IDEA_CATEGORIES = ['business', 'creative', 'general', 'personal', 'research', 'technology'];
+/** Shared by ideas and notes — the two resources that are filed by subject. */
+const CATEGORIES = ['business', 'creative', 'general', 'personal', 'research', 'technology'];
 
 const PRIORITIES = [
   { value: 'LOW', label: 'Low' },
@@ -174,13 +176,12 @@ function ColourSwatches({ selected }: { selected: string }) {
  * The category list, plus whatever this record already says.
  *
  * The six are fixed, but the field has always accepted free text and older
- * ideas carry values outside the list. A select that silently drops one would
- * rewrite it to the first option the moment the idea was edited for any other
- * reason.
+ * records carry values outside the list. A select that silently drops one
+ * would rewrite it to the first option the moment that record was edited for
+ * any other reason.
  */
 function categoryOptions(current: string | undefined) {
-  const values =
-    current && !IDEA_CATEGORIES.includes(current) ? [...IDEA_CATEGORIES, current] : IDEA_CATEGORIES;
+  const values = current && !CATEGORIES.includes(current) ? [...CATEGORIES, current] : CATEGORIES;
 
   return values.map((value) => ({ value, label: humanise(value) }));
 }
@@ -264,19 +265,12 @@ const notesConfig: ResourceConfig<Note> = {
   title: 'Notes',
   icon: 'sticky_note_2',
   noun: 'note',
-  blurb: 'Longer working notes, pinned to the top when you need them close at hand.',
-  createLabel: 'New note',
+  blurb: 'Longer working notes — a method, a summary, a half-finished argument.',
+  // "Text note", because it is no longer the only kind. The voice button sits
+  // beside it and owns its own recorder and dialog.
+  createLabel: 'Text note',
+  extraAction: () => <VoiceNoteButton />,
   hooks: noteHooks as never,
-  filters: [
-    {
-      name: 'pinned',
-      label: 'Pinned',
-      options: [
-        { value: 'true', label: 'Pinned only' },
-        { value: 'false', label: 'Unpinned only' },
-      ],
-    },
-  ],
   sorts: [
     { value: 'newest', label: 'Newest' },
     { value: 'oldest', label: 'Oldest' },
@@ -285,20 +279,20 @@ const notesConfig: ResourceConfig<Note> = {
   row: (note) => ({
     primary: note.title,
     secondary: note.content,
-    tag: note.pinned ? 'pinned' : note.category,
-    tone: note.pinned ? 'brand' : 'neutral',
+    tag: note.category,
     meta: shortAge(note.updatedAt),
   }),
-  // Notes carry the same colour field ideas do, and it was equally invisible.
-  // Unlike the row, the card shows the category and the pin together rather
-  // than choosing between them.
+  // Plain cards, not sticky notes: a note is filed and found by its title and
+  // category, not recognised by colour across a wall. No `tint`, so the card
+  // stays a panel — shorter, and no fold.
   card: (note) => ({
-    tint: NOTE_TINT[note.color] ?? NOTE_TINT['YELLOW'] ?? 'transparent',
     primary: note.title,
-    secondary: note.content,
+    // A voice note has no body to preview, so its length stands in for one —
+    // otherwise every recording would show as an identical empty card.
+    secondary: note.audioUrl ? `Recording · ${clock(note.audioSeconds ?? 0)}` : note.content,
     badge: note.category,
     meta: shortAge(note.updatedAt),
-    ...(note.pinned ? { icon: 'push_pin' } : {}),
+    ...(note.audioUrl ? { audioUrl: note.audioUrl } : {}),
   }),
   form: (note) => (
     <>
@@ -309,17 +303,15 @@ const notesConfig: ResourceConfig<Note> = {
         required
         error={Err('title')}
       />
-      {/* Category and colour before the body, as on an idea: each is one
-          decision, and a seven-row textarea buries anything under it. */}
-      <FieldRow>
-        <Field
-          label="Category"
-          name="category"
-          defaultValue={note?.category ?? 'general'}
-          error={Err('category')}
-        />
-        <ColourSwatches selected={note?.color ?? 'YELLOW'} />
-      </FieldRow>
+      {/* Category before the body, as on an idea: it is one decision, and a
+          seven-row textarea buries anything under it. */}
+      <Select
+        label="Category"
+        name="category"
+        defaultValue={note?.category ?? 'general'}
+        options={categoryOptions(note?.category)}
+        error={Err('category')}
+      />
       <Textarea
         label="Note"
         name="content"
@@ -327,20 +319,15 @@ const notesConfig: ResourceConfig<Note> = {
         defaultValue={note?.content ?? ''}
         error={Err('content')}
       />
-      <Checkbox
-        name="pinned"
-        label="Pin to the top"
-        hint="Pinned notes stay first regardless of the sort order."
-        defaultChecked={note?.pinned ?? false}
-      />
     </>
   ),
+  // No `color`. The column still exists and still defaults to YELLOW on the
+  // server, but a note does not ask for one, so nothing is sent: create takes
+  // the default, and update leaves whatever is stored alone.
   toInput: (form) => ({
     title: required(form, 'title'),
     content: text(form, 'content'),
     category: text(form, 'category') ?? 'general',
-    color: form.get('color'),
-    pinned: form.get('pinned') === 'on',
   }),
   emptyTitle: 'No notes yet',
   emptyBody: 'Notes hold the longer writing — a method, a summary, a half-finished argument.',

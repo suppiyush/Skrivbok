@@ -53,20 +53,20 @@ export interface Row {
  * them; a deadline is a record in a register, and a register is a list.
  */
 export interface CardView {
-  /** The card's background — what makes a wall of ideas scannable by colour. */
-  tint: string;
+  /**
+   * A background colour, for a resource whose colour means something.
+   *
+   * Its presence is what makes the card a sticky note: tinted, taller, and
+   * with a turned-up corner. Without it the card is a plain panel — which is
+   * what a record you never chose a colour for should look like.
+   */
+  tint?: string | undefined;
   primary: string;
   secondary?: string | null | undefined;
   badge?: string | undefined;
   meta?: string | undefined;
-  /**
-   * A state worth showing beside the badge — a pinned note, say.
-   *
-   * Separate from `badge` rather than replacing it: the list row has to choose
-   * between showing "pinned" and showing the category, and a card has room for
-   * both, so it should not inherit that compromise.
-   */
-  icon?: string | undefined;
+  /** A recording to play in place, without opening the record first. */
+  audioUrl?: string | undefined;
 }
 
 export interface FilterDef {
@@ -110,6 +110,15 @@ export interface ResourceConfig<T extends { id: string }> {
   form: (item: T | null) => ReactNode;
   /** Turn the submitted form into the request body. */
   toInput: (form: FormData) => Record<string, unknown>;
+
+  /**
+   * Rendered beside the create button.
+   *
+   * A function rather than a node so it can own state and dialogs of its own —
+   * recording a voice note is a second way of creating a note, not a variation
+   * on the first, and it does not belong in the shared create form.
+   */
+  extraAction?: () => ReactNode;
 
   /** Rendered to the left of the list, e.g. the literature tag filter. */
   aside?: (state: {
@@ -272,15 +281,18 @@ export function ResourceScreen<T extends { id: string }>({
         description={config.blurb}
         meta={limit?.limited ? <QuotaMeter status={limit} /> : undefined}
         actions={
-          <Button
-            variant="primary"
-            size="sm"
-            icon="add"
-            disabled={atLimit}
-            onClick={() => setEditing(null)}
-          >
-            {config.createLabel}
-          </Button>
+          <>
+            {config.extraAction?.()}
+            <Button
+              variant="primary"
+              size="sm"
+              icon="add"
+              disabled={atLimit}
+              onClick={() => setEditing(null)}
+            >
+              {config.createLabel}
+            </Button>
+          </>
         }
       />
 
@@ -554,32 +566,55 @@ function ResourceCard({
   onEdit: () => void;
   onDelete: () => void;
 }) {
+  // A tint makes it a note; without one it is a card, and a card has no
+  // coloured field to fill, so it sits tighter and shows less of the body.
+  const sticky = view.tint !== undefined;
+
   return (
     <div
-      className="lift group relative flex h-full min-h-[150px] flex-col rounded-[16px] border border-line p-4"
-      style={{ background: view.tint }}
+      className={`lift group relative flex h-full flex-col rounded-[16px] border border-line p-4 ${
+        sticky ? 'min-h-[150px]' : 'min-h-[112px] bg-surface'
+      }`}
+      style={sticky ? { background: view.tint } : undefined}
     >
-      <span className="note-fold" aria-hidden="true" />
+      {sticky ? <span className="note-fold" aria-hidden="true" /> : null}
 
       {/* The face opens it; the menu lives in the footer instead of the corner,
-          which the fold now occupies. */}
+          which the fold occupies on a note. */}
       <button
         type="button"
         onClick={onEdit}
         className="flex min-w-0 flex-1 cursor-pointer flex-col text-left"
       >
-        <span className="line-clamp-2 pr-6 text-[14.5px] leading-snug font-bold text-ink">
+        <span
+          className={`line-clamp-2 text-[14.5px] leading-snug font-bold text-ink ${sticky ? 'pr-6' : ''}`}
+        >
           {view.primary}
         </span>
         {view.secondary ? (
-          <span className="mt-1.5 line-clamp-4 text-[13px] leading-relaxed text-ink-2">
+          <span
+            className={`mt-1.5 text-[13px] leading-relaxed text-ink-2 ${
+              sticky ? 'line-clamp-4' : 'line-clamp-2'
+            }`}
+          >
             {view.secondary}
           </span>
         ) : null}
       </button>
 
+      {/* Playable from the list. Opening a dialog to hear a thirty-second clip
+          is three interactions where one will do. */}
+      {view.audioUrl ? (
+        <audio
+          controls
+          preload="none"
+          src={view.audioUrl}
+          className="mt-3 h-9 w-full"
+          onClick={(e) => e.stopPropagation()}
+        />
+      ) : null}
+
       <div className="mt-3 flex flex-none items-center gap-2">
-        {view.icon ? <Icon name={view.icon} size={15} className="flex-none text-ink-3" /> : null}
         {view.badge ? (
           <span className="rounded-full bg-ink px-2.5 py-1 text-[11px] font-bold text-white capitalize">
             {view.badge}

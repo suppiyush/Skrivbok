@@ -148,7 +148,7 @@ Fields marked `?` are nullable. This is what you have to display and edit.
 
 ### Note
 
-Same as Idea, plus `pinned` (boolean). **Pinned notes always sort first.**
+The same shape as Idea. Pinning was removed: it decided every sort order, and a note is found by searching and filtering rather than by being held at the top.
 
 ### JournalEntry
 
@@ -521,8 +521,6 @@ tinted surface + border, not saturated fills.
 
 As Ideas, plus:
 
-- **Pinned** state — pinned notes always sort first, in a visually distinct band
-  or with a clear pin marker
 - Longer content (up to 50,000 chars) — the editor needs to handle a full page
 - Pin/unpin action on card and in editor
 

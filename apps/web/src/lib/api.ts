@@ -174,7 +174,20 @@ export interface Idea {
 }
 
 export interface Note extends Idea {
-  pinned: boolean;
+  /** Set on a voice note. The recording itself lives with the storage provider. */
+  audioUrl: string | null;
+  /** Whole seconds, so a list can say how long it runs without fetching it. */
+  audioSeconds: number | null;
+}
+
+/** What the client needs to POST a recording straight to the storage provider. */
+export interface UploadSignature {
+  uploadUrl: string;
+  apiKey: string;
+  timestamp: number;
+  signature: string;
+  folder: string;
+  publicId?: string;
 }
 
 export interface JournalEntry {
@@ -466,10 +479,17 @@ export const notes = {
       content?: string | null;
       category?: string;
       color?: NoteColor;
-      pinned?: boolean;
+      audioUrl?: string | null;
+      audioSeconds?: number | null;
     }
   >('/notes'),
   categories: () => api.get<{ categories: string[] }>('/notes/categories'),
+
+  /** Whether storage is configured. False hides recording rather than offering
+   *  a button that fails on tap. */
+  voiceConfig: () => api.get<{ voiceNotesEnabled: boolean }>('/notes/voice/config'),
+  /** Short-lived, and scoped server-side to the caller's own folder. */
+  voiceSignature: () => api.post<UploadSignature>('/notes/voice/signature'),
 };
 
 export const journal = {

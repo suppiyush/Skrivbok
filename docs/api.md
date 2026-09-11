@@ -94,15 +94,15 @@ no-op — this prevents a client bug from silently resetting fields to defaults.
 
 ## Auth — `/api/v1/auth`
 
-| Method | Path               | Notes                                                                     |
-| ------ | ------------------ | ------------------------------------------------------------------------- |
-| GET    | `/config`          | `{ googleEnabled }` — false means nobody can sign in; the page says so    |
-| GET    | `/google`          | → consent screen                                                          |
-| GET    | `/google/callback` | → session + redirect. Signs up on first use. **No identity in the URL**   |
-| POST   | `/logout`          | 204. Revokes server-side, not just the cookie                             |
+| Method | Path               | Notes                                                                      |
+| ------ | ------------------ | -------------------------------------------------------------------------- |
+| GET    | `/config`          | `{ googleEnabled }` — false means nobody can sign in; the page says so     |
+| GET    | `/google`          | → consent screen                                                           |
+| GET    | `/google/callback` | → session + redirect. Signs up on first use. **No identity in the URL**    |
+| POST   | `/logout`          | 204. Revokes server-side, not just the cookie                              |
 | POST   | `/logout-all`      | Sign out everywhere → `{ revokedSessions }`. Ends the caller's session too |
-| GET    | `/me`              | Current user + `providers`                                                |
-| PATCH  | `/me`              | `name`, `timezone`                                                        |
+| GET    | `/me`              | Current user + `providers`                                                 |
+| PATCH  | `/me`              | `name`, `timezone`                                                         |
 
 There is no `/register`, `/login` or `/password`. **Sign-up is not a separate
 call:** the Google callback creates the account the first time it sees an
@@ -120,7 +120,7 @@ All share: `GET /` `POST /` `GET /:id` `PATCH /:id` `DELETE /:id`
 | Module      | Extra                             | Filters                                                 |
 | ----------- | --------------------------------- | ------------------------------------------------------- |
 | ideas       | `GET /categories`                 | `category`, `color`, `search`, `sort`                   |
-| notes       | `GET /categories`                 | + `pinned` (pinned always sorts first)                  |
+| notes       | `GET /categories`                 | Same filters as ideas                                   |
 | journal     | `GET /activity?from&to` — heatmap | `from`, `to`, `mood`, `search`                          |
 | deadlines   | `GET /summary`                    | `status`, `priority`, `from`, `to`, `overdue`, `search` |
 | future-work | —                                 | `priority`, `search`                                    |

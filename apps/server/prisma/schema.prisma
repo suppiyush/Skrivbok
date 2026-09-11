@@ -459,7 +459,14 @@ model Note {
   category String    @default("general")
   color    NoteColor @default(YELLOW)
 
-  pinned Boolean @default(false)
+  /// A voice note: the recording lives with the storage provider and only its
+  /// URL is kept here. Null for a typed note, which is most of them. Checked
+  /// against our own storage host before it is written — the client reports
+  /// this after uploading, and a client can report anything.
+  audioUrl     String?
+  /// Whole seconds, so a list can say how long a recording runs without
+  /// fetching it. Taken from the recorder's own clock.
+  audioSeconds Int?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt

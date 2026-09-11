@@ -2,19 +2,32 @@ import { z } from 'zod';
 import { paginationSchema } from '../../middleware/validate.js';
 import { categorySchema, noteColorSchema } from '../ideas/ideas.schema.js';
 
+/**
+ * Where a recording may come from.
+ *
+ * Shape only — that it is a URL at all, and not absurdly long. Whether it is
+ * *our* storage is a question about configuration rather than about the
+ * request, so the service asks `isOwnStorageUrl` once the body has parsed.
+ * Without that second check this field would be a way to point the product's
+ * own pages at an arbitrary third-party file.
+ */
+const audioUrlSchema = z.string().trim().url('That is not a valid recording URL').max(2048);
+
 /** Field shapes with no defaults — see the note above updateNoteSchema. */
 const noteFields = z.object({
   title: z.string().trim().min(1, 'A title is required').max(200),
   content: z.string().max(50_000).nullish(),
   category: categorySchema,
   color: noteColorSchema,
-  pinned: z.boolean(),
+  audioUrl: audioUrlSchema.nullish(),
+  // Four hours. Long enough for any plausible recording, short enough that a
+  // nonsense value cannot be stored and displayed.
+  audioSeconds: z.number().int().min(0).max(14_400).nullish(),
 });
 
 export const createNoteSchema = noteFields.extend({
   category: categorySchema.default('general'),
   color: noteColorSchema.default('YELLOW'),
-  pinned: z.boolean().default(false),
 });
 
 /**
@@ -34,10 +47,6 @@ export const updateNoteSchema = noteFields.partial().refine((v) => Object.keys(v
 export const listNotesSchema = paginationSchema.extend({
   category: categorySchema.optional(),
   color: noteColorSchema.optional(),
-  pinned: z
-    .enum(['true', 'false'])
-    .transform((v) => v === 'true')
-    .optional(),
   search: z.string().trim().min(1).max(200).optional(),
   sort: z.enum(['newest', 'oldest', 'title']).default('newest'),
 });

@@ -145,7 +145,7 @@ Agree these first, or every screen gets redesigned twice.
 ## 3. Public / auth screens
 
 | #   | Screen                 | Requirements                                                                                                                                                                                                        |
-| --- | ---------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| --- | ---------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | 1   | **Landing page**       | Marketing. Feature grid, platform stats, sign-up CTA                                                                                                                                                                |
 | 2   | **Sign in / Sign up**  | **One "Continue with Google" button — no email or password fields.** `/login` and `/register` are the same screen, differing only in heading. States: loading, Google unconfigured, server unreachable, OAuth error |
 | 3   | **Legal pages** ×5     | Terms, EULA, Refund Policy, Privacy Policy, Contact                                                                                                                                                                 |
@@ -184,7 +184,7 @@ Shared shape: list/grid + create modal + edit modal + delete confirm + filters +
 | Screen          | Specific needs                                                                                                                                                          |
 | --------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | **Ideas**       | Sticky-note cards. **7 colours**, category filter, search                                                                                                               |
-| **Notes**       | Same + **pinned** notes sort first (needs a visual pin state)                                                                                                           |
+| **Notes**       | Plain cards — title, category badge, age. No colour and no pinning                                                                                                      |
 | **Journal**     | Date-based entries, mood field, **activity heatmap** (GitHub-style contribution grid), date-range filter                                                                |
 | **Deadlines**   | Priority (4 levels), status (4), due date **+ time + timezone**, overdue styling, reminder toggle, **summary bar** (total / open / overdue / due-this-week / completed) |
 | **Future Work** | Priority, free-text timeline field                                                                                                                                      |
