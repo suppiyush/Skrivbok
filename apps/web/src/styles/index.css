@@ -488,6 +488,35 @@
   }
 }
 
+/* A sticky note's turned-up corner.
+
+   One square in the top-right, filled with a diagonal gradient: canvas colour
+   down to the crease, a thin dark line for the crease itself, then nothing —
+   so the corner reads as folded away while the note shows through below it.
+
+   A gradient rather than a rotated square or a `clip-path`, both of which need
+   the card to clip its own overflow. The card cannot: the row menu opens
+   downward out of it, and hiding overflow would cut the menu off. A gradient
+   paints inside its own box and asks nothing of its parent.
+
+   The radius matches the card's, so the folded corner follows the same curve
+   the other three do. */
+@utility note-fold {
+  position: absolute;
+  top: 0;
+  right: 0;
+  width: 30px;
+  height: 30px;
+  border-top-right-radius: 16px;
+  pointer-events: none;
+  background: linear-gradient(
+    225deg,
+    var(--color-canvas) 0 48%,
+    rgb(11 15 25 / 0.18) 48% 52%,
+    transparent 52%
+  );
+}
+
 /* ── Printing ───────────────────────────────────────────────────────────────
    The export path. A brief is printed through the browser's own "Save as PDF",
    which paginates properly, embeds the fonts and needs no dependency — but it

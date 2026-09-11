@@ -37,15 +37,44 @@ import { ResourceScreen, useFieldError, type ResourceConfig } from './ResourceSc
 
 /* ── Shared option lists ──────────────────────────────────────────────────── */
 
-const COLOURS = [
-  { value: 'YELLOW', label: 'Yellow' },
-  { value: 'BLUE', label: 'Blue' },
-  { value: 'GREEN', label: 'Green' },
-  { value: 'PINK', label: 'Pink' },
-  { value: 'PURPLE', label: 'Purple' },
-  { value: 'ORANGE', label: 'Orange' },
-  { value: 'GRAY', label: 'Grey' },
-];
+/** Names for the swatches. A lookup, not a list of options — nothing selects
+ *  from it now that colour is chosen by clicking a circle. */
+const COLOUR_LABEL: Record<string, string> = {
+  YELLOW: 'Yellow',
+  BLUE: 'Blue',
+  GREEN: 'Green',
+  PINK: 'Pink',
+  PURPLE: 'Purple',
+  ORANGE: 'Orange',
+  GRAY: 'Grey',
+};
+
+/**
+ * Sticky-note tints.
+ *
+ * Set as alpha over the card rather than as flat hex, so a note picks up the
+ * warm paper behind it instead of sitting on it as a separate sheet — and so
+ * one set of values works if the canvas ever changes.
+ *
+ * Deliberately pale. Ink at full strength has to stay legible on every one of
+ * them: a note you cannot read is worse than a white one.
+ */
+const NOTE_TINT: Record<string, string> = {
+  YELLOW: 'rgb(255 214 10 / 0.20)',
+  GREEN: 'rgb(6 214 160 / 0.18)',
+  PINK: 'rgb(255 105 160 / 0.16)',
+  PURPLE: 'rgb(150 100 220 / 0.16)',
+  BLUE: 'rgb(17 138 178 / 0.15)',
+  // Not offered when choosing, but records written before the palette was
+  // settled still carry them and still have to draw.
+  ORANGE: 'rgb(255 127 80 / 0.18)',
+  GRAY: 'rgb(11 15 25 / 0.06)',
+};
+
+/** The five offered when picking. `NOTE_TINT` renders more than this. */
+const NOTE_COLOURS = ['YELLOW', 'GREEN', 'PINK', 'PURPLE', 'BLUE'];
+
+const IDEA_CATEGORIES = ['business', 'creative', 'general', 'personal', 'research', 'technology'];
 
 const PRIORITIES = [
   { value: 'LOW', label: 'Low' },
@@ -94,6 +123,68 @@ function Err(name: string) {
   return useFieldError(name);
 }
 
+/**
+ * The colour of a note, as swatches.
+ *
+ * Radio inputs rather than buttons with state: the dialog reads its values out
+ * of `FormData` on submit, so the native control is what makes this work
+ * without lifting any state into the screen. A radio also gets arrow-key
+ * movement and a group role for free.
+ *
+ * A record whose colour is not one of the five still gets a swatch, appended.
+ * Dropping it would leave nothing selected, and saving would then rewrite a
+ * colour the author had chosen.
+ */
+function ColourSwatches({ selected }: { selected: string }) {
+  const offered = NOTE_COLOURS.includes(selected) ? NOTE_COLOURS : [...NOTE_COLOURS, selected];
+
+  return (
+    <fieldset className="flex flex-col gap-1.5">
+      <legend className="text-[13px] font-semibold text-ink-2">Colour</legend>
+      {/* `h-11` matches the control height of the field beside it, so the
+          swatches sit on the same centre line rather than at the top of a row
+          sized by a taller neighbour. */}
+      <div className="flex h-11 flex-wrap items-center gap-2">
+        {offered.map((colour) => (
+          <label
+            key={colour}
+            title={COLOUR_LABEL[colour] ?? colour}
+            className="group relative cursor-pointer"
+          >
+            <input
+              type="radio"
+              name="color"
+              value={colour}
+              defaultChecked={colour === selected}
+              className="peer sr-only"
+            />
+            <span
+              className="block size-7 rounded-full border border-line-2 transition peer-checked:ring-2 peer-checked:ring-ink peer-checked:ring-offset-2 peer-focus-visible:ring-2 peer-focus-visible:ring-brand peer-focus-visible:ring-offset-2"
+              style={{ background: NOTE_TINT[colour] ?? NOTE_TINT['GRAY'] }}
+            />
+            <span className="sr-only">{COLOUR_LABEL[colour] ?? colour}</span>
+          </label>
+        ))}
+      </div>
+    </fieldset>
+  );
+}
+
+/**
+ * The category list, plus whatever this record already says.
+ *
+ * The six are fixed, but the field has always accepted free text and older
+ * ideas carry values outside the list. A select that silently drops one would
+ * rewrite it to the first option the moment the idea was edited for any other
+ * reason.
+ */
+function categoryOptions(current: string | undefined) {
+  const values =
+    current && !IDEA_CATEGORIES.includes(current) ? [...IDEA_CATEGORIES, current] : IDEA_CATEGORIES;
+
+  return values.map((value) => ({ value, label: humanise(value) }));
+}
+
 /* ── Ideas ────────────────────────────────────────────────────────────────── */
 
 const ideasConfig: ResourceConfig<Idea> = {
@@ -115,9 +206,37 @@ const ideasConfig: ResourceConfig<Idea> = {
     tag: idea.category,
     meta: shortAge(idea.createdAt),
   }),
+  // Ideas are the one resource drawn as cards. Choosing a colour only ever
+  // meant anything if the colour is what you see.
+  card: (idea) => ({
+    tint: NOTE_TINT[idea.color] ?? NOTE_TINT['YELLOW'] ?? 'transparent',
+    primary: idea.title,
+    secondary: idea.content,
+    badge: idea.category,
+    meta: shortAge(idea.createdAt),
+  }),
   form: (idea) => (
     <>
-      <Field label="Title" name="title" defaultValue={idea?.title ?? ''} required error={Err('title')} />
+      <Field
+        label="Title"
+        name="title"
+        defaultValue={idea?.title ?? ''}
+        required
+        error={Err('title')}
+      />
+      {/* Category and colour above the details: both are one decision each,
+          and putting them after a six-line textarea buries them under the
+          part that takes the longest to write. */}
+      <FieldRow>
+        <Select
+          label="Category"
+          name="category"
+          defaultValue={idea?.category ?? 'general'}
+          options={categoryOptions(idea?.category)}
+          error={Err('category')}
+        />
+        <ColourSwatches selected={idea?.color ?? 'YELLOW'} />
+      </FieldRow>
       <Textarea
         label="Details"
         name="content"
@@ -126,23 +245,13 @@ const ideasConfig: ResourceConfig<Idea> = {
         placeholder="What is the idea, and what would it take?"
         error={Err('content')}
       />
-      <FieldRow>
-        <Field
-          label="Category"
-          name="category"
-          defaultValue={idea?.category ?? 'general'}
-          placeholder="general"
-          error={Err('category')}
-        />
-        <Select label="Colour" name="color" defaultValue={idea?.color ?? 'YELLOW'} options={COLOURS} />
-      </FieldRow>
     </>
   ),
   toInput: (form) => ({
     title: required(form, 'title'),
     content: text(form, 'content'),
     category: text(form, 'category') ?? 'general',
-    color: form.get('color'),
+    color: form.get('color') ?? 'YELLOW',
   }),
   emptyTitle: 'No ideas yet',
   emptyBody:
@@ -180,16 +289,28 @@ const notesConfig: ResourceConfig<Note> = {
     tone: note.pinned ? 'brand' : 'neutral',
     meta: shortAge(note.updatedAt),
   }),
+  // Notes carry the same colour field ideas do, and it was equally invisible.
+  // Unlike the row, the card shows the category and the pin together rather
+  // than choosing between them.
+  card: (note) => ({
+    tint: NOTE_TINT[note.color] ?? NOTE_TINT['YELLOW'] ?? 'transparent',
+    primary: note.title,
+    secondary: note.content,
+    badge: note.category,
+    meta: shortAge(note.updatedAt),
+    ...(note.pinned ? { icon: 'push_pin' } : {}),
+  }),
   form: (note) => (
     <>
-      <Field label="Title" name="title" defaultValue={note?.title ?? ''} required error={Err('title')} />
-      <Textarea
-        label="Note"
-        name="content"
-        rows={7}
-        defaultValue={note?.content ?? ''}
-        error={Err('content')}
+      <Field
+        label="Title"
+        name="title"
+        defaultValue={note?.title ?? ''}
+        required
+        error={Err('title')}
       />
+      {/* Category and colour before the body, as on an idea: each is one
+          decision, and a seven-row textarea buries anything under it. */}
       <FieldRow>
         <Field
           label="Category"
@@ -197,8 +318,15 @@ const notesConfig: ResourceConfig<Note> = {
           defaultValue={note?.category ?? 'general'}
           error={Err('category')}
         />
-        <Select label="Colour" name="color" defaultValue={note?.color ?? 'YELLOW'} options={COLOURS} />
+        <ColourSwatches selected={note?.color ?? 'YELLOW'} />
       </FieldRow>
+      <Textarea
+        label="Note"
+        name="content"
+        rows={7}
+        defaultValue={note?.content ?? ''}
+        error={Err('content')}
+      />
       <Checkbox
         name="pinned"
         label="Pin to the top"
@@ -404,7 +532,13 @@ const futureWorkConfig: ResourceConfig<FutureWorkItem> = {
   }),
   form: (item) => (
     <>
-      <Field label="Title" name="title" defaultValue={item?.title ?? ''} required error={Err('title')} />
+      <Field
+        label="Title"
+        name="title"
+        defaultValue={item?.title ?? ''}
+        required
+        error={Err('title')}
+      />
       <Textarea
         label="Description"
         name="description"
@@ -436,7 +570,8 @@ const futureWorkConfig: ResourceConfig<FutureWorkItem> = {
     timeline: text(form, 'timeline'),
   }),
   emptyTitle: 'Nothing planned yet',
-  emptyBody: 'Park the things you want to come back to. They stay out of the way until they matter.',
+  emptyBody:
+    'Park the things you want to come back to. They stay out of the way until they matter.',
 };
 
 /* ── Literature ───────────────────────────────────────────────────────────── */
@@ -459,11 +594,19 @@ const literatureConfig: ResourceConfig<LiteratureEntry> = {
     secondary: [entry.authors, entry.year].filter(Boolean).join(' · ') || entry.summary,
     tag: entry.tags[0],
     tone: 'brand',
-    meta: entry.links.length ? `${entry.links.length} link${entry.links.length > 1 ? 's' : ''}` : '',
+    meta: entry.links.length
+      ? `${entry.links.length} link${entry.links.length > 1 ? 's' : ''}`
+      : '',
   }),
   form: (entry) => (
     <>
-      <Field label="Title" name="title" defaultValue={entry?.title ?? ''} required error={Err('title')} />
+      <Field
+        label="Title"
+        name="title"
+        defaultValue={entry?.title ?? ''}
+        required
+        error={Err('title')}
+      />
       <FieldRow>
         <Field
           label="Authors"
@@ -523,9 +666,12 @@ const literatureConfig: ResourceConfig<LiteratureEntry> = {
       summary: text(form, 'summary'),
     };
   },
-  aside: ({ filters, setFilter }) => <TagSidebar active={filters['tag'] ?? ''} onPick={(t) => setFilter('tag', t)} />,
+  aside: ({ filters, setFilter }) => (
+    <TagSidebar active={filters['tag'] ?? ''} onPick={(t) => setFilter('tag', t)} />
+  ),
   emptyTitle: 'The library is empty',
-  emptyBody: 'Add the paper you read most recently. Tags are what make it findable at three hundred.',
+  emptyBody:
+    'Add the paper you read most recently. Tags are what make it findable at three hundred.',
 };
 
 /** The literature tag filter. Counts come from the backend, not the loaded page. */
@@ -558,7 +704,9 @@ function TagSidebar({ active, onPick }: { active: string; onPick: (tag: string) 
               >
                 <Icon name="label" size={15} className="flex-none text-ink-4" />
                 <span className="min-w-0 flex-1 truncate">{tag}</span>
-                <span className="flex-none font-mono text-[11.5px] text-ink-4 tabular">{count}</span>
+                <span className="flex-none font-mono text-[11.5px] text-ink-4 tabular">
+                  {count}
+                </span>
               </button>
             </li>
           ))}
@@ -618,7 +766,13 @@ const careerGoalsConfig: ResourceConfig<CareerGoal> = {
   },
   form: (goal) => (
     <>
-      <Field label="Title" name="title" defaultValue={goal?.title ?? ''} required error={Err('title')} />
+      <Field
+        label="Title"
+        name="title"
+        defaultValue={goal?.title ?? ''}
+        required
+        error={Err('title')}
+      />
       <Textarea
         label="Description"
         name="description"

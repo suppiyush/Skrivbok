@@ -45,6 +45,30 @@ export interface Row {
   extra?: ReactNode;
 }
 
+/**
+ * A record drawn as a card rather than a row.
+ *
+ * Offered per resource, because only some of them are objects. An idea is a
+ * thing you wrote on a coloured square and want to recognise across a wall of
+ * them; a deadline is a record in a register, and a register is a list.
+ */
+export interface CardView {
+  /** The card's background — what makes a wall of ideas scannable by colour. */
+  tint: string;
+  primary: string;
+  secondary?: string | null | undefined;
+  badge?: string | undefined;
+  meta?: string | undefined;
+  /**
+   * A state worth showing beside the badge — a pinned note, say.
+   *
+   * Separate from `badge` rather than replacing it: the list row has to choose
+   * between showing "pinned" and showing the category, and a card has room for
+   * both, so it should not inherit that compromise.
+   */
+  icon?: string | undefined;
+}
+
 export interface FilterDef {
   /** The query parameter sent to the backend. */
   name: string;
@@ -75,6 +99,13 @@ export interface ResourceConfig<T extends { id: string }> {
   searchable?: boolean;
 
   row: (item: T) => Row;
+  /**
+   * Draw this resource as a grid of cards instead of a list.
+   *
+   * `row` is still required when this is set: the delete dialog names what it
+   * is about to delete, and it asks `row` for that name.
+   */
+  card?: (item: T) => CardView;
   /** The dialog body. `item` is null when creating. */
   form: (item: T | null) => ReactNode;
   /** Turn the submitted form into the request body. */
@@ -225,6 +256,9 @@ export function ResourceScreen<T extends { id: string }>({
   }
 
   const saving = create.isPending || update.isPending;
+  // Hoisted so the narrowing survives into the render callback below, where
+  // `config.card` on its own is only ever "possibly undefined".
+  const asCard = config.card;
   // The quota is waited on too: it decides whether the header carries a usage
   // meter, and arriving late it would push the whole body down the page.
   const loading = list.isPending || (quota?.isPending ?? false);
@@ -354,57 +388,71 @@ export function ResourceScreen<T extends { id: string }>({
             </EmptyState>
           ) : (
             <>
-              <Reveal>
-                <Card padded={false} className="overflow-hidden">
-                  <ul>
-                    {items.map((item) => {
-                      const row = config.row(item);
-                      return (
-                        <li key={item.id} className="border-t border-line first:border-t-0">
-                          <div
-                            className={`row-hover group flex items-center gap-4 px-5 hover:bg-surface-3 ${
-                              compact ? 'py-2.5' : 'py-3.5'
-                            }`}
-                          >
-                            <button
-                              type="button"
-                              onClick={() => setEditing(item)}
-                              className="min-w-0 flex-1 cursor-pointer text-left"
+              {asCard ? (
+                <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                  {items.map((item, i) => (
+                    <Reveal key={item.id} delay={i * 35}>
+                      <ResourceCard
+                        view={asCard(item)}
+                        onEdit={() => setEditing(item)}
+                        onDelete={() => setDeleting(item)}
+                      />
+                    </Reveal>
+                  ))}
+                </div>
+              ) : (
+                <Reveal>
+                  <Card padded={false} className="overflow-hidden">
+                    <ul>
+                      {items.map((item) => {
+                        const row = config.row(item);
+                        return (
+                          <li key={item.id} className="border-t border-line first:border-t-0">
+                            <div
+                              className={`row-hover group flex items-center gap-4 px-5 hover:bg-surface-3 ${
+                                compact ? 'py-2.5' : 'py-3.5'
+                              }`}
                             >
-                              <span className="block truncate text-[14.5px] font-semibold text-ink">
-                                {row.primary}
-                              </span>
-                              {row.secondary ? (
-                                <span className="mt-0.5 block truncate text-[13px] text-ink-3">
-                                  {row.secondary}
+                              <button
+                                type="button"
+                                onClick={() => setEditing(item)}
+                                className="min-w-0 flex-1 cursor-pointer text-left"
+                              >
+                                <span className="block truncate text-[14.5px] font-semibold text-ink">
+                                  {row.primary}
+                                </span>
+                                {row.secondary ? (
+                                  <span className="mt-0.5 block truncate text-[13px] text-ink-3">
+                                    {row.secondary}
+                                  </span>
+                                ) : null}
+                                {row.extra}
+                              </button>
+
+                              {row.tag ? (
+                                <span className="hidden sm:block">
+                                  <Pill tone={row.tone ?? 'neutral'}>{row.tag}</Pill>
                                 </span>
                               ) : null}
-                              {row.extra}
-                            </button>
 
-                            {row.tag ? (
-                              <span className="hidden sm:block">
-                                <Pill tone={row.tone ?? 'neutral'}>{row.tag}</Pill>
-                              </span>
-                            ) : null}
+                              {row.meta ? (
+                                <span className="hidden w-28 flex-none text-right font-mono text-[12px] text-ink-3 tabular sm:block">
+                                  {row.meta}
+                                </span>
+                              ) : null}
 
-                            {row.meta ? (
-                              <span className="hidden w-28 flex-none text-right font-mono text-[12px] text-ink-3 tabular sm:block">
-                                {row.meta}
-                              </span>
-                            ) : null}
-
-                            <RowMenu
-                              onEdit={() => setEditing(item)}
-                              onDelete={() => setDeleting(item)}
-                            />
-                          </div>
-                        </li>
-                      );
-                    })}
-                  </ul>
-                </Card>
-              </Reveal>
+                              <RowMenu
+                                onEdit={() => setEditing(item)}
+                                onDelete={() => setDeleting(item)}
+                              />
+                            </div>
+                          </li>
+                        );
+                      })}
+                    </ul>
+                  </Card>
+                </Reveal>
+              )}
 
               {meta ? (
                 <Pagination
@@ -453,13 +501,23 @@ export function ResourceScreen<T extends { id: string }>({
           </div>
         ) : null}
 
-        <FormErrors.Provider value={fieldErrors}>
-          {/* Rendered as a component, not called as a function: `useFieldError`
-              has to run *inside* the provider to see the errors, and calling
-              `config.form()` here would run its hooks in this component's
-              scope, outside it, where the context is always empty. */}
-          <ResourceForm item={editing ?? null} render={config.form} />
-        </FormErrors.Provider>
+        {/* Only while open.
+
+            The dialog element itself stays mounted, and the fields inside are
+            uncontrolled — `defaultValue` applies when an input mounts and
+            never again. Left mounted, the form kept whatever was last typed
+            into it: creating one record and opening the dialog again showed
+            the previous one's title and body, ready to be saved a second time.
+            Unmounting on close makes every opening a fresh form. */}
+        {editing !== undefined ? (
+          <FormErrors.Provider value={fieldErrors}>
+            {/* Rendered as a component, not called as a function: `useFieldError`
+                has to run *inside* the provider to see the errors, and calling
+                `config.form()` here would run its hooks in this component's
+                scope, outside it, where the context is always empty. */}
+            <ResourceForm item={editing ?? null} render={config.form} />
+          </FormErrors.Provider>
+        ) : null}
       </Modal>
 
       <ConfirmDialog
@@ -471,6 +529,68 @@ export function ResourceScreen<T extends { id: string }>({
         busy={remove.isPending}
       />
     </AppShell>
+  );
+}
+
+/* ── Card ─────────────────────────────────────────────────────────────────── */
+
+/**
+ * One record as a sticky note.
+ *
+ * The colour is the point: a wall of these is meant to be scannable by hue
+ * before a word of it is read, which is what choosing a colour was always for.
+ * The tints are pale enough that the ordinary ink colour still sits on them at
+ * full contrast — a note you cannot read is a worse note than a white one.
+ *
+ * The body is clamped rather than scrolled. A card is a reminder of what you
+ * wrote; the dialog is where you read it.
+ */
+function ResourceCard({
+  view,
+  onEdit,
+  onDelete,
+}: {
+  view: CardView;
+  onEdit: () => void;
+  onDelete: () => void;
+}) {
+  return (
+    <div
+      className="lift group relative flex h-full min-h-[150px] flex-col rounded-[16px] border border-line p-4"
+      style={{ background: view.tint }}
+    >
+      <span className="note-fold" aria-hidden="true" />
+
+      {/* The face opens it; the menu lives in the footer instead of the corner,
+          which the fold now occupies. */}
+      <button
+        type="button"
+        onClick={onEdit}
+        className="flex min-w-0 flex-1 cursor-pointer flex-col text-left"
+      >
+        <span className="line-clamp-2 pr-6 text-[14.5px] leading-snug font-bold text-ink">
+          {view.primary}
+        </span>
+        {view.secondary ? (
+          <span className="mt-1.5 line-clamp-4 text-[13px] leading-relaxed text-ink-2">
+            {view.secondary}
+          </span>
+        ) : null}
+      </button>
+
+      <div className="mt-3 flex flex-none items-center gap-2">
+        {view.icon ? <Icon name={view.icon} size={15} className="flex-none text-ink-3" /> : null}
+        {view.badge ? (
+          <span className="rounded-full bg-ink px-2.5 py-1 text-[11px] font-bold text-white capitalize">
+            {view.badge}
+          </span>
+        ) : null}
+        {view.meta ? <span className="ml-auto text-[11.5px] text-ink-3">{view.meta}</span> : null}
+        <span className={view.meta ? '' : 'ml-auto'}>
+          <RowMenu onEdit={onEdit} onDelete={onDelete} />
+        </span>
+      </div>
+    </div>
   );
 }
 

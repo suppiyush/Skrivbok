@@ -115,6 +115,19 @@ export default function Projects() {
   // "nothing shared yet" wording only holds when nothing is filtering it out.
   const sharedAndEmpty = scope === 'shared' && search === '';
 
+  /**
+   * Close, and forget.
+   *
+   * The invitee rows are state on this screen rather than fields in the form,
+   * so unmounting the dialog does not clear them — abandoning a half-typed
+   * invitation would otherwise leave it waiting in the next project's form.
+   */
+  function closeDialog() {
+    setEditing(undefined);
+    setMembers([BLANK_MEMBER]);
+    setFieldErrors({});
+  }
+
   async function onSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setFieldErrors({});
@@ -281,18 +294,13 @@ export default function Projects() {
       {/* ── Create / edit ──────────────────────────────────────────────────── */}
       <Modal
         open={editing !== undefined}
-        onClose={() => setEditing(undefined)}
+        onClose={closeDialog}
         title={editing ? 'Edit project' : 'New project'}
         onSubmit={onSubmit}
         busy={saving}
         footer={
           <>
-            <Button
-              variant="secondary"
-              size="sm"
-              onClick={() => setEditing(undefined)}
-              disabled={saving}
-            >
+            <Button variant="secondary" size="sm" onClick={closeDialog} disabled={saving}>
               Cancel
             </Button>
             <Button type="submit" variant="primary" size="sm" loading={saving}>
@@ -301,32 +309,37 @@ export default function Projects() {
           </>
         }
       >
-        {/* Keyed on the project so the dialog's fields are rebuilt for each
-            one. `defaultValue` only applies when an input mounts, and this
-            dialog stays mounted between openings — without the key, editing a
-            second project would show the first one's values. */}
-        <div key={editing?.id ?? 'new'} className="flex flex-col gap-4">
-          <Field
-            label="Name"
-            name="name"
-            defaultValue={editing?.name ?? ''}
-            required
-            error={fieldErrors['name']}
-          />
-          <Textarea
-            label="Description"
-            name="description"
-            rows={2}
-            defaultValue={editing?.description ?? ''}
-            error={fieldErrors['description']}
-          />
-          <ProgressSlider name="progress" defaultValue={editing?.progress ?? 0} />
+        {/* Rendered only while open, so every opening builds fresh fields.
 
-          {/* Invitations are part of creating a project, not of editing one:
+            The dialog element stays mounted and these inputs are uncontrolled,
+            so `defaultValue` applies once and never again. A key on the project
+            id fixed editing two projects in a row, but not creating two: the
+            key was "new" both times, so the second dialog still held the first
+            one's answers. Unmounting on close covers both. */}
+        {editing !== undefined ? (
+          <div className="flex flex-col gap-4">
+            <Field
+              label="Name"
+              name="name"
+              defaultValue={editing?.name ?? ''}
+              required
+              error={fieldErrors['name']}
+            />
+            <Textarea
+              label="Description"
+              name="description"
+              rows={2}
+              defaultValue={editing?.description ?? ''}
+              error={fieldErrors['description']}
+            />
+            <ProgressSlider name="progress" defaultValue={editing?.progress ?? 0} />
+
+            {/* Invitations are part of creating a project, not of editing one:
               the update endpoint takes no members, and an existing project has
               the members dialog, which can also change roles and remove people. */}
-          {!editing ? <TeamMembersField members={members} onChange={setMembers} /> : null}
-        </div>
+            {!editing ? <TeamMembersField members={members} onChange={setMembers} /> : null}
+          </div>
+        ) : null}
       </Modal>
 
       <MembersDialog project={managing} onClose={() => setManaging(null)} />
