@@ -1,24 +1,33 @@
 /**
  * Button.
  *
- * Five variants, all present in the designs:
+ * Six variants:
  *   primary   dark pill — the app's main action
+ *   brand     deep coral — the landing page's call to action
  *   accent    yellow — the marketing CTA
  *   secondary white with a border
  *   ghost     transparent, hover tint
+ *   caution   tinted red — reversible, but think first
  *   danger    destructive
  */
 import type { ButtonHTMLAttributes, ReactNode } from 'react';
 import { Icon } from './Icon';
 
-type Variant = 'primary' | 'accent' | 'secondary' | 'ghost' | 'danger';
+type Variant = 'primary' | 'brand' | 'accent' | 'secondary' | 'ghost' | 'caution' | 'danger';
 type Size = 'sm' | 'md' | 'lg';
 
 const VARIANT: Record<Variant, string> = {
   primary: 'bg-ink text-white hover:bg-[#1a2130] border border-transparent',
+  // The deep end of the coral, not `--color-brand` itself: white on #ff7f50 is
+  // 2.5:1 and unreadable, where this clears 6:1.
+  brand: 'bg-brand-deep text-white hover:brightness-110 border border-transparent',
   accent: 'bg-accent text-ink hover:brightness-95 border border-transparent font-bold',
   secondary: 'bg-surface text-ink border border-line-2 hover:bg-surface-2',
   ghost: 'bg-transparent text-ink-2 border border-transparent hover:bg-surface-3',
+  // Between `secondary` and `danger`: the action gives pause but undoes itself
+  // by signing in again, so it carries the colour without the solid red weight
+  // reserved for things that delete.
+  caution: 'bg-danger-tint text-danger-ink border border-danger/25 hover:brightness-[0.97]',
   danger: 'bg-danger text-white hover:brightness-95 border border-transparent',
 };
 

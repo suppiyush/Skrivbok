@@ -11,6 +11,7 @@ import { lazy, Suspense, type ReactNode } from 'react';
 import { createBrowserRouter, Navigate } from 'react-router-dom';
 import { RedirectIfAuthed, RequireAdmin, RequireAuth } from './components/layout/RequireAuth';
 import { useAuth } from './lib/auth';
+import { chunks } from './lib/preload';
 import Landing from './pages/Landing';
 import AuthPage from './pages/Auth';
 import Dashboard from './pages/Dashboard';
@@ -25,18 +26,18 @@ import {
 } from './pages/screens';
 
 // Screens a signed-out visitor never reaches are split out of the first load.
-const Legal = lazy(() => import('./pages/Legal'));
-const Projects = lazy(() => import('./pages/Projects'));
-const Admin = lazy(() => import('./pages/Admin'));
-const Calendar = lazy(() => import('./pages/Calendar'));
-const Meetings = lazy(() => import('./pages/Calendar').then((m) => ({ default: m.Meetings })));
-const Profile = lazy(() => import('./pages/Account').then((m) => ({ default: m.Profile })));
-const Upgrade = lazy(() => import('./pages/Account').then((m) => ({ default: m.Upgrade })));
-const Notifications = lazy(() =>
-  import('./pages/Account').then((m) => ({ default: m.Notifications })),
-);
-const Help = lazy(() => import('./pages/Account').then((m) => ({ default: m.Help })));
-const Settings = lazy(() => import('./pages/Account').then((m) => ({ default: m.Settings })));
+// The loaders come from `lib/preload` so that a link can start fetching one of
+// these chunks before the route that needs it is rendered.
+const Legal = lazy(chunks.legal);
+const Projects = lazy(chunks.projects);
+const Admin = lazy(chunks.admin);
+const Calendar = lazy(chunks.calendar);
+const Meetings = lazy(() => chunks.calendar().then((m) => ({ default: m.Meetings })));
+const Profile = lazy(() => chunks.account().then((m) => ({ default: m.Profile })));
+const Upgrade = lazy(() => chunks.account().then((m) => ({ default: m.Upgrade })));
+const Notifications = lazy(() => chunks.account().then((m) => ({ default: m.Notifications })));
+const Help = lazy(() => chunks.account().then((m) => ({ default: m.Help })));
+const Settings = lazy(() => chunks.account().then((m) => ({ default: m.Settings })));
 
 /**
  * Where an unmatched path goes.

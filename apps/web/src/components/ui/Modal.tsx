@@ -10,7 +10,7 @@
  *    inside the panel ends on the backdrop
  *  - plays the exit animation before actually closing
  */
-import { useEffect, useRef, type FormEvent, type ReactNode } from 'react';
+import { useEffect, useLayoutEffect, useRef, type FormEvent, type ReactNode } from 'react';
 import { Button } from './Button';
 import { Icon } from './Icon';
 
@@ -42,7 +42,11 @@ export function Modal({
   // panel does not read as a backdrop click.
   const downOnBackdrop = useRef(false);
 
-  useEffect(() => {
+  // Layout, not passive: a passive effect runs after the browser has painted,
+  // so a dialog that opens as its page mounts would be one frame late — the
+  // page behind it appears first and the dialog snaps in over it. This puts
+  // `showModal()` before the paint, so the dialog is in the first frame.
+  useLayoutEffect(() => {
     const dialog = ref.current;
     if (!dialog) return;
 

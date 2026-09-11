@@ -10,7 +10,7 @@
  * one document and saves it with one PUT rather than a request per field.
  */
 import { useEffect, useRef, useState, type ChangeEvent, type FormEvent } from 'react';
-import { AppShell, useDensity } from '../components/layout/AppShell';
+import { AppShell } from '../components/layout/AppShell';
 import { Alert } from '../components/ui/Alert';
 import { Button } from '../components/ui/Button';
 import { EmptyState } from '../components/ui/EmptyState';
@@ -22,7 +22,7 @@ import { Modal } from '../components/ui/Modal';
 import { Reveal } from '../components/ui/Motion';
 import { Skeleton } from '../components/ui/Skeleton';
 import { useToast } from '../components/ui/Toast';
-import { ApiError, auth } from '../lib/api';
+import { ApiError, auth, type LimitStatus } from '../lib/api';
 import { dateTime, humanise, initials, longDate, relative, rupees } from '../lib/format';
 import { useAuth } from '../lib/auth';
 import {
@@ -335,9 +335,7 @@ export function Profile() {
         onClose={() => setEditing(null)}
         title="Edit identity"
         busy={save.isPending}
-        onSubmit={(e) =>
-          void onSave(e, ['fullName', 'designation', 'department', 'institution'])
-        }
+        onSubmit={(e) => void onSave(e, ['fullName', 'designation', 'department', 'institution'])}
         footer={<EditorFooter busy={save.isPending} onCancel={() => setEditing(null)} />}
       >
         <div className="flex flex-col gap-4">
@@ -659,17 +657,41 @@ export function Upgrade() {
   const billingEnabled = subscription.data?.billingEnabled ?? false;
   const price = plans.data?.plans.find((p) => p.id === cycle);
 
+  /**
+   * The three capped resources, one card each.
+   *
+   * Icons and tints are the ones the dashboard already gives these features,
+   * so a card here is recognisably the same thing as the card there.
+   */
   const meters = [
-    { name: 'Projects', status: usage.data?.projects },
-    { name: 'Career goals', status: usage.data?.careerGoals },
-    { name: 'Literature', status: usage.data?.literature },
+    {
+      name: 'Projects',
+      icon: 'folder_open',
+      tint: '#fdece0',
+      fg: '#c2650b',
+      status: usage.data?.projects,
+    },
+    {
+      name: 'Career goals',
+      icon: 'stairs',
+      tint: '#f1e9fb',
+      fg: '#7c4dbd',
+      status: usage.data?.careerGoals,
+    },
+    {
+      name: 'Literature',
+      icon: 'menu_book',
+      tint: '#e8eaff',
+      fg: '#4f5bd5',
+      status: usage.data?.literature,
+    },
   ];
 
   return (
     <AppShell>
       <PageHeader
         title="Plan and billing"
-        description="Collaboration, calendar sharing and email reminders are on every plan. PRO only lifts three caps."
+        description="Unlock unlimited potential for your research and projects"
       />
 
       {pro ? (
@@ -680,44 +702,16 @@ export function Upgrade() {
         </Alert>
       ) : null}
 
-      <Reveal>
-        <Card>
-          <h2 className="text-[15px] font-bold">Your usage</h2>
-          <div className="mt-4 grid gap-5 sm:grid-cols-3">
-            {meters.map((meter) => (
-              <div key={meter.name}>
-                <div className="flex items-baseline justify-between">
-                  <span className="text-[13.5px] font-semibold">{meter.name}</span>
-                  <span className="font-mono text-[12.5px] text-ink-3 tabular">
-                    {meter.status ? `${meter.status.used} / ${meter.status.limit ?? '∞'}` : '—'}
-                  </span>
-                </div>
-                <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-surface-2">
-                  <div
-                    className="h-full rounded-full transition-[width] duration-700"
-                    style={{
-                      width: meter.status?.limit
-                        ? `${Math.min(100, (meter.status.used / meter.status.limit) * 100)}%`
-                        : '100%',
-                      background:
-                        meter.status?.remaining === 0
-                          ? 'var(--color-warn)'
-                          : 'var(--color-brand)',
-                    }}
-                  />
-                </div>
-                <p className="mt-1.5 text-[12px] text-ink-3">
-                  {meter.status?.limited === false
-                    ? 'Unlimited'
-                    : meter.status?.remaining === 0
-                      ? 'Limit reached'
-                      : 'Free plan'}
-                </p>
-              </div>
-            ))}
-          </div>
-        </Card>
-      </Reveal>
+      <section>
+        <h2 className="text-[11px] font-bold tracking-[0.1em] text-ink-5 uppercase">Your usage</h2>
+        <div className="mt-3 grid gap-4 sm:grid-cols-3">
+          {meters.map((meter, i) => (
+            <Reveal key={meter.name} delay={i * 70}>
+              <UsageCard {...meter} />
+            </Reveal>
+          ))}
+        </div>
+      </section>
 
       {!pro ? (
         <>
@@ -738,14 +732,17 @@ export function Upgrade() {
             </div>
           </div>
 
-          <div className="grid items-start gap-4 lg:grid-cols-2">
-            <Reveal>
-              <Card className="h-full border-brand">
-                <div className="flex items-center gap-2">
-                  <h2 className="text-[16px] font-bold">Free</h2>
-                  <Pill tone="brand">Current</Pill>
-                </div>
-                <p className="mt-2 text-[30px] leading-none font-extrabold">₹0</p>
+          {/* Narrowed to a pair of portrait columns rather than spanning the
+              full page: at the container's full width these were two wide
+              slabs, which reads as two panels of settings rather than as a
+              choice between two plans. */}
+          <div className="mx-auto grid w-full max-w-[760px] gap-4 sm:grid-cols-2">
+            <Reveal className="h-full">
+              <Card className="flex h-full min-h-[456px] flex-col border-brand">
+                <h2 className="text-[16px] font-bold">Free</h2>
+                <p className="mt-3 text-[34px] leading-none font-extrabold tracking-[-0.03em]">
+                  ₹0
+                </p>
                 <p className="mt-2 text-[13px] text-ink-3">Everything you need to start</p>
                 <PlanFeatures
                   items={[
@@ -756,13 +753,23 @@ export function Upgrade() {
                     'Email reminders in your timezone',
                   ]}
                 />
+
+                {/* The same footer slot PRO uses, so both cards end on a
+                    control at a shared baseline rather than one of them simply
+                    running out of content. It also states which plan you are
+                    on, which is what the badge beside the title used to do. */}
+                <div className="mt-auto pt-6">
+                  <Button variant="secondary" size="lg" className="w-full" disabled>
+                    Your current plan
+                  </Button>
+                </div>
               </Card>
             </Reveal>
 
-            <Reveal delay={90}>
-              <Card className="h-full">
+            <Reveal delay={90} className="h-full">
+              <Card className="flex h-full min-h-[456px] flex-col">
                 <h2 className="text-[16px] font-bold">PRO</h2>
-                <p className="mt-2 text-[30px] leading-none font-extrabold">
+                <p className="mt-3 text-[34px] leading-none font-extrabold tracking-[-0.03em]">
                   {price ? price.amountDisplay.replace(/^INR\s*/, '₹') : '—'}
                   <span className="text-[14px] font-semibold text-ink-3">
                     /{cycle === 'YEARLY' ? 'year' : 'month'}
@@ -779,19 +786,20 @@ export function Upgrade() {
                     'Unlimited literature entries',
                   ]}
                 />
-                <Button
-                  variant="accent"
-                  size="lg"
-                  className="mt-5 w-full"
-                  disabled={!billingEnabled}
-                >
-                  {billingEnabled ? 'Upgrade to PRO' : 'Payments are not configured yet'}
-                </Button>
-                {!billingEnabled ? (
-                  <p className="mt-2 text-center text-[12px] text-ink-3">
-                    Checkout opens once the payment provider keys are set on the server.
-                  </p>
-                ) : null}
+
+                {/* `mt-auto` pins the action to the foot of the card, so it
+                    sits level with the bottom of the Free card beside it
+                    however the two feature lists differ in length. */}
+                <div className="mt-auto pt-6">
+                  <Button variant="accent" size="lg" className="w-full" disabled={!billingEnabled}>
+                    {billingEnabled ? 'Upgrade to PRO' : 'Payments are not configured yet'}
+                  </Button>
+                  {!billingEnabled ? (
+                    <p className="mt-2 text-center text-[12px] text-ink-3">
+                      Checkout opens once the payment provider keys are set on the server.
+                    </p>
+                  ) : null}
+                </div>
               </Card>
             </Reveal>
           </div>
@@ -853,12 +861,89 @@ export function Upgrade() {
   );
 }
 
+/**
+ * One capped resource, as a card.
+ *
+ * The figure is the point of this screen — it is what tells someone whether
+ * PRO is worth paying for — so it is set at headline size rather than as a
+ * label beside a bar. The bar stays underneath as the shape of the same fact.
+ *
+ * Nothing is invented while the numbers are in flight: the figure shows an em
+ * dash rather than a zero, because "you have none" and "we have not asked yet"
+ * are different things, and one of them is discouraging.
+ */
+function UsageCard({
+  name,
+  icon,
+  tint,
+  fg,
+  status,
+}: {
+  name: string;
+  icon: string;
+  tint: string;
+  fg: string;
+  status: LimitStatus | undefined;
+}) {
+  const unlimited = status?.limited === false || status?.limit === null;
+  const full = status?.remaining === 0;
+  const pct = status?.limit ? Math.min(100, (status.used / status.limit) * 100) : 100;
+
+  return (
+    <Card className="h-full">
+      <div className="flex items-center gap-3">
+        <span
+          className="grid size-10 flex-none place-items-center rounded-[12px]"
+          style={{ background: tint }}
+        >
+          <Icon name={icon} size={20} style={{ color: fg }} />
+        </span>
+        <h3 className="text-[14px] font-bold">{name}</h3>
+      </div>
+
+      <p className="mt-5 flex items-baseline gap-1.5">
+        <span className="text-[38px] leading-none font-extrabold tracking-[-0.03em] tabular">
+          {status ? status.used : '—'}
+        </span>
+        <span className="text-[15px] font-semibold text-ink-4">
+          / {unlimited ? '∞' : (status?.limit ?? '—')}
+        </span>
+      </p>
+
+      <div className="mt-4 h-2 overflow-hidden rounded-full bg-surface-2">
+        <div
+          className="h-full rounded-full transition-[width] duration-700"
+          style={{
+            width: `${status ? pct : 0}%`,
+            background: full ? 'var(--color-warn)' : 'var(--color-brand)',
+          }}
+        />
+      </div>
+
+      <p className="mt-2.5 text-[12.5px] text-ink-3">
+        {!status
+          ? 'Checking your usage'
+          : unlimited
+            ? 'Unlimited on PRO'
+            : full
+              ? 'Limit reached — PRO lifts this'
+              : `${status.remaining} more on the free plan`}
+      </p>
+    </Card>
+  );
+}
+
 function PlanFeatures({ items }: { items: string[] }) {
   return (
-    <ul className="mt-4 flex flex-col gap-2.5">
+    <ul className="mt-5 flex flex-col gap-3">
       {items.map((item) => (
-        <li key={item} className="flex items-start gap-2 text-[13.5px] text-ink-2">
-          <Icon name="check" size={17} className="mt-px flex-none text-brand" />
+        <li key={item} className="flex items-start gap-2.5 text-[13.5px] text-ink-2">
+          {/* A filled disc rather than a bare tick: at this size the glyph on
+              its own is a thin scratch, and the deep coral needs a solid shape
+              to read as the brand rather than as a stray mark. */}
+          <span className="mt-px grid size-[18px] flex-none place-items-center rounded-full bg-brand-deep">
+            <Icon name="check" size={12} className="text-white" />
+          </span>
           {item}
         </li>
       ))}
@@ -1021,11 +1106,35 @@ export function Notifications() {
 
 /* ── Help ─────────────────────────────────────────────────────────────────── */
 
-const REPORT_TYPES = [
-  { value: 'BUG', label: 'Something is broken' },
-  { value: 'FEATURE', label: 'I would like a feature' },
+type ReportType = 'BUG' | 'FEEDBACK' | 'FEATURE';
+
+const REPORT_TYPES: { value: ReportType; label: string }[] = [
+  { value: 'BUG', label: 'Bug report' },
   { value: 'FEEDBACK', label: 'General feedback' },
+  { value: 'FEATURE', label: 'Feature request' },
 ];
+
+/**
+ * The wording of the description field, per type.
+ *
+ * Asking "what happened?" of someone requesting a feature is asking about the
+ * past when they are describing a future, and the answers come back shaped by
+ * the question. Display only — the value sent as `type` is unchanged.
+ */
+const REPORT_COPY: Record<ReportType, { label: string; placeholder: string }> = {
+  BUG: {
+    label: 'What happened?',
+    placeholder: 'What you expected, and what happened instead.',
+  },
+  FEEDBACK: {
+    label: 'What would you like us to know?',
+    placeholder: 'What is working well, and what is getting in your way.',
+  },
+  FEATURE: {
+    label: 'What would you like to be able to do?',
+    placeholder: 'The thing you are trying to do, and what would make it easier.',
+  },
+};
 
 const REPORT_TONE = {
   OPEN: 'brand',
@@ -1039,6 +1148,9 @@ export function Help() {
   const create = useCreateReport();
   const mine = useReports({ limit: 10 });
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
+  // Controlled, because the description field's wording follows it. A reset
+  // form would leave the two out of step, so the submit handler clears it.
+  const [type, setType] = useState<ReportType>('BUG');
 
   async function onSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -1048,12 +1160,13 @@ export function Help() {
 
     try {
       await create.mutateAsync({
-        type: String(data.get('type') ?? 'BUG') as 'BUG' | 'FEATURE' | 'FEEDBACK',
+        type,
         featurePage: String(data.get('featurePage') ?? '').trim() || null,
         title: String(data.get('title') ?? '').trim() || null,
         description: String(data.get('description') ?? '').trim(),
       });
       form.reset();
+      setType('BUG');
       toast.success('Report sent — thank you');
     } catch (error) {
       if (error instanceof ApiError && error.details.length > 0) setFieldErrors(error.fieldErrors);
@@ -1068,82 +1181,93 @@ export function Help() {
         description="Report something broken, ask for a feature, or tell us what is working."
       />
 
-      <div className="grid items-start gap-4 lg:grid-cols-2">
-        <Reveal>
-          <Card>
-            <h2 className="text-[15px] font-bold">Send a report</h2>
-            <form onSubmit={onSubmit} className="mt-4 flex flex-col gap-4" noValidate>
-              <Select label="Type" name="type" defaultValue="BUG" options={REPORT_TYPES} />
-              <FieldRow>
-                <Field
-                  label="Which screen?"
-                  name="featurePage"
-                  defaultValue={window.location.pathname}
-                  error={fieldErrors['featurePage']}
-                />
-                <Field
-                  label="Title"
-                  name="title"
-                  placeholder="Optional"
-                  error={fieldErrors['title']}
-                />
-              </FieldRow>
-              <Textarea
-                label="What happened?"
-                name="description"
-                rows={6}
-                required
-                placeholder="What you expected, and what happened instead."
-                hint="At least 10 characters."
-                error={fieldErrors['description']}
+      <Reveal>
+        <Card>
+          <h2 className="text-[15px] font-bold">Send a report</h2>
+          <form onSubmit={onSubmit} className="mt-4 flex flex-col gap-4" noValidate>
+            <Select
+              label="Type"
+              name="type"
+              value={type}
+              onChange={(e) => setType(e.target.value as ReportType)}
+              options={REPORT_TYPES}
+            />
+            <FieldRow>
+              <Field
+                label="Title"
+                name="title"
+                placeholder="Optional"
+                error={fieldErrors['title']}
               />
-              <Button type="submit" variant="primary" loading={create.isPending} className="self-start">
-                Send report
-              </Button>
-            </form>
-          </Card>
-        </Reveal>
+              <Field
+                label="Which screen?"
+                name="featurePage"
+                defaultValue={window.location.pathname}
+                error={fieldErrors['featurePage']}
+              />
+            </FieldRow>
+            <Textarea
+              label={REPORT_COPY[type].label}
+              name="description"
+              rows={6}
+              required
+              placeholder={REPORT_COPY[type].placeholder}
+              hint="At least 10 characters."
+              error={fieldErrors['description']}
+            />
+            <Button
+              type="submit"
+              variant="primary"
+              loading={create.isPending}
+              className="self-start"
+            >
+              Send report
+            </Button>
+          </form>
+        </Card>
+      </Reveal>
 
-        <Reveal delay={90}>
-          <Card padded={false}>
-            <h2 className="px-5 py-4 text-[15px] font-bold sm:px-6">Your reports</h2>
-            {mine.isPending ? (
-              <div className="shimmer px-5 pb-5">
-                <Skeleton h={120} radius={12} />
-              </div>
-            ) : (mine.data?.data.length ?? 0) === 0 ? (
-              <p className="border-t border-line px-5 py-8 text-center text-[13.5px] text-ink-3 sm:px-6">
-                You have not sent anything yet.
-              </p>
-            ) : (
-              <ul>
-                {mine.data?.data.map((report) => (
-                  <li key={report.id} className="border-t border-line px-5 py-4 sm:px-6">
-                    <div className="flex items-start gap-3">
-                      <span className="min-w-0 flex-1">
-                        <span className="block text-[14px] font-semibold">
-                          {report.title ?? humanise(report.type)}
-                        </span>
-                        <span className="mt-0.5 block text-[12.5px] text-ink-3">
-                          {humanise(report.type)} · {longDate(report.createdAt)}
-                        </span>
+      <Reveal delay={90}>
+        <Card padded={false}>
+          <h2 className="px-5 py-4 text-[15px] font-bold sm:px-6">Your reports</h2>
+          {mine.isPending ? (
+            <div className="shimmer px-5 pb-5">
+              <Skeleton h={120} radius={12} />
+            </div>
+          ) : (mine.data?.data.length ?? 0) === 0 ? (
+            <p className="border-t border-line px-5 py-8 text-center text-[13.5px] text-ink-3 sm:px-6">
+              You have not sent anything yet.
+            </p>
+          ) : (
+            <ul>
+              {mine.data?.data.map((report) => (
+                <li key={report.id} className="border-t border-line px-5 py-4 sm:px-6">
+                  <div className="flex items-start gap-3">
+                    <span className="min-w-0 flex-1">
+                      <span className="block text-[14px] font-semibold">
+                        {report.title ?? humanise(report.type)}
                       </span>
-                      <Pill tone={REPORT_TONE[report.status as keyof typeof REPORT_TONE] ?? 'neutral'}>
-                        {report.status.toLowerCase().replace('_', ' ')}
-                      </Pill>
-                    </div>
-                    {report.adminNote ? (
-                      <p className="mt-2 rounded-xl bg-surface-2 px-3 py-2 text-[12.5px] text-ink-3">
-                        {report.adminNote}
-                      </p>
-                    ) : null}
-                  </li>
-                ))}
-              </ul>
-            )}
-          </Card>
-        </Reveal>
-      </div>
+                      <span className="mt-0.5 block text-[12.5px] text-ink-3">
+                        {humanise(report.type)} · {longDate(report.createdAt)}
+                      </span>
+                    </span>
+                    <Pill
+                      tone={REPORT_TONE[report.status as keyof typeof REPORT_TONE] ?? 'neutral'}
+                    >
+                      {report.status.toLowerCase().replace('_', ' ')}
+                    </Pill>
+                  </div>
+                  {report.resolution ? (
+                    <p className="mt-2 rounded-xl bg-surface-2 px-3 py-2 text-[12.5px] text-ink-3">
+                      {report.resolution}
+                    </p>
+                  ) : null}
+                </li>
+              ))}
+            </ul>
+          )}
+        </Card>
+      </Reveal>
     </AppShell>
   );
 }
@@ -1153,7 +1277,6 @@ export function Help() {
 export function Settings() {
   const toast = useToast();
   const { user, refresh } = useAuth();
-  const { density, setDensity } = useDensity();
   const [savingAccount, setSavingAccount] = useState(false);
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
 
@@ -1186,58 +1309,67 @@ export function Settings() {
 
   return (
     <AppShell>
-      <PageHeader title="Settings" description="Account, security and appearance." />
+      <PageHeader title="Settings" description="Your account and its security." />
 
-      <div className="grid items-start gap-4 lg:grid-cols-2">
-        <Reveal>
-          <Card>
-            <h2 className="text-[15px] font-bold">Account</h2>
-            <form onSubmit={onSaveAccount} className="mt-4 flex flex-col gap-4" noValidate>
-              <Field
-                label="Name"
-                name="name"
-                defaultValue={user?.name ?? ''}
-                error={fieldErrors['name']}
-              />
-              <Field
-                label="Email"
-                name="email"
-                defaultValue={user?.email ?? ''}
-                disabled
-                hint="Contact support to change the address on your account."
-              />
-              <Select
-                label="Timezone"
-                name="timezone"
-                defaultValue={user?.timezone ?? 'UTC'}
-                options={zones}
-                hint="Drives reminder delivery and the default for new events."
-              />
-              <Button type="submit" variant="primary" loading={savingAccount} className="self-start">
-                Save
-              </Button>
-            </form>
-          </Card>
-        </Reveal>
+      {/* One card, centred and held to a readable measure. Spread across the
+          full page the three fields would each be a metre wide. */}
+      <Reveal className="mx-auto w-full max-w-[760px]">
+        <Card>
+          <h2 className="text-[15px] font-bold">Account</h2>
+          <form onSubmit={onSaveAccount} className="mt-4 flex flex-col gap-4" noValidate>
+            <Field
+              label="Name"
+              name="name"
+              defaultValue={user?.name ?? ''}
+              error={fieldErrors['name']}
+            />
+            <Field
+              label="Email"
+              name="email"
+              defaultValue={user?.email ?? ''}
+              disabled
+              hint="Contact support to change the address on your account."
+            />
+            <Select
+              label="Timezone"
+              name="timezone"
+              defaultValue={user?.timezone ?? 'UTC'}
+              options={zones}
+              hint="Drives reminder delivery and the default for new events."
+            />
+            <Button type="submit" variant="primary" loading={savingAccount} className="self-start">
+              Save
+            </Button>
+          </form>
 
-        <Reveal delay={80}>
-          <Card>
-            <h2 className="text-[15px] font-bold">Security</h2>
-            <p className="mt-2 text-[13.5px] leading-relaxed text-ink-3">
-              You sign in with {user?.providers.join(', ').toLowerCase() || 'Google'}. Skrivbok
-              stores no password of its own, so there is nothing here to change or leak — manage
-              this account's security from your Google account.
+          {/* The facts about the account, below the fields that change it.
+              These were a second card headed "Your account", which sat beside
+              this one and read as a different subject. */}
+          <dl className="mt-6 flex flex-col gap-3 border-t border-line pt-5 text-[13.5px]">
+            <Row label="Plan" value={user?.plan ?? '—'} />
+            <Row label="Role" value={user ? humanise(user.role) : '—'} />
+            <Row label="Member since" value={user ? longDate(user.createdAt) : '—'} />
+            <Row
+              label="Sign-in method"
+              value={user ? humanise(user.providers.join(', ')) || '—' : '—'}
+            />
+            {user?.subscriptionEndsAt ? (
+              <Row label="Renews" value={dateTime(user.subscriptionEndsAt)} />
+            ) : null}
+          </dl>
+
+          {/* Security, in the two lines it actually needs. The paragraph this
+              replaced explained that there is no password to manage, which the
+              "Sign-in method" row above already answers. */}
+          <div className="mt-6 border-t border-line pt-5">
+            <h3 className="text-[13.5px] font-bold">Security</h3>
+            <p className="mt-1.5 text-[13px] leading-relaxed text-ink-3">
+              Signing out everywhere ends every session, including this one.
             </p>
-            <div className="mt-4">
-              <Alert tone="info" title="Signing out everywhere ends every session">
-                Every device is signed out immediately, including this one. Do this if you have used
-                Skrivbok on a machine you no longer trust.
-              </Alert>
-            </div>
             <Button
-              variant="secondary"
+              variant="caution"
               icon="logout"
-              className="mt-4"
+              className="mt-3"
               onClick={() =>
                 void auth
                   .logoutAll()
@@ -1247,50 +1379,9 @@ export function Settings() {
             >
               Sign out everywhere
             </Button>
-          </Card>
-        </Reveal>
-
-        <Reveal delay={140}>
-          <Card>
-            <h2 className="text-[15px] font-bold">Appearance</h2>
-            <p className="mt-2 text-[13px] leading-relaxed text-ink-3">
-              Compact fits noticeably more on screen — worth it once your library is large.
-            </p>
-            <div className="mt-4 flex rounded-xl border border-line bg-surface-2 p-1">
-              {(['comfortable', 'compact'] as const).map((option) => (
-                <button
-                  key={option}
-                  type="button"
-                  onClick={() => setDensity(option)}
-                  className={`press flex-1 rounded-lg py-2 text-[13.5px] font-semibold capitalize transition ${
-                    density === option ? 'bg-surface text-ink shadow-card' : 'text-ink-3'
-                  }`}
-                >
-                  {option}
-                </button>
-              ))}
-            </div>
-          </Card>
-        </Reveal>
-
-        <Reveal delay={200}>
-          <Card>
-            <h2 className="text-[15px] font-bold">Your account</h2>
-            <dl className="mt-4 flex flex-col gap-3 text-[13.5px]">
-              <Row label="Plan" value={user?.plan ?? '—'} />
-              <Row label="Role" value={user ? humanise(user.role) : '—'} />
-              <Row label="Member since" value={user ? longDate(user.createdAt) : '—'} />
-              <Row
-                label="Sign-in method"
-                value={user ? humanise(user.providers.join(', ')) || '—' : '—'}
-              />
-              {user?.subscriptionEndsAt ? (
-                <Row label="Renews" value={dateTime(user.subscriptionEndsAt)} />
-              ) : null}
-            </dl>
-          </Card>
-        </Reveal>
-      </div>
+          </div>
+        </Card>
+      </Reveal>
     </AppShell>
   );
 }

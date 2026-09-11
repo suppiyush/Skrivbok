@@ -95,8 +95,8 @@ export function MarketingNav({
   ctaClassName = '',
 }: {
   isSignedIn?: boolean;
-  /** Extra classes for the primary CTA button, so a page on its own theme
-   *  (the landing page's pastel palette) can recolor it without affecting
+  /** Extra classes for the primary CTA button, so the landing page can give it
+   *  the deep coral it uses for its own calls to action without affecting
    *  every other page that renders this nav. */
   ctaClassName?: string;
 }) {

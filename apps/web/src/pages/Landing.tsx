@@ -213,7 +213,7 @@ export default function Landing() {
   const { user } = useAuth();
 
   return (
-    <div className="theme-sticky min-h-screen bg-canvas-alt">
+    <div className="min-h-screen bg-canvas-alt">
       <MarketingNav
         isSignedIn={Boolean(user)}
         ctaClassName="!bg-[color:var(--color-brand-deep)] hover:!brightness-110"

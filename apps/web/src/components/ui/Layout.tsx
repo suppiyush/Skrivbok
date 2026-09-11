@@ -14,24 +14,44 @@ import { Icon } from './Icon';
  *
  * Title and description are one unit; actions sit opposite and wrap beneath on
  * narrow screens rather than squeezing the title.
+ *
+ * `serif` sets the pair in the display face. It is opt-in and not the default
+ * because a screen title is a label — it names where you are, and the sans
+ * says that more plainly. The greeting on the dashboard is the exception: it
+ * addresses the reader rather than labelling the page, which is the one place
+ * the warmer face earns its extra download.
  */
 export function PageHeader({
   title,
   description,
   actions,
   meta,
+  serif = false,
 }: {
   title: string;
   description?: string;
   actions?: ReactNode;
   meta?: ReactNode;
+  serif?: boolean;
 }) {
   return (
     <header className="flex flex-wrap items-start justify-between gap-x-6 gap-y-4">
       <div className="min-w-0">
-        <h1 className="text-[26px] leading-tight font-extrabold tracking-[-0.03em]">{title}</h1>
+        <h1
+          className={
+            serif
+              ? 'font-serif text-[31px] leading-tight font-semibold tracking-[-0.01em]'
+              : 'text-[26px] leading-tight font-extrabold tracking-[-0.03em]'
+          }
+        >
+          {title}
+        </h1>
         {description ? (
-          <p className="mt-1.5 max-w-[68ch] text-[14px] leading-relaxed text-ink-3">
+          <p
+            className={`mt-1.5 max-w-[68ch] leading-relaxed text-ink-3 ${
+              serif ? 'font-serif text-[15.5px]' : 'text-[14px]'
+            }`}
+          >
             {description}
           </p>
         ) : null}

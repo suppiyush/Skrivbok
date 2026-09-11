@@ -9,7 +9,12 @@
  * Controlled state per field would mean a re-render of the whole dialog on
  * every keystroke for no benefit — the values are only needed once.
  */
-import { useId, type ReactNode, type SelectHTMLAttributes, type TextareaHTMLAttributes } from 'react';
+import {
+  useId,
+  type ReactNode,
+  type SelectHTMLAttributes,
+  type TextareaHTMLAttributes,
+} from 'react';
 import { Icon } from './Icon';
 
 function Label({ htmlFor, children }: { htmlFor: string; children: ReactNode }) {

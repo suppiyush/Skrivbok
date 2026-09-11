@@ -1,342 +1,160 @@
 /**
  * Dashboard.
  *
- * Answers one question — what needs me today? — and only then offers the rest
- * of the workspace. The hierarchy is deliberate: four counters, the two things
- * with a date attached, and quiet links to everything else.
- *
- * Every number here is a real count from the API. There is no "recent activity"
- * feed, because a list of things you already did is not a reason to open an app.
+ * A directory of the workspace, not a report on it: one card per feature,
+ * named and described so someone new can tell what each one is for before
+ * they have put anything into it. Matches `design/dashboard-design.png`,
+ * including its small count badge in the top-right corner of every card —
+ * how many of that thing already exist, not a status or an alert.
  */
-import { useMemo } from 'react';
-import { Link } from 'react-router-dom';
+import { useEffect, useRef, useState } from 'react';
+import { Link, useNavigate } from 'react-router-dom';
 import { AppShell } from '../components/layout/AppShell';
 import { Button } from '../components/ui/Button';
 import { Icon } from '../components/ui/Icon';
-import { Card, CardHeader, PageHeader, Pill } from '../components/ui/Layout';
-import { CountUp, Reveal } from '../components/ui/Motion';
-import { Skeleton } from '../components/ui/Skeleton';
-import { dueLabel, longDate, timeOnly } from '../lib/format';
+import { Card, PageHeader } from '../components/ui/Layout';
+import { Reveal } from '../components/ui/Motion';
+import { longDate } from '../lib/format';
 import { useAuth } from '../lib/auth';
+import { FEATURES } from '../lib/features';
+import { preloadRoute } from '../lib/preload';
 import {
+  careerGoalHooks,
   deadlineHooks,
-  useCareerSummary,
-  useDeadlineSummary,
-  useEventRange,
+  futureWorkHooks,
+  ideaHooks,
+  journalHooks,
+  literatureHooks,
+  noteHooks,
+  projectHooks,
   useMeetings,
-  useUsage,
 } from '../lib/queries';
+
+/**
+ * What the "New" button offers.
+ *
+ * Each of these pages already has its own create dialog behind local state;
+ * `openCreate` in router state asks it to open on arrival instead of adding a
+ * second, dashboard-only way to create the same thing. See the matching
+ * effect in `ResourceScreen.tsx` and `Projects.tsx`.
+ */
+const NEW_ITEMS = [
+  { to: '/projects', icon: 'folder_open', label: 'Project' },
+  { to: '/ideas', icon: 'lightbulb', label: 'Idea' },
+  { to: '/notes', icon: 'sticky_note_2', label: 'Note' },
+];
+
+/**
+ * The greeting.
+ *
+ * Each has to read on its own as well as with a name after it, since not every
+ * account has one: "Welcome back" and "Welcome back, Piyush" both have to be
+ * sentences.
+ */
+const GREETINGS = [
+  'Welcome back',
+  'Good to see you',
+  'Hello again',
+  'Good to have you back',
+  'Back at it',
+  'Ready when you are',
+];
+
+/**
+ * The same greeting all day, a different one tomorrow.
+ *
+ * Picked from the date rather than at random. A random choice would be re-rolled
+ * on every render — the heading would change while the page was being looked at,
+ * and again on every return to the dashboard. Keying it to the local day makes
+ * it stable for as long as anyone is looking, and still varied over a week.
+ */
+function greetingFor(now: Date): string {
+  const localMidnight = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const day = Math.floor(localMidnight.getTime() / 86_400_000);
+  return GREETINGS[((day % GREETINGS.length) + GREETINGS.length) % GREETINGS.length]!;
+}
 
 export default function Dashboard() {
   const { user } = useAuth();
-
-  // "Today" is the user's civil day, taken from the browser. The backend stores
-  // instants; the window that counts as today is a display decision.
-  const { dayStart, dayEnd } = useMemo(() => {
-    const start = new Date();
-    start.setHours(0, 0, 0, 0);
-    const end = new Date(start);
-    end.setDate(end.getDate() + 1);
-    return { dayStart: start.toISOString(), dayEnd: end.toISOString() };
-  }, []);
-
-  const deadlineSummary = useDeadlineSummary();
-  const careerSummary = useCareerSummary();
-  const usage = useUsage();
-  const today = useEventRange(dayStart, dayEnd);
-  const incoming = useMeetings({ box: 'incoming', status: 'PENDING', limit: 5 });
-  const attention = deadlineHooks.useList({ limit: 4, sort: 'dueSoonest', status: 'PENDING' });
-
   const firstName = (user?.name ?? '').trim().split(/\s+/)[0];
-  const events = today.data?.events ?? [];
-  const pendingMeetings = incoming.data?.data ?? [];
-  const upcoming = attention.data?.data ?? [];
+  const greeting = greetingFor(new Date());
 
-  const counters = [
-    {
-      label: 'Overdue',
-      value: deadlineSummary.data?.overdue ?? 0,
-      icon: 'error',
-      to: '/deadlines',
-      tone: 'text-danger',
-      loading: deadlineSummary.isPending,
-    },
-    {
-      label: 'Due this week',
-      value: deadlineSummary.data?.dueThisWeek ?? 0,
-      icon: 'schedule',
-      to: '/deadlines',
-      tone: 'text-warn',
-      loading: deadlineSummary.isPending,
-    },
-    {
-      label: 'Events today',
-      value: events.length,
-      icon: 'calendar_month',
-      to: '/calendar',
-      tone: 'text-brand',
-      loading: today.isPending,
-    },
-    {
-      label: 'Awaiting reply',
-      value: pendingMeetings.length,
-      icon: 'groups',
-      to: '/meetings',
-      tone: 'text-ink-3',
-      loading: incoming.isPending,
-    },
-  ];
-
-  const workspace = [
-    {
-      to: '/projects',
-      icon: 'folder_open',
-      label: 'Projects',
-      value: usage.data?.projects.used,
-      hint: 'Shared work and briefs',
-    },
-    {
-      to: '/literature',
-      icon: 'menu_book',
-      label: 'Literature',
-      value: usage.data?.literature.used,
-      hint: 'Papers and reading notes',
-    },
-    {
-      to: '/career-goals',
-      icon: 'trending_up',
-      label: 'Career goals',
-      value: careerSummary.data?.total,
-      hint:
-        careerSummary.data !== undefined
-          ? `${careerSummary.data.averageProgress}% average progress`
-          : 'Stage-tracked goals',
-    },
-    { to: '/ideas', icon: 'lightbulb', label: 'Ideas', hint: 'Captured before they go' },
-    { to: '/notes', icon: 'sticky_note_2', label: 'Notes', hint: 'Longer working notes' },
-    { to: '/journal', icon: 'history_edu', label: 'Journal', hint: 'What you actually did' },
-  ];
+  // One count per card: the true total from `pagination.total`, not the size
+  // of the page fetched — `limit: 1` asks for as little of the list itself as
+  // the API allows, since only the total is used here.
+  const counts: Record<string, { value: number | undefined; loading: boolean }> = {
+    '/projects': loadCount(projectHooks.useList({ limit: 1 })),
+    '/ideas': loadCount(ideaHooks.useList({ limit: 1 })),
+    '/notes': loadCount(noteHooks.useList({ limit: 1 })),
+    '/deadlines': loadCount(deadlineHooks.useList({ limit: 1 })),
+    '/future-work': loadCount(futureWorkHooks.useList({ limit: 1 })),
+    '/literature': loadCount(literatureHooks.useList({ limit: 1 })),
+    '/journal': loadCount(journalHooks.useList({ limit: 1 })),
+    '/meetings': loadCount(useMeetings({ limit: 1 })),
+    '/career-goals': loadCount(careerGoalHooks.useList({ limit: 1 })),
+  };
 
   return (
     <AppShell>
       <PageHeader
-        title={firstName ? `Good to see you, ${firstName}` : 'Good to see you'}
+        serif
+        title={firstName ? `${greeting}, ${firstName}` : greeting}
         description={longDate(new Date())}
-        actions={
-          <>
-            <Link to="/deadlines">
-              <Button variant="secondary" size="sm" icon="add">
-                New deadline
-              </Button>
-            </Link>
-            <Link to="/ideas">
-              <Button variant="primary" size="sm" icon="bolt">
-                Capture an idea
-              </Button>
-            </Link>
-          </>
-        }
+        actions={<NewMenu />}
       />
 
-      {/* ── Counters ───────────────────────────────────────────────────────── */}
-      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-        {counters.map((c, i) => (
-          <Reveal key={c.label} delay={i * 50}>
-            <Link to={c.to} className="block">
-              <Card className="lift h-full">
-                <span className="flex items-center gap-2 text-[13px] font-semibold text-ink-3">
-                  <Icon name={c.icon} size={17} className={c.tone} />
-                  {c.label}
-                </span>
-                {c.loading ? (
-                  <Skeleton h={34} radius={8} className="shimmer mt-2 w-16" />
-                ) : (
-                  <CountUp
-                    value={c.value}
-                    className="mt-1.5 block text-[30px] leading-none font-extrabold tabular"
-                  />
-                )}
-              </Card>
-            </Link>
-          </Reveal>
-        ))}
-      </div>
-
-      {/* ── The two things with a date attached ────────────────────────────── */}
-      <div className="grid items-start gap-4 lg:grid-cols-2">
-        <Reveal delay={80}>
-          <Card padded={false} className="h-full">
-            <div className="px-5 pt-5 pb-3">
-              <CardHeader
-                title="Needs attention"
-                icon="flag"
-                tint="var(--color-danger-tint)"
-                fg="var(--color-danger)"
-                count={deadlineSummary.data?.open}
-              />
-            </div>
-
-            {attention.isPending ? (
-              <ListSkeleton rows={3} />
-            ) : upcoming.length === 0 ? (
-              <QuietEmpty
-                icon="check_circle"
-                text="Nothing is due. Add a deadline when the next one is set."
-              />
-            ) : (
-              <ul>
-                {upcoming.map((deadline) => {
-                  const due = dueLabel(deadline.dueAt);
-                  return (
-                    <li key={deadline.id} className="border-t border-line">
-                      <Link
-                        to="/deadlines"
-                        className="row-hover flex items-center gap-3 px-5 py-3 hover:bg-surface-3"
-                      >
-                        <span className="min-w-0 flex-1">
-                          <span className="block truncate text-[14px] font-semibold">
-                            {deadline.title}
-                          </span>
-                          {due ? (
-                            <span
-                              className={`mt-0.5 block text-[12.5px] ${
-                                due.tone === 'danger' ? 'text-danger-ink' : 'text-ink-3'
-                              }`}
-                            >
-                              {due.text}
-                            </span>
-                          ) : null}
-                        </span>
-                        <Pill tone={due?.tone === 'danger' ? 'danger' : 'warning'}>
-                          {deadline.priority.charAt(0) + deadline.priority.slice(1).toLowerCase()}
-                        </Pill>
-                      </Link>
-                    </li>
-                  );
-                })}
-              </ul>
-            )}
-
-            <FooterLink to="/deadlines" label="All deadlines" />
-          </Card>
-        </Reveal>
-
-        <Reveal delay={140}>
-          <Card padded={false} className="h-full">
-            <div className="px-5 pt-5 pb-3">
-              <CardHeader
-                title="Today's schedule"
-                icon="calendar_month"
-                tint="var(--color-brand-tint)"
-                fg="var(--color-brand)"
-                count={events.length}
-              />
-            </div>
-
-            {today.isPending ? (
-              <ListSkeleton rows={3} />
-            ) : events.length === 0 ? (
-              <QuietEmpty icon="event_available" text="Nothing scheduled today." />
-            ) : (
-              <ul>
-                {events.slice(0, 5).map((event, i) => (
-                  <li key={`${event.id}-${i}`} className="border-t border-line">
-                    <Link
-                      to="/calendar"
-                      className="row-hover flex items-center gap-4 px-5 py-3 hover:bg-surface-3"
-                    >
-                      <span className="w-12 flex-none font-mono text-[12px] text-ink-3 tabular">
-                        {event.isAllDay ? 'all day' : timeOnly(event.startAt)}
-                      </span>
-                      <span className="min-w-0 flex-1">
-                        <span
-                          className={`block truncate text-[14px] font-semibold ${
-                            event.redacted ? 'text-ink-4 italic' : ''
-                          }`}
-                        >
-                          {event.title}
-                        </span>
-                        {event.location ? (
-                          <span className="mt-0.5 block truncate text-[12.5px] text-ink-3">
-                            {event.location}
-                          </span>
-                        ) : null}
-                      </span>
-                      {event.redacted ? (
-                        <Icon name="lock" size={15} className="flex-none text-ink-5" />
-                      ) : null}
-                    </Link>
-                  </li>
-                ))}
-              </ul>
-            )}
-
-            <FooterLink to="/calendar" label="Open calendar" />
-          </Card>
-        </Reveal>
-      </div>
-
-      {/* ── Meeting requests, only when there are any ──────────────────────── */}
-      {pendingMeetings.length > 0 ? (
-        <Reveal delay={60}>
-          <Card>
-            <CardHeader
-              title="Meeting requests waiting on you"
-              icon="groups"
-              tint="var(--color-brand-tint)"
-              fg="var(--color-brand)"
-              count={pendingMeetings.length}
-              action={
-                <Link to="/meetings" className="text-[12.5px] font-semibold text-brand-ink">
-                  Review
-                </Link>
-              }
-            />
-            <ul className="mt-3 flex flex-col gap-1.5">
-              {pendingMeetings.slice(0, 3).map((m) => (
-                <li key={m.id} className="flex items-center gap-3 text-[13.5px]">
-                  <Icon name="schedule" size={16} className="flex-none text-ink-4" />
-                  <span className="min-w-0 flex-1 truncate font-semibold">{m.title}</span>
-                  <span className="flex-none text-[12.5px] text-ink-3">
-                    {m.sender?.name ?? m.sender?.email ?? 'Someone'}
-                  </span>
-                </li>
-              ))}
-            </ul>
-          </Card>
-        </Reveal>
-      ) : null}
-
-      {/* ── Everything else ────────────────────────────────────────────────── */}
       <section>
         <h2 className="text-[11px] font-bold tracking-[0.1em] text-ink-5 uppercase">
           Your workspace
         </h2>
-        <div className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-          {workspace.map((w, i) => (
-            <Reveal key={w.to} delay={i * 40}>
-              <Link to={w.to} className="block">
-                <Card className="lift h-full !p-4">
-                  <span className="flex items-center gap-3">
-                    <Icon name={w.icon} size={19} className="flex-none text-ink-4" />
-                    <span className="min-w-0 flex-1">
-                      <span className="block text-[14px] font-bold">{w.label}</span>
-                      <span className="mt-0.5 block truncate text-[12.5px] text-ink-3">
-                        {w.hint}
+        <div className="mt-3 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          {FEATURES.map((f, i) => {
+            const count = counts[f.to];
+            return (
+              <Reveal key={f.to} delay={i * 30}>
+                {/* The whole card is the link — the footer text is no longer
+                    its own nested `<a>`, just the affordance for it. */}
+                <Link
+                  to={f.to}
+                  className="block h-full"
+                  onMouseEnter={() => preloadRoute(f.to)}
+                  onFocus={() => preloadRoute(f.to)}
+                >
+                  <Card padded={false} className="lift row-hover flex h-full flex-col">
+                    <div className="relative flex flex-1 flex-col p-5">
+                      <span
+                        aria-hidden="true"
+                        className="absolute top-4 right-4 grid size-7 place-items-center rounded-full bg-surface-2 text-[12px] font-bold text-ink-3 tabular"
+                      >
+                        {count?.loading ? (
+                          <Icon
+                            name="progress_activity"
+                            size={13}
+                            className="animate-spin text-ink-4"
+                          />
+                        ) : (
+                          (count?.value ?? 0)
+                        )}
                       </span>
-                    </span>
-                    {w.value !== undefined ? (
-                      <span className="flex-none font-mono text-[13px] text-ink-3 tabular">
-                        {w.value}
+
+                      <span
+                        className="grid size-10 flex-none place-items-center rounded-[12px]"
+                        style={{ background: f.tint }}
+                      >
+                        <Icon name={f.icon} size={20} style={{ color: f.fg }} />
                       </span>
-                    ) : (
-                      <Icon name="chevron_right" size={18} className="row-arrow flex-none text-ink-5" />
-                    )}
-                  </span>
-                </Card>
-              </Link>
-            </Reveal>
-          ))}
+                      <h3 className="mt-4 pr-8 text-[15.5px] font-bold">{f.title}</h3>
+                      <p className="mt-1.5 text-[13px] leading-relaxed text-ink-3">{f.text}</p>
+                    </div>
+                    <div className="mt-auto flex items-center justify-between border-t border-line px-5 py-3 text-[13px] font-semibold text-brand-ink">
+                      View all
+                      <Icon name="arrow_forward" size={17} className="row-arrow" />
+                    </div>
+                  </Card>
+                </Link>
+              </Reveal>
+            );
+          })}
         </div>
       </section>
     </AppShell>
@@ -345,33 +163,88 @@ export default function Dashboard() {
 
 /* ── Small pieces ─────────────────────────────────────────────────────────── */
 
-function ListSkeleton({ rows }: { rows: number }) {
+/** Closes on an outside click or Escape. Returned ref goes on the menu's container. */
+function useDismiss(onDismiss: () => void) {
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const onPointer = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) onDismiss();
+    };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onDismiss();
+    };
+    document.addEventListener('mousedown', onPointer);
+    document.addEventListener('keydown', onKey);
+    return () => {
+      document.removeEventListener('mousedown', onPointer);
+      document.removeEventListener('keydown', onKey);
+    };
+  }, [onDismiss]);
+
+  return ref;
+}
+
+/** The single "New" action, replacing the old "New deadline" / "Capture an
+ *  idea" pair — one button, a short list of what it can create. */
+function NewMenu() {
+  const navigate = useNavigate();
+  const [open, setOpen] = useState(false);
+  const ref = useDismiss(() => setOpen(false));
+
+  /**
+   * Opening the menu is the signal that one of these is about to be needed, so
+   * their chunks start downloading now rather than on the click. By the time a
+   * pointer has travelled to a menu item, the destination is usually already
+   * in memory and the navigation costs nothing.
+   */
+  const openMenu = () => {
+    setOpen((v) => !v);
+    for (const item of NEW_ITEMS) preloadRoute(item.to);
+  };
+
   return (
-    <div className="shimmer flex flex-col gap-2 px-5 pb-4">
-      {Array.from({ length: rows }, (_, i) => (
-        <Skeleton key={i} h={44} radius={10} />
-      ))}
+    <div className="relative" ref={ref}>
+      <Button
+        variant="brand"
+        size="sm"
+        icon="add"
+        iconAfter="expand_more"
+        aria-expanded={open}
+        onMouseEnter={() => {
+          for (const item of NEW_ITEMS) preloadRoute(item.to);
+        }}
+        onClick={openMenu}
+      >
+        New
+      </Button>
+
+      {open ? (
+        <div className="animate-slide-down absolute top-full right-0 z-20 mt-1.5 w-48 overflow-hidden rounded-xl border border-line bg-surface py-1 shadow-pop">
+          {NEW_ITEMS.map((item) => (
+            <button
+              key={item.to}
+              type="button"
+              onClick={() => {
+                setOpen(false);
+                navigate(item.to, { state: { openCreate: true } });
+              }}
+              className="flex w-full items-center gap-2.5 px-3 py-2 text-left text-[13.5px] font-medium text-ink-2 transition hover:bg-surface-2"
+            >
+              <Icon name={item.icon} size={17} className="text-ink-4" />
+              {item.label}
+            </button>
+          ))}
+        </div>
+      ) : null}
     </div>
   );
 }
 
-function QuietEmpty({ icon, text }: { icon: string; text: string }) {
-  return (
-    <div className="border-t border-line px-5 py-8 text-center">
-      <Icon name={icon} size={24} className="text-ink-5" />
-      <p className="mt-2 text-[13px] text-ink-3">{text}</p>
-    </div>
-  );
-}
-
-function FooterLink({ to, label }: { to: string; label: string }) {
-  return (
-    <Link
-      to={to}
-      className="row-hover flex items-center justify-between border-t border-line px-5 py-3 text-[13px] font-semibold text-brand-ink hover:bg-surface-3"
-    >
-      {label}
-      <Icon name="arrow_forward" size={17} className="row-arrow" />
-    </Link>
-  );
+/** Reads the total out of any resource list query, whatever shape it's in. */
+function loadCount(query: {
+  data?: { pagination: { total: number } } | undefined;
+  isPending: boolean;
+}): { value: number | undefined; loading: boolean } {
+  return { value: query.data?.pagination.total, loading: query.isPending };
 }

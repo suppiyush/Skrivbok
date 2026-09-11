@@ -3,47 +3,68 @@
 /* ============================================================================
    Skrivbok design tokens
 
-   Extracted from the approved Claude Design files:
+   The neutral ramp, type, radii and elevation came from the approved Claude
+   Design files:
      design/Skrivbok App.dc.html   (readable source)
      design/Skrivbok Landing.html  (rendered and sampled)
 
-   Every value below appears in one of those two files. Nothing is invented.
+   The colour is the sticky-notes palette the landing page was redesigned
+   around — coral, yellow, and paper rather than blue on cool grey. It began
+   scoped to a `.theme-sticky` class so that only the marketing page picked it
+   up; it now applies everywhere, because the app carrying a different palette
+   to the page that sells it is a seam the user sees on the way in.
+
+   Two deliberate departures from the landing values, both noted at the line.
    ========================================================================== */
 
 @theme {
-  /* ── Neutral ramp ──────────────────────────────────────────────────────── */
+  /* ── Neutral ramp ──────────────────────────────────────────────────────────
+     Warmed. These are the same lightnesses as the original cool ramp, moved
+     onto a paper hue: a coral interface on blue-grey surfaces reads as two
+     designs sharing a screen. The ink ramp is untouched — the landing page
+     never re-tinted it, and warming text is where this kind of change starts
+     costing contrast. */
   --color-ink: #0b0f19; /* headings, primary text */
   --color-ink-2: #3a4152; /* secondary text, nav labels */
   --color-ink-3: #5b6472; /* body copy, meta */
   --color-ink-4: #6f7889; /* icon rest state */
   --color-ink-5: #8b93a3; /* disabled, busy blocks */
 
-  --color-canvas: #eef0f4; /* app background */
-  --color-canvas-alt: #f1f3f7; /* marketing background */
+  --color-canvas: #f4ede3; /* app background */
+  --color-canvas-alt: #fffaf3; /* marketing background */
   --color-surface: #ffffff; /* cards, sidebar, header */
-  --color-surface-2: #f2f4f8; /* inset fields, hover */
-  --color-surface-3: #f4f6fa; /* nav hover */
-  --color-surface-4: #eef1f6; /* neutral tint */
-  --color-surface-5: #fbfbfd; /* subtle panel */
+  --color-surface-2: #f8f1e8; /* inset fields, hover */
+  --color-surface-3: #faf5ed; /* nav hover */
+  --color-surface-4: #f4ede4; /* neutral tint */
+  --color-surface-5: #fffcf7; /* subtle panel */
 
-  --color-line: rgb(11 15 25 / 0.07); /* standard border */
-  --color-line-2: rgb(11 15 25 / 0.14); /* button border */
-  --color-line-3: #e2e5ec; /* skeleton fill */
+  --color-line: rgb(61 43 28 / 0.09); /* standard border */
+  --color-line-2: rgb(61 43 28 / 0.17); /* button border */
+  --color-line-3: #ebe1d4; /* skeleton fill */
 
-  /* ── Primary ───────────────────────────────────────────────────────────── */
-  --color-brand: #2f6bfa;
-  --color-brand-ink: #1d4fd8; /* links */
-  --color-brand-ink-2: #2454c9; /* icon on tint */
-  --color-brand-deep: #22459c;
-  --color-brand-tint: #eaf0ff;
-  --color-brand-tint-2: #f7f9ff;
-  --color-brand-avatar: #dbe6ff;
-  --color-brand-avatar-ink: #274a95;
+  /* ── Primary: coral ────────────────────────────────────────────────────── */
+  --color-brand: #ff7f50;
+  /* Links, and the one value not taken from the landing page. Its #e35f34
+     reaches 3.6:1 on white — fine for a marketing headline, not for the
+     functional links this drives across the app. Darkened to clear 4.5:1. */
+  --color-brand-ink: #c2491f;
+  --color-brand-ink-2: #d1552c; /* icon on tint */
+  --color-brand-deep: #a83f20;
+  --color-brand-tint: #ffe7db;
+  --color-brand-tint-2: #fff3ec;
+  --color-brand-avatar: #ffd9c4;
+  --color-brand-avatar-ink: #a83f20;
 
-  /* ── Accent: the yellow used for primary marketing CTAs ────────────────── */
-  --color-accent: #ffd60a;
-  --color-accent-ink: #7d6000;
-  --color-accent-tint: #fff6d1;
+  /* ── Accent: the yellow on CTAs and the premium mark ───────────────────── */
+  --color-accent: #ffd166;
+  --color-accent-ink: #8a5a00;
+  --color-accent-tint: #fff6e0;
+
+  /* ── Secondary: the rest of the sticky-notes palette ───────────────────── */
+  --color-mint: #06d6a0;
+  --color-mint-tint: #dcf9f0;
+  --color-teal: #118ab2;
+  --color-teal-tint: #dcf0f7;
 
   /* ── Semantic ──────────────────────────────────────────────────────────── */
   --color-danger: #b4483c;
@@ -60,8 +81,14 @@
   --color-shell-ink: #c9cede;
   --color-shell-muted: #9aa1b0;
 
-  /* ── Typography ────────────────────────────────────────────────────────── */
+  /* ── Typography ──────────────────────────────────────────────────────────
+     Fraunces is the display face, and it is display only: a soft, warm serif
+     for the handful of lines that greet rather than instruct. Everything that
+     does work — labels, rows, forms, figures — stays on Figtree, which is
+     built for it. Loaded as a variable font across 400..700 with no italic,
+     so the whole family is one file. */
   --font-sans: 'Figtree', system-ui, -apple-system, sans-serif;
+  --font-serif: 'Fraunces', 'Iowan Old Style', Georgia, serif;
   --font-mono: ui-monospace, Menlo, 'Cascadia Mono', monospace;
 
   /* ── Radius ────────────────────────────────────────────────────────────── */
@@ -78,41 +105,6 @@
   --shadow-card: 0 1px 2px rgb(11 15 25 / 0.04);
   --shadow-pop: 0 28px 64px -28px rgb(11 15 25 / 0.45);
   --shadow-lift: 0 18px 40px -24px rgb(11 15 25 / 0.35);
-}
-
-/* ── Sticky-notes theme (landing page only) ───────────────────────────────
-   A pastel palette scoped to `.theme-sticky` rather than redefined in
-   `@theme` above, so the app shell keeps its existing colors and only the
-   marketing page picks this up. Every color utility (bg-brand, text-accent,
-   etc.) resolves through these same custom properties, so overriding them
-   here is enough — no component classes need to change.
-   Primary: coral #FF7F50. Secondary: #FFD166 (yellow), #06D6A0 (mint),
-   #118AB2 (teal-blue). Pastel tints are the primaries lightened toward
-   paper, the way a highlighter looks on a sticky note rather than on glass. */
-.theme-sticky {
-  --color-brand: #ff7f50;
-  --color-brand-ink: #e35f34;
-  --color-brand-ink-2: #d1552c;
-  --color-brand-deep: #a83f20;
-  --color-brand-tint: #ffe7db;
-  --color-brand-tint-2: #fff3ec;
-  --color-brand-avatar: #ffd9c4;
-  --color-brand-avatar-ink: #a83f20;
-
-  --color-accent: #ffd166;
-  --color-accent-ink: #8a5a00;
-  --color-accent-tint: #fff6e0;
-
-  --color-canvas-alt: #fffaf3;
-  --color-surface: #ffffff;
-  --color-surface-5: #fffcf7;
-
-  /* Not used by any existing utility, held here so components can reach the
-     rest of the palette by name instead of a hardcoded hex. */
-  --color-mint: #06d6a0;
-  --color-mint-tint: #dcf9f0;
-  --color-teal: #118ab2;
-  --color-teal-tint: #dcf0f7;
 }
 
 @layer base {
@@ -186,7 +178,6 @@
     outline-offset: 2px;
     border-radius: var(--radius-xs);
   }
-
 }
 
 /* ── Material Symbols ─────────────────────────────────────────────────────── */
@@ -426,6 +417,30 @@
   &:hover .row-arrow {
     transform: translateX(3px);
   }
+}
+
+/* Collapsing the sidebar.
+
+   The rail and the content beside it have to move as one object: the same
+   properties, the same duration, the same curve. Declared once and applied to
+   both, because two separate transitions that merely agree today will drift
+   the moment one of them is edited, and the content edge visibly lagging the
+   border is the thing that reads as cheap. */
+@utility sidebar-motion {
+  transition:
+    width 0.28s var(--ease-out),
+    padding-left 0.28s var(--ease-out);
+}
+
+/* Labels inside the rail.
+
+   Held back briefly, then faded in over the remainder of the collapse: the
+   text arrives into space that already exists instead of racing the border
+   outwards. There is no matching exit — on the way in the label would be
+   sliding under a border that has not moved yet, and the narrowing rail covers
+   its departure well enough on its own. */
+@utility sidebar-label {
+  animation: fade-in 0.2s var(--ease-out) 0.08s both;
 }
 
 /* Numbers that change should be seen to change. */

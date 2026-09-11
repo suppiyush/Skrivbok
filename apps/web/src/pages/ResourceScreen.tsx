@@ -20,23 +20,16 @@ import {
   type FormEvent,
   type ReactNode,
 } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { AppShell, useDensity } from '../components/layout/AppShell';
 import { Alert } from '../components/ui/Alert';
 import { Button } from '../components/ui/Button';
 import { EmptyState } from '../components/ui/EmptyState';
 import { Icon } from '../components/ui/Icon';
-import {
-  Card,
-  PageHeader,
-  Pagination,
-  Pill,
-  SearchInput,
-  Toolbar,
-} from '../components/ui/Layout';
+import { Card, PageHeader, Pagination, Pill, SearchInput, Toolbar } from '../components/ui/Layout';
 import { Modal, ConfirmDialog } from '../components/ui/Modal';
 import { Reveal } from '../components/ui/Motion';
-import { Skeleton } from '../components/ui/Skeleton';
+import { Skeleton, useSlowLoad } from '../components/ui/Skeleton';
 import { useToast } from '../components/ui/Toast';
 import { ApiError, type LimitStatus, type Paginated } from '../lib/api';
 import type { ResourceHooks } from '../lib/queries';
@@ -68,8 +61,14 @@ export interface ResourceConfig<T extends { id: string }> {
   noun: string;
 
   hooks: ResourceHooks<T, Record<string, unknown>, Record<string, unknown>>;
-  /** Free-plan cap, when this resource has one. */
-  useQuota?: () => { data?: LimitStatus | undefined };
+  /**
+   * Free-plan cap, when this resource has one.
+   *
+   * `isPending` is part of the contract because the quota decides whether the
+   * header carries a usage meter: the screen waits for it before drawing the
+   * body, so the meter cannot appear late and displace what is beneath it.
+   */
+  useQuota?: () => { data?: LimitStatus | undefined; isPending: boolean };
 
   filters?: FilterDef[];
   sorts?: { value: string; label: string }[];
@@ -82,7 +81,10 @@ export interface ResourceConfig<T extends { id: string }> {
   toInput: (form: FormData) => Record<string, unknown>;
 
   /** Rendered to the left of the list, e.g. the literature tag filter. */
-  aside?: (state: { filters: Record<string, string>; setFilter: (n: string, v: string) => void }) => ReactNode;
+  aside?: (state: {
+    filters: Record<string, string>;
+    setFilter: (n: string, v: string) => void;
+  }) => ReactNode;
 
   emptyTitle: string;
   emptyBody: string;
@@ -97,6 +99,8 @@ export function ResourceScreen<T extends { id: string }>({
 }) {
   const { compact } = useDensity();
   const toast = useToast();
+  const location = useLocation();
+  const navigate = useNavigate();
 
   const [page, setPage] = useState(1);
   const [searchInput, setSearchInput] = useState('');
@@ -104,10 +108,30 @@ export function ResourceScreen<T extends { id: string }>({
   const [filters, setFilters] = useState<Record<string, string>>({});
   const [sort, setSort] = useState(config.sorts?.[0]?.value ?? '');
 
-  const [editing, setEditing] = useState<T | null | undefined>(undefined); // undefined = closed
+  /**
+   * A link into this page (the dashboard's "New" menu) can ask for the create
+   * dialog to be open on arrival, through router state rather than a query
+   * string — it is intent for one navigation, not part of the URL.
+   *
+   * Read during the first render, not in an effect. An effect runs after the
+   * browser has painted, so opening it there would show the bare list for a
+   * frame and then pop the dialog over it; deciding here puts the dialog in the
+   * first painted frame instead.
+   */
+  const openOnArrival = (location.state as { openCreate?: boolean } | null)?.openCreate === true;
+
+  const [editing, setEditing] = useState<T | null | undefined>(openOnArrival ? null : undefined); // undefined = closed
   const [deleting, setDeleting] = useState<T | null>(null);
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   const [formError, setFormError] = useState<string | null>(null);
+
+  // The flag has been acted on, so it is dropped from history straight away —
+  // left in place, a refresh or a back navigation would reopen the dialog.
+  useEffect(() => {
+    if (openOnArrival) navigate(location.pathname, { replace: true, state: null });
+    // Once, on arrival: re-running this when `location` changes would fire
+    // again for the very navigation it just performed.
+  }, []);
 
   // Debounce the search so typing does not fire a request per keystroke.
   useEffect(() => {
@@ -119,7 +143,13 @@ export function ResourceScreen<T extends { id: string }>({
   }, [searchInput]);
 
   const query = useMemo(
-    () => ({ page, limit: PAGE_SIZE, ...(search ? { search } : {}), ...filters, ...(sort ? { sort } : {}) }),
+    () => ({
+      page,
+      limit: PAGE_SIZE,
+      ...(search ? { search } : {}),
+      ...filters,
+      ...(sort ? { sort } : {}),
+    }),
     [page, search, filters, sort],
   );
 
@@ -195,6 +225,11 @@ export function ResourceScreen<T extends { id: string }>({
   }
 
   const saving = create.isPending || update.isPending;
+  // The quota is waited on too: it decides whether the header carries a usage
+  // meter, and arriving late it would push the whole body down the page.
+  const loading = list.isPending || (quota?.isPending ?? false);
+  // Nothing is drawn for a wait too short to read — see `useSlowLoad`.
+  const showSkeleton = useSlowLoad(loading);
 
   return (
     <AppShell>
@@ -271,19 +306,23 @@ export function ResourceScreen<T extends { id: string }>({
         {config.aside?.({ filters, setFilter })}
 
         <div className="flex min-w-0 flex-col gap-4">
-          {list.isPending ? (
-            <div className="shimmer flex flex-col gap-2">
-              {Array.from({ length: 6 }, (_, i) => (
-                <Skeleton key={i} h={compact ? 54 : 66} radius={14} />
-              ))}
-            </div>
+          {loading ? (
+            showSkeleton ? (
+              <div className="shimmer flex flex-col gap-2">
+                {Array.from({ length: 6 }, (_, i) => (
+                  <Skeleton key={i} h={compact ? 54 : 66} radius={14} />
+                ))}
+              </div>
+            ) : null
           ) : list.isError ? (
             <Card className="grid place-items-center gap-3 py-14 text-center">
               <Icon name="cloud_off" size={30} className="text-danger" />
               <h2 className="text-[17px] font-bold">{config.title} could not be loaded</h2>
               <p className="max-w-[46ch] text-[13.5px] leading-relaxed text-ink-3">
                 Nothing has been lost.{' '}
-                {list.error instanceof ApiError ? list.error.message : 'The server did not respond.'}
+                {list.error instanceof ApiError
+                  ? list.error.message
+                  : 'The server did not respond.'}
               </p>
               <Button variant="primary" size="sm" onClick={() => void list.refetch()}>
                 Try again

@@ -39,9 +39,7 @@ export class ApiError extends Error {
 
   /** Field errors keyed by name, ready to drop into form state. */
   get fieldErrors(): Record<string, string> {
-    return Object.fromEntries(
-      this.details.map((d) => [d.path.replace(/^body\./, ''), d.message]),
-    );
+    return Object.fromEntries(this.details.map((d) => [d.path.replace(/^body\./, ''), d.message]));
   }
 }
 
@@ -393,7 +391,15 @@ export interface Report {
   title: string | null;
   description: string;
   status: string;
-  adminNote: string | null;
+  /**
+   * What the maintainer wrote when they closed it.
+   *
+   * Named `resolution` on the model and in the response. This was declared as
+   * `adminNote` — the name the *reviews* module uses — so the note the Help
+   * screen tried to show was always undefined and never rendered.
+   */
+  resolution: string | null;
+  resolvedAt: string | null;
   createdAt: string;
 }
 
@@ -431,16 +437,23 @@ function resource<T, TCreate, TUpdate = Partial<TCreate>>(path: string) {
 }
 
 export const ideas = {
-  ...resource<Idea, { title: string; content?: string | null; category?: string; color?: NoteColor }>(
-    '/ideas',
-  ),
+  ...resource<
+    Idea,
+    { title: string; content?: string | null; category?: string; color?: NoteColor }
+  >('/ideas'),
   categories: () => api.get<{ categories: string[] }>('/ideas/categories'),
 };
 
 export const notes = {
   ...resource<
     Note,
-    { title: string; content?: string | null; category?: string; color?: NoteColor; pinned?: boolean }
+    {
+      title: string;
+      content?: string | null;
+      category?: string;
+      color?: NoteColor;
+      pinned?: boolean;
+    }
   >('/notes'),
   categories: () => api.get<{ categories: string[] }>('/notes/categories'),
 };
@@ -451,7 +464,9 @@ export const journal = {
     { title?: string | null; content: string; entryDate?: string; mood?: string | null }
   >('/journal'),
   activity: (from: string, to: string) =>
-    api.get<{ activity: { date: string; count: number }[] }>(`/journal/activity${qs({ from, to })}`),
+    api.get<{ activity: { date: string; count: number }[] }>(
+      `/journal/activity${qs({ from, to })}`,
+    ),
 };
 
 export const deadlines = {
@@ -468,9 +483,13 @@ export const deadlines = {
     }
   >('/deadlines'),
   summary: () =>
-    api.get<{ total: number; open: number; overdue: number; dueThisWeek: number; completed: number }>(
-      '/deadlines/summary',
-    ),
+    api.get<{
+      total: number;
+      open: number;
+      overdue: number;
+      dueThisWeek: number;
+      completed: number;
+    }>('/deadlines/summary'),
 };
 
 export const futureWork = resource<
@@ -524,8 +543,10 @@ export const projects = {
   >('/projects'),
   quota: () => api.get<LimitStatus>('/projects/quota'),
   members: (id: string) => api.get<{ members: ProjectMember[] }>(`/projects/${id}/members`),
-  addMember: (id: string, input: { email: string; name?: string | null; role?: 'EDITOR' | 'VIEWER' }) =>
-    api.post<ProjectMember>(`/projects/${id}/members`, input),
+  addMember: (
+    id: string,
+    input: { email: string; name?: string | null; role?: 'EDITOR' | 'VIEWER' },
+  ) => api.post<ProjectMember>(`/projects/${id}/members`, input),
   /** The invitee accepting their own invitation. Not an owner action. */
   acceptInvite: (id: string) => api.post<ProjectMember>(`/projects/${id}/members/accept`),
   removeMember: (id: string, memberId: string) =>
@@ -703,8 +724,10 @@ export const admin = {
     ),
   reviews: (query: Record<string, unknown> = {}) =>
     api.get<Paginated<AdminReview>>(`/admin/reviews${qs(query)}`),
-  moderateReview: (id: string, input: { status: 'APPROVED' | 'REJECTED'; adminNote?: string | null }) =>
-    api.patch<{ review: OwnReview }>(`/admin/reviews/${id}`, input),
+  moderateReview: (
+    id: string,
+    input: { status: 'APPROVED' | 'REJECTED'; adminNote?: string | null },
+  ) => api.patch<{ review: OwnReview }>(`/admin/reviews/${id}`, input),
   reports: (query: Record<string, unknown> = {}) =>
     api.get<Paginated<Report & { user?: { email: string; name: string | null } }>>(
       `/admin/reports${qs(query)}`,

@@ -13,9 +13,6 @@
  * one button in an empty field. Both are deliberately composed — an unbalanced
  * sign-in screen is the first thing a new user sees.
  *
- * The page carries `theme-sticky`, the landing page's pastel palette, so
- * arriving here from the marketing site is not a change of brand mid-flow.
- *
  * Every error state is handled: Google declined · expired state · server not
  * configured for Google · server unreachable.
  */
@@ -103,7 +100,7 @@ export default function AuthPage({ mode }: { mode: 'login' | 'register' }) {
   // Each column still gets `overflow-y-auto` as a floor: on a genuinely short
   // window the content stays reachable rather than being clipped away.
   return (
-    <div className="theme-sticky grid min-h-screen bg-canvas-alt lg:h-screen lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)] lg:overflow-hidden">
+    <div className="grid min-h-screen bg-canvas-alt lg:h-screen lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)] lg:overflow-hidden">
       {/* ── Left: the brand side ────────────────────────────────────────
           Hidden below `lg`: on a phone the sign-in panel is the whole point of
           the screen, and anything above it only pushes it down. */}

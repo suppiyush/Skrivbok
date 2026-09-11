@@ -9,6 +9,7 @@
  * strip that a single line cannot hold.
  */
 import { useEffect, useMemo, useState, type FormEvent } from 'react';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { AppShell } from '../components/layout/AppShell';
 import { Button } from '../components/ui/Button';
 import { EmptyState } from '../components/ui/EmptyState';
@@ -18,7 +19,7 @@ import { Icon } from '../components/ui/Icon';
 import { Card, PageHeader, Pagination, Pill, SearchInput, Toolbar } from '../components/ui/Layout';
 import { ConfirmDialog, Modal } from '../components/ui/Modal';
 import { Reveal } from '../components/ui/Motion';
-import { Skeleton } from '../components/ui/Skeleton';
+import { Skeleton, useSlowLoad } from '../components/ui/Skeleton';
 import { useToast } from '../components/ui/Toast';
 import { ApiError, type Project } from '../lib/api';
 import { initials, relative } from '../lib/format';
@@ -39,6 +40,8 @@ const SCOPES = [
 
 export default function Projects() {
   const toast = useToast();
+  const location = useLocation();
+  const navigate = useNavigate();
 
   const [scope, setScope] = useState('all');
   const [archived, setArchived] = useState(false);
@@ -46,10 +49,27 @@ export default function Projects() {
   const [search, setSearch] = useState('');
   const [page, setPage] = useState(1);
 
-  const [editing, setEditing] = useState<Project | null | undefined>(undefined);
+  /**
+   * A link into this page (the dashboard's "New" menu) can ask for the create
+   * dialog to be open on arrival, through router state rather than a query
+   * string. Read during the first render rather than in an effect: an effect
+   * runs after the browser paints, so the bare list would appear for a frame
+   * before the dialog arrived over it.
+   */
+  const openOnArrival = (location.state as { openCreate?: boolean } | null)?.openCreate === true;
+
+  const [editing, setEditing] = useState<Project | null | undefined>(
+    openOnArrival ? null : undefined,
+  );
   const [deleting, setDeleting] = useState<Project | null>(null);
   const [managing, setManaging] = useState<Project | null>(null);
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
+
+  // Acted on, so the flag is dropped from history: left in place, a refresh or
+  // a back navigation would reopen the dialog.
+  useEffect(() => {
+    if (openOnArrival) navigate(location.pathname, { replace: true, state: null });
+  }, []);
 
   useEffect(() => {
     const timer = window.setTimeout(() => {
@@ -82,6 +102,19 @@ export default function Projects() {
   const limit = quota.data;
   const atLimit = limit?.limited === true && limit.remaining === 0;
   const saving = create.isPending || update.isPending;
+
+  /**
+   * The quota is waited on as well as the list.
+   *
+   * It decides whether the header carries a usage meter, and it answers on its
+   * own schedule — so showing the list first means the meter drops in
+   * afterwards and shoves everything below it down the page. Holding the body
+   * until both have answered lets the header reach its final height while
+   * there is still nothing underneath to displace.
+   */
+  const loading = list.isPending || quota.isPending;
+  // Nothing is drawn for a wait too short to read — see `useSlowLoad`.
+  const showSkeleton = useSlowLoad(loading);
 
   async function onSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -172,12 +205,14 @@ export default function Projects() {
         </button>
       </Toolbar>
 
-      {list.isPending ? (
-        <div className="shimmer grid gap-4 lg:grid-cols-2">
-          {Array.from({ length: 4 }, (_, i) => (
-            <Skeleton key={i} h={168} radius={18} />
-          ))}
-        </div>
+      {loading ? (
+        showSkeleton ? (
+          <div className="shimmer grid gap-4 lg:grid-cols-2">
+            {Array.from({ length: 4 }, (_, i) => (
+              <Skeleton key={i} h={168} radius={18} />
+            ))}
+          </div>
+        ) : null
       ) : list.isError ? (
         <Card className="grid place-items-center gap-3 py-14 text-center">
           <Icon name="cloud_off" size={30} className="text-danger" />
@@ -261,7 +296,12 @@ export default function Projects() {
         busy={saving}
         footer={
           <>
-            <Button variant="secondary" size="sm" onClick={() => setEditing(undefined)} disabled={saving}>
+            <Button
+              variant="secondary"
+              size="sm"
+              onClick={() => setEditing(undefined)}
+              disabled={saving}
+            >
               Cancel
             </Button>
             <Button type="submit" variant="primary" size="sm" loading={saving}>
