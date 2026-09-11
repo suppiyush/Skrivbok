@@ -301,7 +301,6 @@ export function ResourceScreen<T extends { id: string }>({
         description={config.blurb}
         crumbs={[{ label: config.title }]}
         icon={config.icon}
-        meta={limit?.limited ? <QuotaMeter status={limit} /> : undefined}
         actions={
           <>
             {config.extraAction?.()}
@@ -510,7 +509,7 @@ export function ResourceScreen<T extends { id: string }>({
       <Modal
         open={editing !== undefined}
         onClose={() => setEditing(undefined)}
-        title={editing ? `Edit ${config.noun}` : `New ${config.noun}`}
+        title={editing ? `Edit ${config.noun}` : config.createLabel}
         onSubmit={onSubmit}
         busy={saving}
         footer={
@@ -678,35 +677,6 @@ function ResourceForm<T>({
 
 function cap(word: string): string {
   return word.charAt(0).toUpperCase() + word.slice(1);
-}
-
-/** The free-plan usage bar shown under a capped resource's heading. */
-export function QuotaMeter({ status }: { status: LimitStatus }) {
-  if (!status.limited || status.limit === null) return null;
-  const pct = Math.min(100, Math.round((status.used / status.limit) * 100));
-  const full = status.remaining === 0;
-
-  return (
-    <div className="flex max-w-[380px] items-center gap-3">
-      <span className="h-1.5 min-w-[110px] flex-1 overflow-hidden rounded-full bg-surface-2">
-        <span
-          className="block h-full rounded-full transition-[width] duration-500"
-          style={{
-            width: `${pct}%`,
-            background: full ? 'var(--color-warn)' : 'var(--color-brand)',
-          }}
-        />
-      </span>
-      <span className="flex-none text-[12.5px] text-ink-3 tabular">
-        {status.used} of {status.limit}
-      </span>
-      {full ? (
-        <Link to="/upgrade" className="flex-none text-[12.5px] font-semibold text-brand-ink">
-          Upgrade
-        </Link>
-      ) : null}
-    </div>
-  );
 }
 
 /** A filter rendered as a native select, so it works on touch without extra code. */

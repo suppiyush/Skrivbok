@@ -64,7 +64,7 @@ export function VoiceNoteButton() {
   return (
     <>
       <Button variant="secondary" size="sm" icon="mic" onClick={() => setOpen(true)}>
-        Voice note
+        Add voice note
       </Button>
 
       {/* Mounted only while open, so each recording starts from nothing —
@@ -210,7 +210,7 @@ function VoiceNoteDialog({
     <Modal
       open
       onClose={busy ? () => undefined : onClose}
-      title="Voice note"
+      title="Add voice note"
       description="Record it now, and give it a title so you can find it later."
       busy={busy}
       footer={

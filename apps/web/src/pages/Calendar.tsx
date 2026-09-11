@@ -171,7 +171,7 @@ export default function Calendar() {
         description="Events, recurring commitments and meetings. Recurring events stay correct across daylight-saving changes."
         actions={
           <Button variant="primary" size="sm" icon="add" onClick={() => setEditing(null)}>
-            New event
+            Add event
           </Button>
         }
       />
@@ -292,7 +292,7 @@ export default function Calendar() {
           title="Nothing scheduled this month"
           action={
             <Button variant="primary" icon="add" onClick={() => setEditing(null)}>
-              New event
+              Add event
             </Button>
           }
         >
@@ -303,7 +303,7 @@ export default function Calendar() {
       <Modal
         open={editing !== undefined}
         onClose={() => setEditing(undefined)}
-        title={editing ? 'Edit event' : 'New event'}
+        title={editing ? 'Edit event' : 'Add event'}
         onSubmit={onSubmit}
         busy={saving}
         size="lg"

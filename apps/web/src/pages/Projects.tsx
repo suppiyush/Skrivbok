@@ -183,7 +183,7 @@ export default function Projects() {
             disabled={atLimit}
             onClick={() => setEditing(null)}
           >
-            New project
+            Add project
           </Button>
         }
       />
@@ -242,7 +242,7 @@ export default function Projects() {
             title={search || scope !== 'all' ? 'Nothing matches' : 'No projects yet'}
             action={
               <Button variant="primary" icon="add" onClick={() => setEditing(null)}>
-                New project
+                Add project
               </Button>
             }
           >
@@ -296,7 +296,7 @@ export default function Projects() {
       <Modal
         open={editing !== undefined}
         onClose={closeDialog}
-        title={editing ? 'Edit project' : 'New project'}
+        title={editing ? 'Edit project' : 'Add project'}
         onSubmit={onSubmit}
         busy={saving}
         footer={

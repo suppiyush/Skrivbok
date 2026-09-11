@@ -210,7 +210,7 @@ const ideasConfig: ResourceConfig<Idea> = {
   noun: 'idea',
   blurb:
     'Anything worth keeping, recorded before it goes. Categorise and colour them, then search across everything you have written.',
-  createLabel: 'New idea',
+  createLabel: 'Add idea',
   hooks: ideaHooks as never,
   sorts: [
     { value: 'newest', label: 'Newest' },
@@ -282,9 +282,9 @@ const notesConfig: ResourceConfig<Note> = {
   icon: 'sticky_note_2',
   noun: 'note',
   blurb: 'Longer working notes — a method, a summary, a half-finished argument.',
-  // "Text note", because it is no longer the only kind. The voice button sits
+  // "Add text note", because it is no longer the only kind. The voice button sits
   // beside it and owns its own recorder and dialog.
-  createLabel: 'Text note',
+  createLabel: 'Add text note',
   extraAction: () => <VoiceNoteButton />,
   hooks: noteHooks as never,
   sorts: [
@@ -374,7 +374,7 @@ const deadlinesConfig: ResourceConfig<Deadline> = {
   noun: 'deadline',
   blurb:
     'Everything with a date attached. Reminders arrive at the hour you chose, in the timezone you set.',
-  createLabel: 'New deadline',
+  createLabel: 'Add deadline',
   hooks: deadlineHooks as never,
   filters: [
     { name: 'status', label: 'Status', options: DEADLINE_STATUSES },
@@ -483,7 +483,7 @@ const futureWorkConfig: ResourceConfig<FutureWorkItem> = {
   noun: 'item',
   blurb:
     'The work you intend to do but have not scheduled. Timelines here are deliberately loose — "next semester" is a valid answer.',
-  createLabel: 'New item',
+  createLabel: 'Add item',
   hooks: futureWorkHooks as never,
   filters: [{ name: 'priority', label: 'Priority', options: PRIORITIES }],
   sorts: [
