@@ -518,6 +518,31 @@ export const useAdminUsers = (query: Record<string, unknown> = {}) =>
     placeholderData: (previous) => previous,
   });
 
+export const useAdminSubscriptions = (query: Record<string, unknown> = {}) =>
+  useQuery({
+    queryKey: [...keys.admin, 'subscriptions', query],
+    queryFn: () => admin.subscriptions(query),
+    placeholderData: (previous) => previous,
+  });
+
+/** Everything an admin can do to one account. All of it refreshes the lists. */
+export function useAdminUserActions() {
+  const qc = useQueryClient();
+  const invalidate = () => void qc.invalidateQueries({ queryKey: keys.admin });
+  return {
+    update: useMutation({
+      mutationFn: ({ id, ...input }: { id: string } & Parameters<typeof admin.updateUser>[1]) =>
+        admin.updateUser(id, input),
+      onSuccess: invalidate,
+    }),
+    remove: useMutation({
+      mutationFn: (id: string) => admin.deleteUser(id),
+      onSuccess: invalidate,
+    }),
+    revokeSessions: useMutation({ mutationFn: (id: string) => admin.revokeSessions(id) }),
+  };
+}
+
 export const useAdminPayments = (query: Record<string, unknown> = {}) =>
   useQuery({ queryKey: [...keys.admin, 'payments', query], queryFn: () => admin.payments(query) });
 

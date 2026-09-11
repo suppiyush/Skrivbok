@@ -937,18 +937,56 @@ export interface PlatformStats {
   engagement: { withProjects: number; withProfile: number; neverLoggedIn: number };
 }
 
+/** A user as the admin list shows them, with their content counted. */
+export interface AdminUser extends User {
+  lastLoginAt: string | null;
+  emailVerifiedAt: string | null;
+  _count: { ownedProjects: number; ideas: number; notes?: number; deadlines?: number };
+}
+
+export interface AdminSubscription {
+  id: string;
+  email: string;
+  name: string | null;
+  subscriptionEndsAt: string | null;
+  createdAt: string;
+  isExpired: boolean;
+  /** Null for a grant with no end. */
+  daysRemaining: number | null;
+}
+
 export const admin = {
   stats: () => api.get<PlatformStats>('/admin/stats'),
   analytics: (days = 30) =>
     api.get<{
       days: number;
       signups: { date: string; count: number }[];
-      revenue: { date: string; amountPaise: number }[];
+      revenue: { date: string; paise: number }[];
       activeUsers: { date: string; count: number }[];
-      featureAdoption: Record<string, number>;
+      /** Sorted most-used first. `users` is how many have used it at all. */
+      featureAdoption: { feature: string; users: number }[];
     }>(`/admin/analytics${qs({ days })}`),
   users: (query: Record<string, unknown> = {}) =>
-    api.get<Paginated<User & { lastLoginAt: string | null }>>(`/admin/users${qs(query)}`),
+    api.get<Paginated<AdminUser>>(`/admin/users${qs(query)}`),
+  updateUser: (
+    id: string,
+    input: {
+      name?: string | null;
+      role?: 'USER' | 'ADMIN';
+      plan?: 'FREE' | 'PRO';
+      subscriptionEndsAt?: string | null;
+    },
+  ) => api.patch<AdminUser>(`/admin/users/${id}`, input),
+  /** Typed confirmation, so a stray click cannot remove an account. */
+  deleteUser: (id: string) =>
+    request<void>(`/admin/users/${id}`, {
+      method: 'DELETE',
+      body: JSON.stringify({ confirm: 'DELETE' }),
+    }),
+  revokeSessions: (id: string) =>
+    api.post<{ revoked: number }>(`/admin/users/${id}/revoke-sessions`),
+  subscriptions: (query: Record<string, unknown> = {}) =>
+    api.get<Paginated<AdminSubscription>>(`/admin/subscriptions${qs(query)}`),
   payments: (query: Record<string, unknown> = {}) =>
     api.get<Paginated<Payment & { user?: { email: string; name: string | null } }>>(
       `/admin/payments${qs(query)}`,

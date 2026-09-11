@@ -6,102 +6,32 @@
  * backend does not: changing a user's email. There is no password to change —
  * sign-in is delegated to Google.
  */
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { AppShell } from '../components/layout/AppShell';
 import { Button } from '../components/ui/Button';
 import { Icon } from '../components/ui/Icon';
-import {
-  Card,
-  FilterButton,
-  PageHeader,
-  Pill,
-  SearchInput,
-  Toolbar,
-} from '../components/ui/Layout';
-import { Textarea } from '../components/ui/Form';
+import { Card, PageHeader, Pagination, Pill, SearchInput, Toolbar } from '../components/ui/Layout';
+import { FieldRow, Select, Textarea } from '../components/ui/Form';
+import { Field } from '../components/ui/Field';
+import { Skeleton } from '../components/ui/Skeleton';
 import { Modal } from '../components/ui/Modal';
 import { useToast } from '../components/ui/Toast';
-import { ApiError, type AdminReport, type ReportStatus } from '../lib/api';
-import { relative } from '../lib/format';
+import { ApiError, type AdminReport, type AdminUser, type ReportStatus } from '../lib/api';
+import { useAuth } from '../lib/auth';
+import { longDate, relative, rupees } from '../lib/format';
 import {
+  useAdminAnalytics,
   useAdminReports,
   useAdminReviews,
+  useAdminStats,
+  useAdminSubscriptions,
+  useAdminUserActions,
+  useAdminUsers,
   useModerateReview,
   useUpdateReport,
 } from '../lib/queries';
 
 type Tab = 'overview' | 'users' | 'subscriptions' | 'reports' | 'reviews';
-
-const STATS = [
-  { label: 'Total users', value: '1,284', delta: '+38 this week', icon: 'group' },
-  { label: 'PRO', value: '206', delta: '16.0% of users', icon: 'workspace_premium' },
-  { label: 'Active this week', value: '742', delta: '57.8% of users', icon: 'bolt' },
-  { label: 'Revenue, 30 days', value: '₹1,04,790', delta: '+12.4%', icon: 'payments' },
-];
-
-const CONTENT = [
-  ['Projects', '3,912'],
-  ['Deadlines', '11,504'],
-  ['Literature', '28,771'],
-  ['Ideas', '19,340'],
-  ['Notes', '9,655'],
-  ['Journal entries', '41,206'],
-  ['Calendar events', '15,882'],
-  ['Career goals', '2,104'],
-];
-
-const ADOPTION = [
-  ['Deadlines', 88],
-  ['Projects', 74],
-  ['Literature', 61],
-  ['Calendar', 57],
-  ['Ideas', 52],
-  ['Journal', 34],
-  ['Career goals', 21],
-] as const;
-
-const USERS = [
-  {
-    name: 'A. Lindqvist',
-    email: 'a.lindqvist@uni.se',
-    plan: 'PRO',
-    role: 'USER',
-    joined: '14 Jan 2026',
-    active: '2h ago',
-  },
-  {
-    name: 'R. Mehta',
-    email: 'r.mehta@uni.se',
-    plan: 'PRO',
-    role: 'USER',
-    joined: '3 Feb 2026',
-    active: 'Yesterday',
-  },
-  {
-    name: 'K. Osei',
-    email: 'k.osei@uni.se',
-    plan: 'FREE',
-    role: 'USER',
-    joined: '21 Mar 2026',
-    active: '4 days ago',
-  },
-  {
-    name: 'Administrator',
-    email: 'admin@skrivbok.local',
-    plan: 'PRO',
-    role: 'ADMIN',
-    joined: '2 Sep 2026',
-    active: 'Now',
-  },
-  {
-    name: null,
-    email: 'j.svensson@other.ac.uk',
-    plan: 'FREE',
-    role: 'USER',
-    joined: '1 Sep 2026',
-    active: 'Never',
-  },
-];
 
 const REPORT_TONE = {
   OPEN: 'brand',
@@ -112,10 +42,7 @@ const REPORT_TONE = {
 
 export default function Admin() {
   const [tab, setTab] = useState<Tab>('overview');
-  const [query, setQuery] = useState('');
 
-  // Reviews and reports are real; Overview, Users and Subscriptions are still
-  // sample data.
   const pendingQueue = useAdminReviews({ status: 'PENDING', limit: 1 });
   const pendingReviews = pendingQueue.data?.pagination.total ?? 0;
   const openQueue = useAdminReports({ status: 'OPEN', limit: 1 });
@@ -160,141 +87,250 @@ export default function Admin() {
         ))}
       </div>
 
-      {tab === 'overview' ? (
-        <>
-          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-            {STATS.map((s) => (
-              <Card key={s.label} className="!p-4">
-                <span className="flex items-center gap-1.5 text-[12.5px] font-semibold text-ink-3">
-                  <Icon name={s.icon} size={15} className="text-ink-4" />
-                  {s.label}
-                </span>
-                <span className="mt-1.5 block text-[26px] leading-none font-extrabold tabular">
-                  {s.value}
-                </span>
-                <span className="mt-1.5 block text-[11.5px] text-ink-3">{s.delta}</span>
-              </Card>
-            ))}
-          </div>
+      {tab === 'overview' ? <Overview /> : null}
+      {tab === 'users' ? <UsersTab /> : null}
+      {tab === 'subscriptions' ? <SubscriptionsTab /> : null}
+      {tab === 'reports' ? <ReportQueue /> : null}
+      {tab === 'reviews' ? <ReviewQueue /> : null}
+    </AppShell>
+  );
+}
 
-          <div className="grid gap-4 lg:grid-cols-[1fr_1fr]">
-            <Card>
-              <h2 className="text-[15px] font-bold">Content across the platform</h2>
-              <dl className="mt-4 grid grid-cols-2 gap-x-6 gap-y-2.5">
-                {CONTENT.map(([k, v]) => (
-                  <div key={k} className="flex items-baseline justify-between gap-3">
-                    <dt className="text-[13px] text-ink-3">{k}</dt>
-                    <dd className="font-mono text-[13px] font-semibold tabular">{v}</dd>
-                  </div>
-                ))}
-              </dl>
-            </Card>
+/* ── Overview ─────────────────────────────────────────────────────────────── */
 
-            <Card>
-              <h2 className="text-[15px] font-bold">Feature adoption</h2>
-              <p className="mt-1 text-[12.5px] text-ink-3">
-                Share of active users who have used each area.
-              </p>
-              <div className="mt-4 flex flex-col gap-2.5">
-                {ADOPTION.map(([name, pct]) => (
-                  <div key={name} className="flex items-center gap-3">
-                    <span className="w-24 flex-none text-[12.5px] text-ink-2">{name}</span>
-                    <span className="h-2 flex-1 overflow-hidden rounded-full bg-surface-2">
-                      <span
-                        className="block h-full rounded-full bg-brand"
-                        style={{ width: `${pct}%` }}
-                      />
-                    </span>
-                    <span className="w-9 flex-none text-right font-mono text-[12px] text-ink-3 tabular">
-                      {pct}%
-                    </span>
-                  </div>
-                ))}
-              </div>
-            </Card>
-          </div>
-        </>
-      ) : null}
+/** Feature keys from the analytics, as the sections are named to users. */
+const FEATURE_NAME: Record<string, string> = {
+  projects: 'Projects',
+  ideas: 'Ideas',
+  notes: 'Notes',
+  journal: 'Journal',
+  deadlines: 'Deadlines',
+  literature: 'Literature',
+  careerGoals: 'Career goals',
+  calendar: 'Calendar',
+};
 
-      {tab === 'users' ? (
-        <>
-          <Toolbar>
-            <SearchInput value={query} onChange={setQuery} placeholder="Search name or email" />
-            <FilterButton label="Plan" />
-            <FilterButton label="Role" />
-          </Toolbar>
+const CONTENT_NAME: Record<string, string> = {
+  projects: 'Projects',
+  ideas: 'Ideas',
+  notes: 'Notes',
+  journalEntries: 'Journal entries',
+  deadlines: 'Deadlines',
+  futureWork: 'Future work',
+  literature: 'Literature',
+  careerGoals: 'Career goals',
+  calendarEvents: 'Calendar events',
+  meetingRequests: 'Meeting requests',
+  openReports: 'Open reports',
+};
 
-          <Card padded={false}>
-            <div className="overflow-x-auto">
-              <table className="w-full min-w-[720px]">
-                <thead>
-                  <tr className="border-b border-line text-left">
-                    {['User', 'Plan', 'Role', 'Joined', 'Last active', ''].map((h) => (
-                      <th
-                        key={h}
-                        className="px-5 py-2.5 text-[11.5px] font-bold text-ink-4 uppercase"
-                      >
-                        {h}
-                      </th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody>
-                  {USERS.map((u) => (
-                    <tr
-                      key={u.email}
-                      className="border-b border-line last:border-b-0 hover:bg-surface-3"
-                    >
-                      <td className="px-5 py-3">
-                        <p className="text-[13.5px] font-semibold">{u.name ?? '—'}</p>
-                        <p className="text-[12.5px] text-ink-3">{u.email}</p>
-                      </td>
-                      <td className="px-5 py-3">
-                        <Pill tone={u.plan === 'PRO' ? 'brand' : 'neutral'}>{u.plan}</Pill>
-                      </td>
-                      <td className="px-5 py-3">
-                        {u.role === 'ADMIN' ? (
-                          <Pill tone="danger">admin</Pill>
-                        ) : (
-                          <span className="text-[13px] text-ink-3">user</span>
-                        )}
-                      </td>
-                      <td className="px-5 py-3 text-[13px] text-ink-3 tabular">{u.joined}</td>
-                      <td className="px-5 py-3 text-[13px] text-ink-3">{u.active}</td>
-                      <td className="px-5 py-3 text-right">
-                        <button
-                          type="button"
-                          aria-label={`Actions for ${u.email}`}
-                          className="grid size-8 place-items-center rounded-lg text-ink-4 hover:bg-surface-2"
-                        >
-                          <Icon name="more_horiz" size={18} />
-                        </button>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+const pct = (part: number, whole: number) => (whole === 0 ? 0 : Math.round((part / whole) * 100));
+const n = (value: number) => value.toLocaleString();
+
+/**
+ * The headline numbers, from the database as it is now.
+ *
+ * Every figure here is a count or a sum the server computed at request time.
+ * "Active this week" is anyone whose last sign-in was in the past seven days
+ * — a session start, not activity as such — and the revenue figure is the
+ * captured payments of the last thirty days, summed from the daily series.
+ */
+function Overview() {
+  const stats = useAdminStats();
+  const analytics = useAdminAnalytics(30);
+
+  if (stats.isPending || analytics.isPending) {
+    return (
+      <div className="shimmer grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+        {Array.from({ length: 4 }, (_, i) => (
+          <Skeleton key={i} h={110} radius={16} />
+        ))}
+      </div>
+    );
+  }
+
+  if (!stats.data || !analytics.data) {
+    return (
+      <Card className="grid place-items-center gap-2 py-14 text-center">
+        <Icon name="cloud_off" size={28} className="text-danger" />
+        <p className="text-[14px] text-ink-3">The statistics could not be loaded.</p>
+      </Card>
+    );
+  }
+
+  const { users, content, engagement } = stats.data;
+  const revenue30 = analytics.data.revenue.reduce((sum, d) => sum + d.paise, 0);
+  const signups30 = analytics.data.signups.reduce((sum, d) => sum + d.count, 0);
+
+  const headline = [
+    {
+      label: 'Total users',
+      value: n(users.total),
+      delta: `+${n(users.newThisWeek)} this week · ${n(signups30)} in 30 days`,
+      icon: 'group',
+    },
+    {
+      label: 'PRO',
+      value: n(users.pro),
+      delta: `${pct(users.pro, users.total)}% of users · ${n(users.admins)} admin${users.admins === 1 ? '' : 's'}`,
+      icon: 'workspace_premium',
+    },
+    {
+      label: 'Active this week',
+      value: n(users.activeThisWeek),
+      delta: `${pct(users.activeThisWeek, users.total)}% of users · ${n(engagement.neverLoggedIn)} never signed in`,
+      icon: 'bolt',
+    },
+    {
+      label: 'Revenue, 30 days',
+      value: rupees(revenue30),
+      delta: `${rupees(stats.data.revenue.capturedPaise)} all time · ${n(stats.data.revenue.capturedCount)} payments`,
+      icon: 'payments',
+    },
+  ];
+
+  return (
+    <>
+      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+        {headline.map((s) => (
+          <Card key={s.label}>
+            <div className="flex items-center justify-between">
+              <span className="text-[12.5px] font-semibold text-ink-3">{s.label}</span>
+              <Icon name={s.icon} size={18} className="text-ink-4" />
             </div>
+            <span className="mt-2 block text-[26px] leading-none font-extrabold tracking-[-0.02em] tabular">
+              {s.value}
+            </span>
+            <span className="mt-1.5 block text-[11.5px] text-ink-3">{s.delta}</span>
           </Card>
+        ))}
+      </div>
 
-          <p className="text-[12.5px] text-ink-3">
-            Deleting a user permanently removes their content and requires typing{' '}
-            <code>DELETE</code> to confirm. Email addresses cannot be changed from here.
+      <div className="grid gap-4 lg:grid-cols-[1fr_1fr]">
+        <Card>
+          <h2 className="text-[15px] font-bold">Content across the platform</h2>
+          <dl className="mt-4 grid grid-cols-2 gap-x-6 gap-y-2.5">
+            {Object.entries(content).map(([k, v]) => (
+              <div key={k} className="flex items-baseline justify-between gap-3">
+                <dt className="text-[13px] text-ink-3">{CONTENT_NAME[k] ?? k}</dt>
+                <dd className="font-mono text-[13px] font-semibold tabular">{n(v)}</dd>
+              </div>
+            ))}
+          </dl>
+        </Card>
+
+        <Card>
+          <h2 className="text-[15px] font-bold">Feature adoption</h2>
+          <p className="mt-1 text-[12.5px] text-ink-3">
+            Share of all {n(users.total)} users who have used each area at least once.
           </p>
-        </>
-      ) : null}
-
-      {tab === 'subscriptions' ? (
-        <Card padded={false}>
-          <div className="flex items-center justify-between p-5">
-            <h2 className="text-[15px] font-bold">PRO subscriptions</h2>
-            <span className="text-[12.5px] text-ink-3">Sorted by soonest to lapse</span>
+          <div className="mt-4 flex flex-col gap-2.5">
+            {analytics.data.featureAdoption.map((f) => {
+              const share = pct(f.users, users.total);
+              return (
+                <div key={f.feature} className="flex items-center gap-3">
+                  <span className="w-24 flex-none text-[12.5px] text-ink-2">
+                    {FEATURE_NAME[f.feature] ?? f.feature}
+                  </span>
+                  <span className="h-2 flex-1 overflow-hidden rounded-full bg-surface-2">
+                    <span
+                      className="block h-full rounded-full bg-brand"
+                      style={{ width: `${share}%` }}
+                    />
+                  </span>
+                  <span className="w-16 flex-none text-right font-mono text-[12px] text-ink-3 tabular">
+                    {share}% · {n(f.users)}
+                  </span>
+                </div>
+              );
+            })}
           </div>
-          <div className="overflow-x-auto border-t border-line">
-            <table className="w-full min-w-[560px]">
+        </Card>
+      </div>
+    </>
+  );
+}
+
+/* ── Users ────────────────────────────────────────────────────────────────── */
+
+function UsersTab() {
+  const { user: me } = useAuth();
+  const [input, setInput] = useState('');
+  const [search, setSearch] = useState('');
+  const [plan, setPlan] = useState<'' | 'FREE' | 'PRO'>('');
+  const [role, setRole] = useState<'' | 'USER' | 'ADMIN'>('');
+  const [page, setPage] = useState(1);
+  const [managing, setManaging] = useState<AdminUser | null>(null);
+
+  useEffect(() => {
+    const t = window.setTimeout(() => {
+      setSearch(input.trim());
+      setPage(1);
+    }, 300);
+    return () => window.clearTimeout(t);
+  }, [input]);
+
+  const list = useAdminUsers({
+    page,
+    limit: 25,
+    sort: 'newest',
+    ...(search ? { search } : {}),
+    ...(plan ? { plan } : {}),
+    ...(role ? { role } : {}),
+  });
+  const users = list.data?.data ?? [];
+  const rowsShown = users.length;
+
+  return (
+    <>
+      <Toolbar>
+        <SearchInput value={input} onChange={setInput} placeholder="Search name or email" />
+        <Chips
+          value={plan}
+          onChange={(v) => {
+            setPlan(v as typeof plan);
+            setPage(1);
+          }}
+          options={[
+            { value: '', label: 'Any plan' },
+            { value: 'FREE', label: 'Free' },
+            { value: 'PRO', label: 'PRO' },
+          ]}
+        />
+        <Chips
+          value={role}
+          onChange={(v) => {
+            setRole(v as typeof role);
+            setPage(1);
+          }}
+          options={[
+            { value: '', label: 'Any role' },
+            { value: 'USER', label: 'Users' },
+            { value: 'ADMIN', label: 'Admins' },
+          ]}
+        />
+        {list.data ? (
+          <span className="ml-auto text-[12.5px] text-ink-3 tabular">
+            {n(list.data.pagination.total)}{' '}
+            {list.data.pagination.total === 1 ? 'account' : 'accounts'}
+          </span>
+        ) : null}
+      </Toolbar>
+
+      {list.isPending ? (
+        <p className="py-10 text-center text-[13.5px] text-ink-3">Loading…</p>
+      ) : users.length === 0 ? (
+        <Card className="grid place-items-center gap-2 py-14 text-center">
+          <Icon name="person_off" size={28} className="text-ink-5" />
+          <p className="text-[14px] text-ink-3">No accounts match.</p>
+        </Card>
+      ) : (
+        <Card padded={false}>
+          <div className="overflow-x-auto">
+            <table className="w-full min-w-[760px]">
               <thead>
                 <tr className="border-b border-line text-left">
-                  {['User', 'Plan', 'Renews', 'Days left'].map((h) => (
+                  {['User', 'Plan', 'Role', 'Joined', 'Last sign-in', 'Content', ''].map((h) => (
                     <th
                       key={h}
                       className="px-5 py-2.5 text-[11.5px] font-bold text-ink-4 uppercase"
@@ -305,35 +341,372 @@ export default function Admin() {
                 </tr>
               </thead>
               <tbody>
-                {[
-                  ['r.mehta@uni.se', 'Monthly', '12 Sep 2026', 6],
-                  ['a.lindqvist@uni.se', 'Yearly', '2 Mar 2027', 177],
-                  ['admin@skrivbok.local', 'Comped', '—', null],
-                ].map(([email, plan, renews, days]) => (
-                  <tr key={email as string} className="border-b border-line last:border-b-0">
-                    <td className="px-5 py-3 text-[13.5px]">{email}</td>
-                    <td className="px-5 py-3 text-[13px] text-ink-3">{plan}</td>
-                    <td className="px-5 py-3 text-[13px] tabular">{renews}</td>
+                {users.map((u) => (
+                  <tr
+                    key={u.id}
+                    className="border-b border-line last:border-b-0 hover:bg-surface-3"
+                  >
                     <td className="px-5 py-3">
-                      {days === null ? (
-                        <span className="text-[13px] text-ink-3">—</span>
+                      <p className="text-[13.5px] font-semibold">
+                        {u.name ?? '—'}
+                        {u.id === me?.id ? (
+                          <span className="ml-1.5 text-[11px] font-normal text-ink-4">(you)</span>
+                        ) : null}
+                      </p>
+                      <p className="text-[12.5px] text-ink-3">{u.email}</p>
+                    </td>
+                    <td className="px-5 py-3">
+                      <Pill tone={u.plan === 'PRO' ? 'brand' : 'neutral'}>{u.plan}</Pill>
+                    </td>
+                    <td className="px-5 py-3">
+                      {u.role === 'ADMIN' ? (
+                        <Pill tone="danger">admin</Pill>
                       ) : (
-                        <Pill tone={(days as number) < 14 ? 'warning' : 'neutral'}>
-                          {days} days
-                        </Pill>
+                        <span className="text-[13px] text-ink-3">user</span>
                       )}
+                    </td>
+                    <td className="px-5 py-3 text-[13px] text-ink-3 tabular">
+                      {longDate(u.createdAt)}
+                    </td>
+                    <td className="px-5 py-3 text-[13px] text-ink-3">
+                      {u.lastLoginAt ? relative(u.lastLoginAt) : 'Never'}
+                    </td>
+                    <td className="px-5 py-3 text-[12.5px] text-ink-3 tabular">
+                      {u._count.ownedProjects} projects · {u._count.ideas} ideas
+                    </td>
+                    <td className="px-5 py-3 text-right">
+                      <Button variant="secondary" size="sm" onClick={() => setManaging(u)}>
+                        Manage
+                      </Button>
                     </td>
                   </tr>
                 ))}
               </tbody>
             </table>
           </div>
+          {list.data ? (
+            <div className="border-t border-line px-5 py-3">
+              <Pagination
+                page={list.data.pagination.page}
+                totalPages={list.data.pagination.totalPages}
+                total={list.data.pagination.total}
+                shown={rowsShown}
+                onPrevious={() => setPage((p) => Math.max(1, p - 1))}
+                onNext={() => setPage((p) => p + 1)}
+              />
+            </div>
+          ) : null}
         </Card>
-      ) : null}
+      )}
 
-      {tab === 'reports' ? <ReportQueue /> : null}
-      {tab === 'reviews' ? <ReviewQueue /> : null}
-    </AppShell>
+      {managing ? (
+        <ManageUserDialog
+          user={managing}
+          isSelf={managing.id === me?.id}
+          onClose={() => setManaging(null)}
+        />
+      ) : null}
+    </>
+  );
+}
+
+/**
+ * One account, and what an admin can do to it.
+ *
+ * Role and plan are the two switches; a subscription end date is the manual
+ * override for comping an account or correcting a failed webhook. Signing
+ * out everywhere and deletion are separate, and deletion is typed — the
+ * server refuses it without the word, so a stray click cannot remove an
+ * account. Neither is offered on the admin's own account.
+ */
+function ManageUserDialog({
+  user,
+  isSelf,
+  onClose,
+}: {
+  user: AdminUser;
+  isSelf: boolean;
+  onClose: () => void;
+}) {
+  const toast = useToast();
+  const { update, remove, revokeSessions } = useAdminUserActions();
+  const [role, setRole] = useState<'USER' | 'ADMIN'>(user.role);
+  const [plan, setPlan] = useState<'FREE' | 'PRO'>(user.plan);
+  const [endsAt, setEndsAt] = useState(user.subscriptionEndsAt?.slice(0, 10) ?? '');
+  const [confirm, setConfirm] = useState('');
+
+  const changed =
+    role !== user.role ||
+    plan !== user.plan ||
+    endsAt !== (user.subscriptionEndsAt?.slice(0, 10) ?? '');
+  const busy = update.isPending || remove.isPending || revokeSessions.isPending;
+
+  async function save() {
+    try {
+      await update.mutateAsync({
+        id: user.id,
+        ...(role !== user.role ? { role } : {}),
+        ...(plan !== user.plan ? { plan } : {}),
+        ...(endsAt !== (user.subscriptionEndsAt?.slice(0, 10) ?? '')
+          ? { subscriptionEndsAt: endsAt ? new Date(`${endsAt}T00:00:00Z`).toISOString() : null }
+          : {}),
+      });
+      toast.success('Account updated');
+      onClose();
+    } catch (error) {
+      toast.error(error instanceof ApiError ? error.message : 'Could not update that account.');
+    }
+  }
+
+  return (
+    <Modal
+      open
+      onClose={busy ? () => undefined : onClose}
+      title={user.name ?? user.email}
+      description={user.email}
+      busy={busy}
+      onSubmit={(e) => {
+        e.preventDefault();
+        void save();
+      }}
+      footer={
+        <>
+          <Button type="button" variant="secondary" size="sm" onClick={onClose} disabled={busy}>
+            Close
+          </Button>
+          <Button
+            type="submit"
+            variant="brand"
+            size="sm"
+            loading={update.isPending}
+            disabled={!changed}
+          >
+            Save changes
+          </Button>
+        </>
+      }
+    >
+      <div className="flex flex-col gap-4">
+        <FieldRow>
+          <Select
+            label="Role"
+            value={role}
+            onChange={(e) => setRole(e.target.value as typeof role)}
+            options={[
+              { value: 'USER', label: 'User' },
+              { value: 'ADMIN', label: 'Admin' },
+            ]}
+            disabled={isSelf}
+            hint={isSelf ? 'You cannot change your own role.' : undefined}
+          />
+          <Select
+            label="Plan"
+            value={plan}
+            onChange={(e) => setPlan(e.target.value as typeof plan)}
+            options={[
+              { value: 'FREE', label: 'Free' },
+              { value: 'PRO', label: 'PRO' },
+            ]}
+          />
+        </FieldRow>
+        <Field
+          label="Subscription ends"
+          type="date"
+          value={endsAt}
+          onChange={(e) => setEndsAt(e.target.value)}
+          hint="Leave empty for no end date. A manual override — Razorpay sets this on its own."
+        />
+
+        <dl className="grid grid-cols-2 gap-x-6 gap-y-1.5 rounded-xl bg-surface-2 px-4 py-3 text-[12.5px]">
+          <dt className="text-ink-3">Joined</dt>
+          <dd className="text-right tabular">{longDate(user.createdAt)}</dd>
+          <dt className="text-ink-3">Last sign-in</dt>
+          <dd className="text-right">{user.lastLoginAt ? relative(user.lastLoginAt) : 'Never'}</dd>
+          <dt className="text-ink-3">Time zone</dt>
+          <dd className="text-right">{user.timezone}</dd>
+          <dt className="text-ink-3">Owns</dt>
+          <dd className="text-right tabular">
+            {user._count.ownedProjects} projects · {user._count.ideas} ideas
+          </dd>
+        </dl>
+
+        {!isSelf ? (
+          <div className="flex flex-col gap-3 border-t border-line pt-4">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <p className="text-[13px] text-ink-2">Sign this account out of every device.</p>
+              <Button
+                type="button"
+                variant="secondary"
+                size="sm"
+                loading={revokeSessions.isPending}
+                onClick={() =>
+                  void revokeSessions
+                    .mutateAsync(user.id)
+                    .then((r) =>
+                      toast.success(
+                        `Signed out of ${r.revoked} session${r.revoked === 1 ? '' : 's'}`,
+                      ),
+                    )
+                    .catch(() => toast.error('Could not revoke the sessions.'))
+                }
+              >
+                Sign out everywhere
+              </Button>
+            </div>
+
+            <div className="rounded-xl border border-danger/25 bg-danger-tint p-3.5">
+              <p className="text-[13px] font-semibold text-danger-ink">Delete this account</p>
+              <p className="mt-0.5 text-[12.5px] text-danger-ink/80">
+                Everything they made goes with it. Type DELETE to confirm.
+              </p>
+              <div className="mt-2.5 flex gap-2">
+                <input
+                  value={confirm}
+                  onChange={(e) => setConfirm(e.target.value)}
+                  placeholder="DELETE"
+                  className="h-9 min-w-0 flex-1 rounded-[9px] border border-danger/30 bg-surface px-3 font-mono text-[13px] outline-none focus:border-danger"
+                />
+                <Button
+                  type="button"
+                  variant="danger"
+                  size="sm"
+                  disabled={confirm !== 'DELETE'}
+                  loading={remove.isPending}
+                  onClick={() =>
+                    void remove
+                      .mutateAsync(user.id)
+                      .then(() => {
+                        toast.success('Account deleted');
+                        onClose();
+                      })
+                      .catch((error: unknown) =>
+                        toast.error(
+                          error instanceof ApiError
+                            ? error.message
+                            : 'Could not delete that account.',
+                        ),
+                      )
+                  }
+                >
+                  Delete
+                </Button>
+              </div>
+            </div>
+          </div>
+        ) : null}
+      </div>
+    </Modal>
+  );
+}
+
+/* ── Subscriptions ────────────────────────────────────────────────────────── */
+
+function SubscriptionsTab() {
+  const [page, setPage] = useState(1);
+  const list = useAdminSubscriptions({ page, limit: 25 });
+  const rows = list.data?.data ?? [];
+  const rowsShown = rows.length;
+
+  return (
+    <Card padded={false}>
+      <div className="flex items-center justify-between p-5">
+        <div>
+          <h2 className="text-[15px] font-bold">PRO subscriptions</h2>
+          <p className="mt-0.5 text-[12.5px] text-ink-3">
+            {list.data ? `${n(list.data.pagination.total)} on PRO` : ''} · soonest to lapse first
+          </p>
+        </div>
+      </div>
+
+      {list.isPending ? (
+        <p className="border-t border-line py-10 text-center text-[13.5px] text-ink-3">Loading…</p>
+      ) : rows.length === 0 ? (
+        <p className="border-t border-line py-10 text-center text-[13.5px] text-ink-3">
+          Nobody is on PRO yet.
+        </p>
+      ) : (
+        <div className="overflow-x-auto border-t border-line">
+          <table className="w-full min-w-[560px]">
+            <thead>
+              <tr className="border-b border-line text-left">
+                {['User', 'Since', 'Ends', 'Days left'].map((h) => (
+                  <th key={h} className="px-5 py-2.5 text-[11.5px] font-bold text-ink-4 uppercase">
+                    {h}
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map((r) => (
+                <tr key={r.id} className="border-b border-line last:border-b-0">
+                  <td className="px-5 py-3">
+                    <p className="text-[13.5px] font-semibold">{r.name ?? '—'}</p>
+                    <p className="text-[12.5px] text-ink-3">{r.email}</p>
+                  </td>
+                  <td className="px-5 py-3 text-[13px] text-ink-3 tabular">
+                    {longDate(r.createdAt)}
+                  </td>
+                  <td className="px-5 py-3 text-[13px] tabular">
+                    {r.subscriptionEndsAt ? longDate(r.subscriptionEndsAt) : 'No end date'}
+                  </td>
+                  <td className="px-5 py-3">
+                    {r.daysRemaining === null ? (
+                      <span className="text-[13px] text-ink-3">—</span>
+                    ) : r.isExpired ? (
+                      <Pill tone="danger">expired</Pill>
+                    ) : (
+                      <Pill tone={r.daysRemaining < 14 ? 'warning' : 'neutral'}>
+                        {r.daysRemaining} {r.daysRemaining === 1 ? 'day' : 'days'}
+                      </Pill>
+                    )}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          {list.data ? (
+            <div className="border-t border-line px-5 py-3">
+              <Pagination
+                page={list.data.pagination.page}
+                totalPages={list.data.pagination.totalPages}
+                total={list.data.pagination.total}
+                shown={rowsShown}
+                onPrevious={() => setPage((p) => Math.max(1, p - 1))}
+                onNext={() => setPage((p) => p + 1)}
+              />
+            </div>
+          ) : null}
+        </div>
+      )}
+    </Card>
+  );
+}
+
+/** A row of toggle chips, one on at a time. */
+function Chips({
+  value,
+  onChange,
+  options,
+}: {
+  value: string;
+  onChange: (value: string) => void;
+  options: { value: string; label: string }[];
+}) {
+  return (
+    <div className="flex flex-none rounded-xl border border-line bg-surface p-1">
+      {options.map((o) => (
+        <button
+          key={o.value}
+          type="button"
+          onClick={() => onChange(o.value)}
+          className={`press rounded-lg px-3 py-1.5 text-[13px] font-semibold transition ${
+            value === o.value ? 'bg-brand-tint text-brand-deep' : 'text-ink-3 hover:text-ink'
+          }`}
+        >
+          {o.label}
+        </button>
+      ))}
+    </div>
   );
 }
 
