@@ -790,7 +790,7 @@ function CareerStats() {
 
 const careerGoalsConfig: ResourceConfig<CareerGoal> = {
   title: 'Career goals',
-  icon: 'trending_up',
+  icon: 'stairs',
   noun: 'goal',
   blurb: 'Set, track, and achieve your career aspirations and personal goals.',
   createLabel: 'Add goal',

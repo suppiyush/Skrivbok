@@ -305,7 +305,7 @@ export function ResourceScreen<T extends { id: string }>({
           <>
             {config.extraAction?.()}
             <Button
-              variant="primary"
+              variant="brand"
               size="sm"
               icon="add"
               disabled={atLimit}
@@ -323,7 +323,7 @@ export function ResourceScreen<T extends { id: string }>({
           title={`All ${limit.limit} on the free plan are in use`}
           action={
             <Link to="/upgrade">
-              <Button variant="primary" size="sm">
+              <Button variant="brand" size="sm">
                 See PRO
               </Button>
             </Link>
@@ -395,7 +395,7 @@ export function ResourceScreen<T extends { id: string }>({
                   ? list.error.message
                   : 'The server did not respond.'}
               </p>
-              <Button variant="primary" size="sm" onClick={() => void list.refetch()}>
+              <Button variant="brand" size="sm" onClick={() => void list.refetch()}>
                 Try again
               </Button>
             </Card>
@@ -416,7 +416,7 @@ export function ResourceScreen<T extends { id: string }>({
               icon={config.icon}
               title={config.emptyTitle}
               action={
-                <Button variant="primary" icon="add" onClick={() => setEditing(null)}>
+                <Button variant="brand" icon="add" onClick={() => setEditing(null)}>
                   {config.createLabel}
                 </Button>
               }
@@ -522,7 +522,7 @@ export function ResourceScreen<T extends { id: string }>({
             >
               Cancel
             </Button>
-            <Button type="submit" variant="primary" size="sm" loading={saving}>
+            <Button type="submit" variant="brand" size="sm" loading={saving}>
               {editing ? 'Save changes' : config.createLabel}
             </Button>
           </>

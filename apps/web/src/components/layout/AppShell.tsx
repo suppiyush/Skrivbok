@@ -12,7 +12,7 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../lib/auth';
-import { FEATURE_PATHS } from '../../lib/features';
+import { accentVars, FEATURE_PATHS, paletteFor } from '../../lib/features';
 import {
   useCareerSummary,
   useDeadlineSummary,
@@ -146,6 +146,13 @@ export function AppShell({ children, fill = false }: { children: ReactNode; fill
 
   const BAR = 64;
   const expanded = !collapsed;
+
+  // The section's own colour, applied to the content region and nowhere
+  // else: the header and sidebar stay coral whichever section is open, so the
+  // chrome reads as one product and the page as one room in it. The variables
+  // are the brand tokens themselves, so nothing inside has to know.
+  const palette = paletteFor(pathname);
+  const accent = palette ? accentVars(palette) : undefined;
   const initials =
     (user?.name ?? user?.email ?? '?')
       .split(/[\s@.]+/)
@@ -400,7 +407,7 @@ export function AppShell({ children, fill = false }: { children: ReactNode; fill
           screen that manages its own scrolling — a two-pane editor, say — the
           centred, padded column above is the wrong container: it would let the
           page grow past the fold and put a second scrollbar on the window. */}
-      <main className="with-sidebar sidebar-motion pt-16">
+      <main className="with-sidebar sidebar-motion pt-16" style={accent}>
         {fill ? (
           <div className="h-[calc(100dvh-64px)] overflow-hidden">{children}</div>
         ) : (

@@ -174,10 +174,11 @@ export default function Projects() {
       <PageHeader
         title="Projects"
         crumbs={[{ label: 'Projects' }]}
+        icon="folder_open"
         description="Manage all your projects, track progress, and collaborate with your team"
         actions={
           <Button
-            variant="primary"
+            variant="brand"
             size="sm"
             icon="add"
             disabled={atLimit}
@@ -224,7 +225,7 @@ export default function Projects() {
         <Card className="grid place-items-center gap-3 py-14 text-center">
           <Icon name="cloud_off" size={30} className="text-danger" />
           <h2 className="text-[17px] font-bold">Projects could not be loaded</h2>
-          <Button variant="primary" size="sm" onClick={() => void list.refetch()}>
+          <Button variant="brand" size="sm" onClick={() => void list.refetch()}>
             Try again
           </Button>
         </Card>
@@ -241,7 +242,7 @@ export default function Projects() {
             icon="folder_open"
             title={search || scope !== 'all' ? 'Nothing matches' : 'No projects yet'}
             action={
-              <Button variant="primary" icon="add" onClick={() => setEditing(null)}>
+              <Button variant="brand" icon="add" onClick={() => setEditing(null)}>
                 Add project
               </Button>
             }
@@ -304,7 +305,7 @@ export default function Projects() {
             <Button variant="secondary" size="sm" onClick={closeDialog} disabled={saving}>
               Cancel
             </Button>
-            <Button type="submit" variant="primary" size="sm" loading={saving}>
+            <Button type="submit" variant="brand" size="sm" loading={saving}>
               {editing ? 'Save changes' : 'Create project'}
             </Button>
           </>
@@ -569,7 +570,7 @@ function ProjectCard({
             {(project.myRole ?? 'VIEWER').toLowerCase()}
           </span>
           <Button
-            variant="primary"
+            variant="brand"
             size="sm"
             icon="check"
             loading={accepting}
@@ -757,7 +758,7 @@ function MembersDialog({ project, onClose }: { project: Project | null; onClose:
             <div className="min-w-[150px] flex-1">
               <RoleSelect name="role" defaultValue="VIEWER" />
             </div>
-            <Button type="submit" variant="primary" size="sm" loading={add.isPending}>
+            <Button type="submit" variant="brand" size="sm" loading={add.isPending}>
               Invite
             </Button>
           </div>

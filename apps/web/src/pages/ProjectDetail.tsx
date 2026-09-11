@@ -158,7 +158,7 @@ export default function ProjectDetail() {
           title="Project not found"
           action={
             <Link to="/projects">
-              <Button variant="primary" icon="arrow_back">
+              <Button variant="brand" icon="arrow_back">
                 Back to projects
               </Button>
             </Link>
@@ -187,6 +187,7 @@ export default function ProjectDetail() {
         <PageHeader
           title={project.name}
           crumbs={[{ label: 'Projects', to: '/projects' }, { label: project.name }]}
+          icon="folder_open"
           {...(project.description ? { description: project.description } : {})}
           meta={
             <div className="flex flex-wrap items-center gap-2">
@@ -210,7 +211,7 @@ export default function ProjectDetail() {
                   Cancel
                 </Button>
                 <Button
-                  variant="primary"
+                  variant="brand"
                   size="sm"
                   icon="check"
                   loading={save.isPending}

@@ -168,9 +168,10 @@ export default function Calendar() {
       <PageHeader
         title="Calendar"
         crumbs={[{ label: 'Calendar' }]}
+        icon="calendar_month"
         description="Events, recurring commitments and meetings. Recurring events stay correct across daylight-saving changes."
         actions={
-          <Button variant="primary" size="sm" icon="add" onClick={() => setEditing(null)}>
+          <Button variant="brand" size="sm" icon="add" onClick={() => setEditing(null)}>
             Add event
           </Button>
         }
@@ -221,7 +222,7 @@ export default function Calendar() {
         <Card className="grid place-items-center gap-3 py-14 text-center">
           <Icon name="cloud_off" size={30} className="text-danger" />
           <h2 className="text-[17px] font-bold">The calendar could not be loaded</h2>
-          <Button variant="primary" size="sm" onClick={() => void range.refetch()}>
+          <Button variant="brand" size="sm" onClick={() => void range.refetch()}>
             Try again
           </Button>
         </Card>
@@ -291,7 +292,7 @@ export default function Calendar() {
           icon="calendar_month"
           title="Nothing scheduled this month"
           action={
-            <Button variant="primary" icon="add" onClick={() => setEditing(null)}>
+            <Button variant="brand" icon="add" onClick={() => setEditing(null)}>
               Add event
             </Button>
           }
@@ -331,7 +332,7 @@ export default function Calendar() {
             >
               Cancel
             </Button>
-            <Button type="submit" variant="primary" size="sm" loading={saving}>
+            <Button type="submit" variant="brand" size="sm" loading={saving}>
               {editing ? 'Save changes' : 'Create event'}
             </Button>
           </>
@@ -537,9 +538,10 @@ export function Meetings() {
       <PageHeader
         title="Meetings"
         crumbs={[{ label: 'Calendar', to: '/calendar' }, { label: 'Meetings' }]}
+        icon="groups"
         description="Propose a time and see it accepted or declined. Accepting puts the event on both calendars at once; cancelling removes it from both."
         actions={
-          <Button variant="primary" size="sm" icon="add" onClick={() => setProposing(true)}>
+          <Button variant="brand" size="sm" icon="add" onClick={() => setProposing(true)}>
             Propose a meeting
           </Button>
         }
@@ -579,7 +581,7 @@ export function Meetings() {
           title={box === 'incoming' ? 'No incoming requests' : 'You have not proposed anything'}
           action={
             box === 'outgoing' ? (
-              <Button variant="primary" icon="add" onClick={() => setProposing(true)}>
+              <Button variant="brand" icon="add" onClick={() => setProposing(true)}>
                 Propose a meeting
               </Button>
             ) : undefined
@@ -625,7 +627,7 @@ export function Meetings() {
             >
               Cancel
             </Button>
-            <Button type="submit" variant="primary" size="sm" loading={create.isPending}>
+            <Button type="submit" variant="brand" size="sm" loading={create.isPending}>
               Send proposal
             </Button>
           </>
@@ -730,7 +732,7 @@ function MeetingCard({
                 <Button variant="secondary" size="sm" onClick={onDecline} disabled={busy}>
                   Decline
                 </Button>
-                <Button variant="primary" size="sm" icon="check" onClick={onAccept} disabled={busy}>
+                <Button variant="brand" size="sm" icon="check" onClick={onAccept} disabled={busy}>
                   Accept
                 </Button>
               </>

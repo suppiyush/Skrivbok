@@ -219,7 +219,7 @@ function VoiceNoteDialog({
             Cancel
           </Button>
           <Button
-            variant="primary"
+            variant="brand"
             size="sm"
             icon="check"
             loading={busy}

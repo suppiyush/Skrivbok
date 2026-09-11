@@ -10,7 +10,14 @@ import { useState } from 'react';
 import { AppShell } from '../components/layout/AppShell';
 import { Button } from '../components/ui/Button';
 import { Icon } from '../components/ui/Icon';
-import { Card, FilterButton, PageHeader, Pill, SearchInput, Toolbar } from '../components/ui/Layout';
+import {
+  Card,
+  FilterButton,
+  PageHeader,
+  Pill,
+  SearchInput,
+  Toolbar,
+} from '../components/ui/Layout';
 import { useToast } from '../components/ui/Toast';
 import { useAdminReviews, useModerateReview } from '../lib/queries';
 
@@ -45,18 +52,77 @@ const ADOPTION = [
 ] as const;
 
 const USERS = [
-  { name: 'A. Lindqvist', email: 'a.lindqvist@uni.se', plan: 'PRO', role: 'USER', joined: '14 Jan 2026', active: '2h ago' },
-  { name: 'R. Mehta', email: 'r.mehta@uni.se', plan: 'PRO', role: 'USER', joined: '3 Feb 2026', active: 'Yesterday' },
-  { name: 'K. Osei', email: 'k.osei@uni.se', plan: 'FREE', role: 'USER', joined: '21 Mar 2026', active: '4 days ago' },
-  { name: 'Administrator', email: 'admin@skrivbok.local', plan: 'PRO', role: 'ADMIN', joined: '2 Sep 2026', active: 'Now' },
-  { name: null, email: 'j.svensson@other.ac.uk', plan: 'FREE', role: 'USER', joined: '1 Sep 2026', active: 'Never' },
+  {
+    name: 'A. Lindqvist',
+    email: 'a.lindqvist@uni.se',
+    plan: 'PRO',
+    role: 'USER',
+    joined: '14 Jan 2026',
+    active: '2h ago',
+  },
+  {
+    name: 'R. Mehta',
+    email: 'r.mehta@uni.se',
+    plan: 'PRO',
+    role: 'USER',
+    joined: '3 Feb 2026',
+    active: 'Yesterday',
+  },
+  {
+    name: 'K. Osei',
+    email: 'k.osei@uni.se',
+    plan: 'FREE',
+    role: 'USER',
+    joined: '21 Mar 2026',
+    active: '4 days ago',
+  },
+  {
+    name: 'Administrator',
+    email: 'admin@skrivbok.local',
+    plan: 'PRO',
+    role: 'ADMIN',
+    joined: '2 Sep 2026',
+    active: 'Now',
+  },
+  {
+    name: null,
+    email: 'j.svensson@other.ac.uk',
+    plan: 'FREE',
+    role: 'USER',
+    joined: '1 Sep 2026',
+    active: 'Never',
+  },
 ];
 
 const REPORTS = [
-  { type: 'BUG', title: 'Recurrence off by an hour', from: 'a.lindqvist@uni.se', status: 'OPEN', date: '2 Sep' },
-  { type: 'FEATURE', title: 'iCal export for the calendar', from: 'r.mehta@uni.se', status: 'OPEN', date: '28 Aug' },
-  { type: 'BUG', title: 'Tag filter drops the last tag', from: 'k.osei@uni.se', status: 'IN_PROGRESS', date: '26 Aug' },
-  { type: 'FEEDBACK', title: 'Tag filters are excellent', from: '(deleted account)', status: 'RESOLVED', date: '20 Aug' },
+  {
+    type: 'BUG',
+    title: 'Recurrence off by an hour',
+    from: 'a.lindqvist@uni.se',
+    status: 'OPEN',
+    date: '2 Sep',
+  },
+  {
+    type: 'FEATURE',
+    title: 'iCal export for the calendar',
+    from: 'r.mehta@uni.se',
+    status: 'OPEN',
+    date: '28 Aug',
+  },
+  {
+    type: 'BUG',
+    title: 'Tag filter drops the last tag',
+    from: 'k.osei@uni.se',
+    status: 'IN_PROGRESS',
+    date: '26 Aug',
+  },
+  {
+    type: 'FEEDBACK',
+    title: 'Tag filters are excellent',
+    from: '(deleted account)',
+    status: 'RESOLVED',
+    date: '20 Aug',
+  },
 ];
 
 const REPORT_TONE = {
@@ -79,7 +145,11 @@ export default function Admin() {
       <PageHeader
         title="Admin"
         description="Platform statistics, user management and report triage."
-        actions={<Pill tone="danger" icon="shield_person">Administrator</Pill>}
+        actions={
+          <Pill tone="danger" icon="shield_person">
+            Administrator
+          </Pill>
+        }
       />
 
       <div className="flex gap-1 overflow-x-auto border-b border-line">
@@ -185,7 +255,10 @@ export default function Admin() {
                 </thead>
                 <tbody>
                   {USERS.map((u) => (
-                    <tr key={u.email} className="border-b border-line last:border-b-0 hover:bg-surface-3">
+                    <tr
+                      key={u.email}
+                      className="border-b border-line last:border-b-0 hover:bg-surface-3"
+                    >
                       <td className="px-5 py-3">
                         <p className="text-[13.5px] font-semibold">{u.name ?? '—'}</p>
                         <p className="text-[12.5px] text-ink-3">{u.email}</p>
@@ -219,8 +292,8 @@ export default function Admin() {
           </Card>
 
           <p className="text-[12.5px] text-ink-3">
-            Deleting a user permanently removes their content and requires typing <code>DELETE</code>{' '}
-            to confirm. Email addresses cannot be changed from here.
+            Deleting a user permanently removes their content and requires typing{' '}
+            <code>DELETE</code> to confirm. Email addresses cannot be changed from here.
           </p>
         </>
       ) : null}
@@ -236,7 +309,10 @@ export default function Admin() {
               <thead>
                 <tr className="border-b border-line text-left">
                   {['User', 'Plan', 'Renews', 'Days left'].map((h) => (
-                    <th key={h} className="px-5 py-2.5 text-[11.5px] font-bold text-ink-4 uppercase">
+                    <th
+                      key={h}
+                      className="px-5 py-2.5 text-[11.5px] font-bold text-ink-4 uppercase"
+                    >
                       {h}
                     </th>
                   ))}
@@ -256,7 +332,9 @@ export default function Admin() {
                       {days === null ? (
                         <span className="text-[13px] text-ink-3">—</span>
                       ) : (
-                        <Pill tone={(days as number) < 14 ? 'warning' : 'neutral'}>{days} days</Pill>
+                        <Pill tone={(days as number) < 14 ? 'warning' : 'neutral'}>
+                          {days} days
+                        </Pill>
                       )}
                     </td>
                   </tr>
@@ -302,7 +380,6 @@ export default function Admin() {
         </Card>
       ) : null}
       {tab === 'reviews' ? <ReviewQueue /> : null}
-
     </AppShell>
   );
 }
@@ -363,7 +440,9 @@ function ReviewQueue() {
         <Card className="grid place-items-center gap-2 py-14 text-center">
           <Icon name="reviews" size={28} className="text-ink-5" />
           <p className="text-[14px] text-ink-3">
-            {status === 'PENDING' ? 'Nothing waiting for approval.' : `No ${status.toLowerCase()} reviews.`}
+            {status === 'PENDING'
+              ? 'Nothing waiting for approval.'
+              : `No ${status.toLowerCase()} reviews.`}
           </p>
         </Card>
       ) : (
