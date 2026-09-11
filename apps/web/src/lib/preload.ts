@@ -27,6 +27,8 @@ export const chunks = {
   projects: () => import('../pages/Projects'),
   projectDetail: () => import('../pages/ProjectDetail'),
   projectMeetings: () => import('../pages/ProjectMeetings'),
+  profile: () => import('../pages/Profile'),
+  resume: () => import('../pages/Resume'),
 };
 
 /**
@@ -41,7 +43,7 @@ const BY_PATH: Record<string, () => Promise<unknown>> = {
   '/calendar': chunks.calendar,
   '/meetings': chunks.calendar,
   '/admin': chunks.admin,
-  '/profile': chunks.account,
+  '/profile': chunks.profile,
   '/upgrade': chunks.account,
   '/notifications': chunks.account,
   '/help': chunks.account,

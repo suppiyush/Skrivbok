@@ -28,7 +28,8 @@ const ProjectMeetings = lazy(chunks.projectMeetings);
 const Admin = lazy(chunks.admin);
 const Calendar = lazy(chunks.calendar);
 const Meetings = lazy(() => chunks.calendar().then((m) => ({ default: m.Meetings })));
-const Profile = lazy(() => chunks.account().then((m) => ({ default: m.Profile })));
+const Profile = lazy(chunks.profile);
+const Resume = lazy(chunks.resume);
 const Upgrade = lazy(() => chunks.account().then((m) => ({ default: m.Upgrade })));
 const Notifications = lazy(() => chunks.account().then((m) => ({ default: m.Notifications })));
 const Help = lazy(() => chunks.account().then((m) => ({ default: m.Help })));
@@ -110,6 +111,7 @@ export const router = createBrowserRouter([
   { path: '/meetings', element: guarded(<Meetings />) },
   { path: '/career-goals', element: guarded(<CareerGoals />) },
   { path: '/profile', element: guarded(<Profile />) },
+  { path: '/profile/resume', element: guarded(<Resume />) },
   { path: '/upgrade', element: guarded(<Upgrade />) },
   { path: '/notifications', element: guarded(<Notifications />) },
   { path: '/help', element: guarded(<Help />) },

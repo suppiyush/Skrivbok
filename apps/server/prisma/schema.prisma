@@ -315,14 +315,32 @@ model Profile {
   department  String?
   institution String?
 
-  officialEmail String?
-  phone         String?
-  website       String?
-  scholarLink   String?
+  officialEmail  String?
+  alternateEmail String?
+  phone          String?
+  website        String?
+  scholarLink    String?
+  officeAddress  String?
 
   /// A short bio, and the keywords that describe the work.
   researchKeywords    String?
   researchDescription String?
+
+  /// Free text, each a paragraph or a list the author formats as they like.
+  professionalActivities String?
+  /// Comma-separated, like the keywords.
+  skills   String?
+  outreach String?
+
+  /// The repeating sections of the record, each a JSON array of small objects
+  /// whose shape is fixed by the API's schema. JSON rather than five tables
+  /// because they are only ever read and written whole, with the profile —
+  /// the form edits the document, and the résumé prints it.
+  degrees   Json @default("[]")
+  positions Json @default("[]")
+  courses   Json @default("[]")
+  grants    Json @default("[]")
+  awards    Json @default("[]")
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt

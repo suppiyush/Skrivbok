@@ -408,6 +408,41 @@ export interface Notification {
   createdAt: string;
 }
 
+/* The repeating sections of the academic record. Shapes fixed by the API. */
+export interface Degree {
+  degree: string;
+  field: string | null;
+  institution: string | null;
+  startYear: string | null;
+  endYear: string | null;
+}
+export interface Position {
+  title: string;
+  organisation: string | null;
+  startYear: string | null;
+  endYear: string | null;
+  description: string | null;
+}
+export interface Course {
+  title: string;
+  code: string | null;
+  level: string | null;
+  institution: string | null;
+  years: string | null;
+}
+export interface Grant {
+  title: string;
+  funder: string | null;
+  amount: string | null;
+  year: string | null;
+  role: string | null;
+}
+export interface Award {
+  title: string;
+  issuer: string | null;
+  year: string | null;
+}
+
 export interface Profile {
   id: string;
   userId: string;
@@ -417,11 +452,21 @@ export interface Profile {
   department: string | null;
   institution: string | null;
   officialEmail: string | null;
+  alternateEmail: string | null;
   phone: string | null;
   website: string | null;
   scholarLink: string | null;
+  officeAddress: string | null;
   researchKeywords: string | null;
   researchDescription: string | null;
+  professionalActivities: string | null;
+  skills: string | null;
+  outreach: string | null;
+  degrees: Degree[];
+  positions: Position[];
+  courses: Course[];
+  grants: Grant[];
+  awards: Award[];
   updatedAt: string;
 }
 
