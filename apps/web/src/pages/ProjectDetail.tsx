@@ -186,6 +186,7 @@ export default function ProjectDetail() {
       <div className="no-print">
         <PageHeader
           title={project.name}
+          crumbs={[{ label: 'Projects', to: '/projects' }, { label: project.name }]}
           {...(project.description ? { description: project.description } : {})}
           meta={
             <div className="flex flex-wrap items-center gap-2">

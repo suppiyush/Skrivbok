@@ -7,7 +7,55 @@
  * which read as clutter.
  */
 import type { ReactNode } from 'react';
+import { Link } from 'react-router-dom';
 import { Icon } from './Icon';
+
+/* ── Breadcrumb ───────────────────────────────────────────────────────────── */
+
+export interface Crumb {
+  label: string;
+  /** Absent on the last crumb, which is where you are. */
+  to?: string;
+}
+
+/**
+ * Where you are, and the way back.
+ *
+ * Always starts at the dashboard — every section is reached from it, so it is
+ * the one ancestor every trail shares and the one place the trail can begin.
+ * The last crumb is the current page and is text, not a link to itself.
+ */
+export function Breadcrumb({ trail }: { trail: Crumb[] }) {
+  const crumbs: Crumb[] = [{ label: 'Dashboard', to: '/dashboard' }, ...trail];
+
+  return (
+    <nav aria-label="Breadcrumb" className="flex items-center gap-1.5 text-[13px] text-ink-3">
+      {crumbs.map((crumb, i) => {
+        const last = i === crumbs.length - 1;
+        return (
+          <span key={`${crumb.label}-${i}`} className="flex min-w-0 items-center gap-1.5">
+            {i > 0 ? (
+              <Icon name="chevron_right" size={15} className="flex-none text-ink-5" />
+            ) : null}
+            {crumb.to && !last ? (
+              <Link to={crumb.to} className="flex items-center gap-1.5 transition hover:text-ink">
+                {i === 0 ? <Icon name="dashboard" size={15} /> : null}
+                {crumb.label}
+              </Link>
+            ) : (
+              <span
+                className={`truncate ${last ? 'font-semibold text-ink-2' : ''}`}
+                aria-current={last ? 'page' : undefined}
+              >
+                {crumb.label}
+              </span>
+            )}
+          </span>
+        );
+      })}
+    </nav>
+  );
+}
 
 /**
  * The heading block at the top of a screen.
@@ -26,17 +74,25 @@ export function PageHeader({
   description,
   actions,
   meta,
+  crumbs,
   serif = false,
 }: {
   title: string;
   description?: string;
   actions?: ReactNode;
   meta?: ReactNode;
+  /** The trail below the dashboard. Omit on the dashboard itself. */
+  crumbs?: Crumb[];
   serif?: boolean;
 }) {
   return (
     <header className="flex flex-wrap items-start justify-between gap-x-6 gap-y-4">
       <div className="min-w-0">
+        {crumbs ? (
+          <div className="mb-2.5">
+            <Breadcrumb trail={crumbs} />
+          </div>
+        ) : null}
         <h1
           className={
             serif

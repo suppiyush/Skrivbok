@@ -167,6 +167,7 @@ export default function Calendar() {
     <AppShell>
       <PageHeader
         title="Calendar"
+        crumbs={[{ label: 'Calendar' }]}
         description="Events, recurring commitments and meetings. Recurring events stay correct across daylight-saving changes."
         actions={
           <Button variant="primary" size="sm" icon="add" onClick={() => setEditing(null)}>
@@ -322,7 +323,12 @@ export default function Calendar() {
                 Delete
               </Button>
             ) : null}
-            <Button variant="secondary" size="sm" onClick={() => setEditing(undefined)} disabled={saving}>
+            <Button
+              variant="secondary"
+              size="sm"
+              onClick={() => setEditing(undefined)}
+              disabled={saving}
+            >
               Cancel
             </Button>
             <Button type="submit" variant="primary" size="sm" loading={saving}>
@@ -530,6 +536,7 @@ export function Meetings() {
     <AppShell>
       <PageHeader
         title="Meetings"
+        crumbs={[{ label: 'Calendar', to: '/calendar' }, { label: 'Meetings' }]}
         description="Propose a time and see it accepted or declined. Accepting puts the event on both calendars at once; cancelling removes it from both."
         actions={
           <Button variant="primary" size="sm" icon="add" onClick={() => setProposing(true)}>
@@ -589,7 +596,9 @@ export function Meetings() {
               <MeetingCard
                 request={request}
                 box={box}
-                onAccept={() => act(accept, request.id, 'Meeting accepted — it is on both calendars')}
+                onAccept={() =>
+                  act(accept, request.id, 'Meeting accepted — it is on both calendars')
+                }
                 onDecline={() => act(decline, request.id, 'Meeting declined')}
                 onCancel={() => act(cancel, request.id, 'Meeting cancelled')}
                 busy={accept.isPending || decline.isPending || cancel.isPending}

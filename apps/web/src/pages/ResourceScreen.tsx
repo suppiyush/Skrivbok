@@ -282,6 +282,7 @@ export function ResourceScreen<T extends { id: string }>({
       <PageHeader
         title={config.title}
         description={config.blurb}
+        crumbs={[{ label: config.title }]}
         meta={limit?.limited ? <QuotaMeter status={limit} /> : undefined}
         actions={
           <>

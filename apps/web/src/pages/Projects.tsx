@@ -173,6 +173,7 @@ export default function Projects() {
     <AppShell>
       <PageHeader
         title="Projects"
+        crumbs={[{ label: 'Projects' }]}
         description="Manage all your projects, track progress, and collaborate with your team"
         actions={
           <Button
