@@ -148,6 +148,22 @@ export function AppShell({ children, fill = false }: { children: ReactNode; fill
   const BAR = 64;
   const expanded = !collapsed;
 
+  // Admins get one more group. It is added here rather than listed with the
+  // others, so that a user who is not one never sees a route they cannot open.
+  const navGroups = useMemo(
+    () =>
+      user?.role === 'ADMIN'
+        ? [
+            ...NAV_GROUPS,
+            {
+              group: 'Admin',
+              items: [{ icon: 'admin_panel_settings', name: 'Admin panel', to: '/admin' }],
+            },
+          ]
+        : NAV_GROUPS,
+    [user?.role],
+  );
+
   // The section's own colour, applied to the content region and nowhere
   // else: the header and sidebar stay coral whichever section is open, so the
   // chrome reads as one product and the page as one room in it. The variables
@@ -287,7 +303,7 @@ export function AppShell({ children, fill = false }: { children: ReactNode; fill
         style={{ width: expanded ? 236 : 72 }}
       >
         <nav aria-label="Sections" className="flex-1 overflow-y-auto px-3 py-4">
-          {NAV_GROUPS.map((g, gi) => (
+          {navGroups.map((g, gi) => (
             <div key={g.group || gi} className={gi > 0 ? 'mt-5' : ''}>
               {g.group && expanded ? (
                 <p className="px-3 pb-1.5 text-[10.5px] font-bold tracking-[0.1em] text-ink-5 uppercase">
