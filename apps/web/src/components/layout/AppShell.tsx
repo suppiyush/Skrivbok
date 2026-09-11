@@ -27,6 +27,7 @@ import { longDate, relative } from '../../lib/format';
 import type { LimitStatus } from '../../lib/api';
 import { Icon } from '../ui/Icon';
 import { Logo } from '../marketing/MarketingChrome';
+import { GlobalSearch } from './GlobalSearch';
 
 export type Density = 'comfortable' | 'compact';
 
@@ -201,16 +202,7 @@ export function AppShell({ children, fill = false }: { children: ReactNode; fill
         </Link>
 
         <div className="mx-auto hidden min-w-0 flex-1 justify-center md:flex">
-          {/* White, now that the bar behind it is the canvas: `surface-2` is
-              four points off the ground it would be sitting on. */}
-          <label className="flex h-10 w-full max-w-[420px] items-center gap-2.5 rounded-full border border-line bg-surface px-4">
-            <Icon name="search" size={19} className="flex-none text-ink-4" />
-            <input
-              placeholder="Search everything"
-              aria-label="Search everything"
-              className="w-full min-w-0 border-0 bg-transparent text-[14px] text-ink outline-none placeholder:text-ink-4"
-            />
-          </label>
+          <GlobalSearch />
         </div>
 
         <div className="ml-auto flex flex-none items-center gap-1 md:ml-0">

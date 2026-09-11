@@ -162,9 +162,17 @@ export function ResourceScreen<T extends { id: string }>({
   const location = useLocation();
   const navigate = useNavigate();
 
+  /**
+   * The header's search can send someone here to find one record by name.
+   * It arrives as router state — intent for one navigation, like `openCreate`
+   * below — and both boxes start out holding it, so the list is already
+   * narrowed in the first frame rather than after the debounce.
+   */
+  const arrivalSearch = (location.state as { search?: string } | null)?.search ?? '';
+
   const [page, setPage] = useState(1);
-  const [searchInput, setSearchInput] = useState('');
-  const [search, setSearch] = useState('');
+  const [searchInput, setSearchInput] = useState(arrivalSearch);
+  const [search, setSearch] = useState(arrivalSearch);
   const [filters, setFilters] = useState<Record<string, string>>({});
   const [sort, setSort] = useState(config.sorts?.[0]?.value ?? '');
 
@@ -186,9 +194,10 @@ export function ResourceScreen<T extends { id: string }>({
   const [formError, setFormError] = useState<string | null>(null);
 
   // The flag has been acted on, so it is dropped from history straight away —
-  // left in place, a refresh or a back navigation would reopen the dialog.
+  // left in place, a refresh or a back navigation would reopen the dialog, or
+  // re-narrow the list to a name the user has since cleared.
   useEffect(() => {
-    if (openOnArrival) navigate(location.pathname, { replace: true, state: null });
+    if (openOnArrival || arrivalSearch) navigate(location.pathname, { replace: true, state: null });
     // Once, on arrival: re-running this when `location` changes would fire
     // again for the very navigation it just performed.
   }, []);

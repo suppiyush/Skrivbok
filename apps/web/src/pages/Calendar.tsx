@@ -11,8 +11,8 @@
  * detail of — has to look deliberate: muted, hatched and padlocked, never like
  * something that failed to load.
  */
-import { useMemo, useState, type FormEvent } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useEffect, useMemo, useState, type FormEvent } from 'react';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { AppShell } from '../components/layout/AppShell';
 import { Button } from '../components/ui/Button';
 import { EmptyState } from '../components/ui/EmptyState';
@@ -74,7 +74,18 @@ function sameLocalDay(iso: string, day: Date): boolean {
 export default function Calendar() {
   const toast = useToast();
   const navigate = useNavigate();
-  const [cursor, setCursor] = useState(() => monthStart(new Date()));
+  const location = useLocation();
+
+  // The header's search can send someone here for one event; it says when the
+  // event is, so the grid opens on that month rather than this one.
+  const arrivalAt = (location.state as { at?: string } | null)?.at;
+  const [cursor, setCursor] = useState(() =>
+    monthStart(arrivalAt ? new Date(arrivalAt) : new Date()),
+  );
+  useEffect(() => {
+    if (arrivalAt) navigate(location.pathname, { replace: true, state: null });
+    // Once, on arrival.
+  }, []);
   const [editing, setEditing] = useState<CalendarEvent | null | undefined>(undefined);
   const [deleting, setDeleting] = useState<CalendarEvent | null>(null);
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});

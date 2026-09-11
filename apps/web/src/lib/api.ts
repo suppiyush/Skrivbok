@@ -681,6 +681,31 @@ export const projects = {
     api.delete<void>(`/projects/${id}/meetings/${meetingId}`),
 };
 
+/* ── Search ───────────────────────────────────────────────────────────────── */
+
+export type SearchKind =
+  | 'project'
+  | 'idea'
+  | 'note'
+  | 'journal'
+  | 'deadline'
+  | 'future-work'
+  | 'literature'
+  | 'career-goal'
+  | 'event';
+
+export interface SearchHit {
+  kind: SearchKind;
+  id: string;
+  title: string;
+  subtitle: string | null;
+  /** For an event: when it is, so the calendar can open on the right month. */
+  at?: string;
+}
+
+/** Names only, across everything the user owns or is on. See the server note. */
+export const search = (q: string) => api.get<{ results: SearchHit[] }>(`/search${qs({ q })}`);
+
 /* ── Calendar ─────────────────────────────────────────────────────────────── */
 
 export const calendar = {

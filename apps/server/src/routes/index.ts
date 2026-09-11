@@ -25,6 +25,7 @@ import { notificationsRouter } from '../modules/notifications/index.js';
 import { profileRouter } from '../modules/profile/index.js';
 import { projectsRouter } from '../modules/projects/index.js';
 import { reportsRouter } from '../modules/reports/index.js';
+import { searchRouter } from '../modules/search/index.js';
 import {
   adminReviewsRouter,
   publicReviewsRouter,
@@ -49,6 +50,7 @@ apiRouter.use('/billing', billingRouter);
 apiRouter.use('/notifications', notificationsRouter);
 apiRouter.use('/reports', reportsRouter);
 apiRouter.use('/reviews', reviewsRouter);
+apiRouter.use('/search', searchRouter);
 apiRouter.use('/admin', adminRouter);
 apiRouter.use('/admin/reviews', adminReviewsRouter);
 // Unauthenticated: the provider signature authenticates these.
