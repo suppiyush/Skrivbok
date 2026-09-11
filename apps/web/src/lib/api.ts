@@ -166,6 +166,8 @@ export interface User {
 export interface MeResponse extends User {
   /** Linked identity providers. Always `['GOOGLE']` for accounts created here. */
   providers: string[];
+  /** What the account may do, not what it bought: true for PRO and for admins. */
+  isPro: boolean;
 }
 
 export interface PageMeta {
@@ -895,7 +897,11 @@ export const billing = {
   subscription: () =>
     api.get<{
       plan: 'FREE' | 'PRO';
+      isPro: boolean;
+      /** PRO comes with the account — an admin — rather than a subscription. */
+      included: boolean;
       subscriptionEndsAt: string | null;
+      isExpired: boolean;
       billingEnabled: boolean;
     }>('/billing/subscription'),
   usage: () =>

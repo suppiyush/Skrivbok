@@ -144,3 +144,52 @@ describe('users and subscriptions', () => {
     expect(subs.data[0]?.daysRemaining).toBeLessThanOrEqual(10);
   });
 });
+
+describe('an admin has PRO without buying it', () => {
+  it('is entitled in the session, with nothing to renew', async () => {
+    const me = await request(app).get('/api/v1/auth/me').set('Cookie', admin.cookie).expect(200);
+    const user = (me.body as { user: { plan: string; isPro: boolean } }).user;
+    expect(user.plan).toBe('FREE');
+    expect(user.isPro).toBe(true);
+
+    const sub = await request(app)
+      .get('/api/v1/billing/subscription')
+      .set('Cookie', admin.cookie)
+      .expect(200);
+    expect(sub.body).toMatchObject({ isPro: true, included: true, billingEnabled: false });
+  });
+
+  it('has no caps', async () => {
+    const usage = await request(app)
+      .get('/api/v1/billing/usage')
+      .set('Cookie', admin.cookie)
+      .expect(200);
+    const caps = usage.body as Record<string, { limited: boolean }>;
+    expect(caps['projects']?.limited).toBe(false);
+    expect(caps['careerGoals']?.limited).toBe(false);
+    expect(caps['literature']?.limited).toBe(false);
+
+    // And a free user does.
+    const theirs = await request(app)
+      .get('/api/v1/billing/usage')
+      .set('Cookie', bob.cookie)
+      .expect(200);
+    expect((theirs.body as Record<string, { limited: boolean }>)['projects']?.limited).toBe(true);
+  });
+
+  it('cannot be charged', async () => {
+    const response = await request(app)
+      .post('/api/v1/billing/orders')
+      .set('Cookie', admin.cookie)
+      .send({ plan: 'MONTHLY' });
+    // Refused before any provider is contacted — a 400 from our own check,
+    // not a 503 from billing being unconfigured in tests.
+    expect(response.status).toBe(400);
+    expect((response.body as { error: { message: string } }).error.message).toMatch(/included/i);
+  });
+
+  it('is not counted as a paying customer', async () => {
+    const stats = (await get('stats')).body as { users: { pro: number } };
+    expect(stats.users.pro).toBe(1);
+  });
+});

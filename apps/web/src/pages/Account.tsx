@@ -42,7 +42,8 @@ export function Upgrade() {
   const payments = usePayments({ limit: 10 });
   const [cycle, setCycle] = useState<'MONTHLY' | 'YEARLY'>('YEARLY');
 
-  const pro = (subscription.data?.plan ?? user?.plan) === 'PRO';
+  const pro = subscription.data?.isPro ?? user?.isPro ?? false;
+  const included = subscription.data?.included ?? false;
   const billingEnabled = subscription.data?.billingEnabled ?? false;
   const price = plans.data?.plans.find((p) => p.id === cycle);
 
@@ -84,10 +85,15 @@ export function Upgrade() {
       />
 
       {pro ? (
-        <Alert tone="success" title="You are on PRO">
-          {subscription.data?.subscriptionEndsAt
-            ? `Your subscription runs until ${longDate(subscription.data.subscriptionEndsAt)}.`
-            : 'Every cap is lifted.'}
+        <Alert
+          tone="success"
+          title={included ? 'PRO is included with your account' : 'You are on PRO'}
+        >
+          {included
+            ? 'Admins have everything, always — there is nothing to buy or renew.'
+            : subscription.data?.subscriptionEndsAt
+              ? `Your subscription runs until ${longDate(subscription.data.subscriptionEndsAt)}.`
+              : 'Every cap is lifted.'}
         </Alert>
       ) : null}
 

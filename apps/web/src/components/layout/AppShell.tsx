@@ -368,7 +368,7 @@ export function AppShell({ children, fill = false }: { children: ReactNode; fill
               Help and Settings below reduce to their icons. */}
           {user ? (
             expanded ? (
-              user.plan === 'FREE' ? (
+              !user.isPro ? (
                 <FreePlanCard usage={usage} />
               ) : (
                 <ProPlanCard endsAt={user.subscriptionEndsAt} />
@@ -376,8 +376,8 @@ export function AppShell({ children, fill = false }: { children: ReactNode; fill
             ) : (
               <Link
                 to="/upgrade"
-                title={user.plan === 'FREE' ? 'Upgrade to PRO' : 'Plan and billing'}
-                aria-label={user.plan === 'FREE' ? 'Upgrade to PRO' : 'Plan and billing'}
+                title={!user.isPro ? 'Upgrade to PRO' : 'Plan and billing'}
+                aria-label={!user.isPro ? 'Upgrade to PRO' : 'Plan and billing'}
                 className="sidebar-label mb-1 flex items-center justify-center rounded-[10px] py-2 hover:bg-surface-3"
               >
                 <Crown size={22} />

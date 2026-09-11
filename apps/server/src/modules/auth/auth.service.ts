@@ -8,6 +8,7 @@
  * identity from the caller: `userId` always originates from a resolved session.
  */
 import { prisma } from '../../db/prisma.js';
+import { entitled } from '../billing/limits.service.js';
 import { createLogger } from '../../config/logger.js';
 import { BadRequestError, NotFoundError } from '../../utils/errors.js';
 import { sendWelcome } from '../../emails/index.js';
@@ -44,6 +45,8 @@ export type PublicUser = {
 export interface MeResponse extends PublicUser {
   /** Linked identity providers, so the UI can name how this account signs in. */
   providers: string[];
+  /** What the account may do, not what it bought: true for PRO and for staff. */
+  isPro: boolean;
 }
 
 // ── Google OAuth ──────────────────────────────────────────────────────────────
@@ -167,7 +170,7 @@ export async function getMe(userId: string): Promise<MeResponse> {
   if (!user) throw new NotFoundError('User');
 
   const { accounts, ...rest } = user;
-  return { ...rest, providers: accounts.map((a) => a.provider) };
+  return { ...rest, providers: accounts.map((a) => a.provider), isPro: entitled(user) };
 }
 
 export async function updateMe(userId: string, input: UpdateMeInput): Promise<PublicUser> {

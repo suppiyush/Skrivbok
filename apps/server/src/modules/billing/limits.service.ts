@@ -29,21 +29,37 @@ const LABELS: Record<LimitedResource, string> = {
 };
 
 /**
- * Is this account currently PRO?
+ * Does this account have PRO — whether by paying for it or by being staff?
  *
- * A `PRO` plan with a `subscriptionEndsAt` in the past is treated as expired.
- * The webhook in Part 9 downgrades lapsed accounts, but this check means a
+ * The plan column says what was bought. This says what the account may do,
+ * which is the question every cap actually asks, and the two differ in one
+ * case: an admin. Admins are not customers, so they are never asked to pay
+ * for the product they run — they have everything, always, without a
+ * subscription row to lapse. Kept as a rule here rather than as `plan: PRO`
+ * on the admin's row, so the admin panel's PRO count stays a count of
+ * customers and nothing depends on remembering to set a flag.
+ *
+ * A `PRO` plan with a `subscriptionEndsAt` in the past is treated as
+ * expired. The webhook downgrades lapsed accounts, but this check means a
  * missed webhook cannot leave someone on PRO indefinitely.
  */
+export function entitled(user: {
+  role: 'USER' | 'ADMIN';
+  plan: 'FREE' | 'PRO';
+  subscriptionEndsAt: Date | null;
+}): boolean {
+  if (user.role === 'ADMIN') return true;
+  if (user.plan !== 'PRO') return false;
+  // A null end date is a lifetime grant (used for comped accounts).
+  return user.subscriptionEndsAt === null || user.subscriptionEndsAt > new Date();
+}
+
 export async function isPro(userId: string): Promise<boolean> {
   const user = await prisma.user.findUnique({
     where: { id: userId },
-    select: { plan: true, subscriptionEndsAt: true },
+    select: { role: true, plan: true, subscriptionEndsAt: true },
   });
-
-  if (!user || user.plan !== 'PRO') return false;
-  // A null end date is a lifetime grant (used for comped accounts).
-  return user.subscriptionEndsAt === null || user.subscriptionEndsAt > new Date();
+  return user ? entitled(user) : false;
 }
 
 async function countFor(userId: string, resource: LimitedResource): Promise<number> {

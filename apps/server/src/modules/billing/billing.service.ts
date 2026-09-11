@@ -70,6 +70,17 @@ export interface OrderResponse {
 }
 
 export async function startOrder(userId: string, plan: BillingPlan): Promise<OrderResponse> {
+  // Staff already have everything; taking their money for it would be a bug
+  // whichever way it happened. The button is hidden, and this is the check
+  // behind the button.
+  const buyer = await prisma.user.findUniqueOrThrow({
+    where: { id: userId },
+    select: { role: true },
+  });
+  if (buyer.role === 'ADMIN') {
+    throw new BadRequestError('PRO is included with an admin account');
+  }
+
   const config = billingConfig();
   const amountPaise = priceFor(plan);
 
@@ -321,21 +332,25 @@ export async function handleWebhook(
 export async function subscription(userId: string) {
   const user = await prisma.user.findUniqueOrThrow({
     where: { id: userId },
-    select: { plan: true, subscriptionEndsAt: true },
+    select: { role: true, plan: true, subscriptionEndsAt: true },
   });
 
   const now = new Date();
-  const active =
+  const paid =
     user.plan === 'PRO' && (user.subscriptionEndsAt === null || user.subscriptionEndsAt > now);
+  // Staff have PRO without a subscription — see `entitled` in limits.service.
+  const included = user.role === 'ADMIN';
 
   return {
     plan: user.plan,
-    isPro: active,
-    subscriptionEndsAt: user.subscriptionEndsAt,
+    isPro: paid || included,
+    /** True when PRO comes with the account rather than a subscription. */
+    included,
+    subscriptionEndsAt: included ? null : user.subscriptionEndsAt,
     // Reported separately from `isPro` so the UI can say "expired" rather than
     // just "not subscribed".
-    isExpired: user.plan === 'PRO' && !active,
-    billingEnabled: true,
+    isExpired: !included && user.plan === 'PRO' && !paid,
+    billingEnabled: !included,
   };
 }
 
