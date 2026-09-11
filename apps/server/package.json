@@ -24,7 +24,7 @@
     "test:unit": "vitest run tests/unit",
     "test:integration": "vitest run tests/integration",
     "test:coverage": "vitest run --coverage",
-    "db:test:setup": "dotenv -e ../../.env -- node -e \"process.env.DATABASE_URL=process.env.DATABASE_URL.replace(//skrivbok(?|$)/,'/skrivbok_test$1');process.env.DIRECT_URL=process.env.DATABASE_URL;require('child_process').execSync('npx prisma migrate deploy',{stdio:'inherit'})\""
+    "db:test:setup": "dotenv -e ../../.env -- node scripts/migrate-test-db.js"
   },
   "dependencies": {
     "@prisma/client": "^6.19.3",
