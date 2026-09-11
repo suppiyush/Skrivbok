@@ -371,6 +371,11 @@ export interface CalendarEvent {
   meetingRequestId: string | null;
   /** Set on redacted occurrences returned from a shared calendar. */
   redacted?: boolean;
+  /**
+   * Set when this is a project meeting read from the project's log, not an
+   * event of the user's own. Not editable here — the log is where it changes.
+   */
+  project?: { id: string; name: string; meetingId: string };
 }
 
 export interface MeetingRequest {

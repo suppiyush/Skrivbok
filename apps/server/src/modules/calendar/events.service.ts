@@ -31,6 +31,82 @@ export interface EventOccurrence extends Omit<EventRow, 'startAt' | 'endAt'> {
   /** The stored row this instance came from. Equal to `id` for the first. */
   seriesId: string;
   isRecurrence: boolean;
+  /**
+   * Set when this is a project meeting shown on the calendar rather than an
+   * event of the user's own. It is read from the project's log, not copied
+   * into the calendar, so it cannot drift from the log and is edited there.
+   */
+  project?: { id: string; name: string; meetingId: string };
+}
+
+/** How long a project meeting blocks out when the log gives no end time. */
+const PROJECT_MEETING_HOURS = 1;
+
+/**
+ * Project meetings the user is listed as attending, dressed as occurrences.
+ *
+ * Read rather than materialised. Writing a calendar row per attendee on every
+ * meeting save would mean keeping N copies in step with the log through every
+ * edit, and letting each attendee edit or delete a copy the log knew nothing
+ * about. Reading them here means the calendar shows what the log says, always,
+ * and the log stays the one place a meeting is changed.
+ *
+ * "Attending" is the rule, not "member of the project": a project can hold a
+ * dozen people and a meeting three of them, and the other nine do not want it
+ * on their calendar.
+ */
+async function projectMeetingsInRange(
+  userId: string,
+  query: RangeQuery,
+): Promise<EventOccurrence[]> {
+  const rows = await prisma.projectMeeting.findMany({
+    where: {
+      heldAt: { gte: query.from, lte: query.to },
+      attendees: { some: { member: { userId } } },
+    },
+    select: {
+      id: true,
+      title: true,
+      heldAt: true,
+      location: true,
+      notes: true,
+      createdAt: true,
+      updatedAt: true,
+      project: { select: { id: true, name: true } },
+      attendees: { select: { member: { select: { email: true } } } },
+    },
+    orderBy: { heldAt: 'asc' },
+  });
+
+  return rows.map((m) => ({
+    // Prefixed so it can never collide with an event id, and so the client
+    // can tell the two apart without inspecting anything else.
+    id: `project-meeting:${m.id}`,
+    userId,
+    title: m.title,
+    description: m.notes,
+    location: m.location,
+    startAt: m.heldAt,
+    endAt: new Date(m.heldAt.getTime() + PROJECT_MEETING_HOURS * 3_600_000),
+    timezone: 'UTC',
+    isAllDay: false,
+    category: m.project.name,
+    priority: 'MEDIUM',
+    showAs: 'BUSY',
+    visibility: 'PRIVATE',
+    isOnline: false,
+    meetingLink: null,
+    attendees: m.attendees.map((a) => a.member.email),
+    reminderMinutes: null,
+    recurrence: 'NONE',
+    recurrenceEndAt: null,
+    meetingRequestId: null,
+    createdAt: m.createdAt,
+    updatedAt: m.updatedAt,
+    seriesId: `project-meeting:${m.id}`,
+    isRecurrence: false,
+    project: { id: m.project.id, name: m.project.name, meetingId: m.id },
+  }));
 }
 
 const ORDER_BY: Record<ListEventsQuery['sort'], Prisma.CalendarEventOrderByWithRelationInput[]> = {
@@ -79,8 +155,12 @@ export async function listRange(userId: string, query: RangeQuery): Promise<Even
     })),
   );
 
+  // A category filter is about the user's own events; project meetings carry
+  // the project's name there and are not what a category means.
+  const meetings = query.category ? [] : await projectMeetingsInRange(userId, query);
+
   // Expansion interleaves series, so the flattened result needs a final sort.
-  return occurrences.sort((a, b) => a.startAt.getTime() - b.startAt.getTime());
+  return [...occurrences, ...meetings].sort((a, b) => a.startAt.getTime() - b.startAt.getTime());
 }
 
 /** Flat list of stored events. Used by management screens, not the grid. */

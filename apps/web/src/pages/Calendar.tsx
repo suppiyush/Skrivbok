@@ -12,6 +12,7 @@
  * something that failed to load.
  */
 import { useMemo, useState, type FormEvent } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { AppShell } from '../components/layout/AppShell';
 import { Button } from '../components/ui/Button';
 import { EmptyState } from '../components/ui/EmptyState';
@@ -30,6 +31,7 @@ import {
   type MeetingRequest,
   type Recurrence,
 } from '../lib/api';
+import { paletteFor } from '../lib/features';
 import { dateTime, dateTimeInputValue, humanise, timeOnly } from '../lib/format';
 import { eventHooks, useEventRange, useMeetingActions, useMeetings } from '../lib/queries';
 
@@ -71,6 +73,7 @@ function sameLocalDay(iso: string, day: Date): boolean {
 
 export default function Calendar() {
   const toast = useToast();
+  const navigate = useNavigate();
   const [cursor, setCursor] = useState(() => monthStart(new Date()));
   const [editing, setEditing] = useState<CalendarEvent | null | undefined>(undefined);
   const [deleting, setDeleting] = useState<CalendarEvent | null>(null);
@@ -270,7 +273,15 @@ export default function Calendar() {
                         <EventChip
                           key={`${event.id}-${n}`}
                           event={event}
-                          onOpen={() => (event.redacted ? undefined : setEditing(event))}
+                          // A project meeting is changed in its project's log,
+                          // so opening it goes there rather than to the editor.
+                          onOpen={() =>
+                            event.redacted
+                              ? undefined
+                              : event.project
+                                ? navigate(`/projects/${event.project.id}/meetings`)
+                                : setEditing(event)
+                          }
                         />
                       ))}
                       {dayEvents.length > 3 ? (
@@ -455,14 +466,23 @@ function EventChip({ event, onOpen }: { event: CalendarEvent; onOpen: () => void
     );
   }
 
+  // A project meeting wears the project's colour, so it reads as belonging to
+  // that section rather than to the calendar — and its title says which.
+  const projectPalette = event.project ? paletteFor('/projects') : null;
+
   return (
     <button
       type="button"
       onClick={onOpen}
-      title={event.title}
+      title={event.project ? `${event.project.name} · ${event.title}` : event.title}
       className="press flex w-full items-center gap-1 truncate rounded-md px-1.5 py-1 text-left text-[11px] font-medium transition hover:brightness-95"
-      style={{ background: 'var(--color-brand-tint)', color: 'var(--color-brand-deep)' }}
+      style={
+        projectPalette
+          ? { background: projectPalette.tint, color: projectPalette.deep }
+          : { background: 'var(--color-brand-tint)', color: 'var(--color-brand-deep)' }
+      }
     >
+      {event.project ? <Icon name="groups" size={11} className="flex-none" /> : null}
       {!event.isAllDay ? (
         <span className="flex-none font-mono text-[10px]">{timeOnly(event.startAt)}</span>
       ) : null}

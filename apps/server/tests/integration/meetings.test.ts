@@ -173,3 +173,61 @@ describe('editing', () => {
       .expect(404);
   });
 });
+
+describe('on the calendar', () => {
+  const range = (user: TestUser) =>
+    request(app)
+      .get('/api/v1/calendar/events/range?from=2027-03-01T00:00:00Z&to=2027-03-31T00:00:00Z')
+      .set('Cookie', user.cookie)
+      .expect(200);
+
+  const titles = (body: unknown) =>
+    (body as { events: { title: string; project?: { id: string } }[] }).events
+      .filter((e) => e.project !== undefined)
+      .map((e) => e.title);
+
+  it('shows a meeting to the people listed as attending, and to nobody else', async () => {
+    await log(owner, {
+      title: 'March review',
+      heldAt: '2027-03-10T09:00:00Z',
+      attendeeIds: [memberId(editor.email), memberId(viewer.email)],
+    }).expect(201);
+
+    expect(titles((await range(editor)).body)).toEqual(['March review']);
+    expect(titles((await range(viewer)).body)).toEqual(['March review']);
+    // The owner logged it but is not in the room.
+    expect(titles((await range(owner)).body)).toEqual([]);
+  });
+
+  it('points back at the project rather than being an event of the attendee', async () => {
+    await log(owner, {
+      title: 'Handover',
+      heldAt: '2027-03-12T14:00:00Z',
+      attendeeIds: [memberId(editor.email)],
+    }).expect(201);
+
+    const body = (await range(editor)).body as {
+      events: { id: string; title: string; project?: { id: string; name: string } }[];
+    };
+    const shown = body.events.find((e) => e.title === 'Handover');
+    expect(shown?.project).toEqual(expect.objectContaining({ id: projectId, name: 'Field study' }));
+    expect(shown?.id.startsWith('project-meeting:')).toBe(true);
+  });
+
+  it('drops off the calendar when the person is taken off the meeting', async () => {
+    const created = await log(owner, {
+      title: 'Sampling plan',
+      heldAt: '2027-03-20T10:00:00Z',
+      attendeeIds: [memberId(viewer.email)],
+    }).expect(201);
+    const id = (created.body as { id: string }).id;
+
+    await request(app)
+      .patch(`/api/v1/projects/${projectId}/meetings/${id}`)
+      .set('Cookie', owner.cookie)
+      .send({ attendeeIds: [] })
+      .expect(200);
+
+    expect(titles((await range(viewer)).body)).not.toContain('Sampling plan');
+  });
+});
