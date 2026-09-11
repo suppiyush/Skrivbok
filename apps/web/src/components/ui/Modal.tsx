@@ -5,10 +5,10 @@
  * top layer, inert background content and Escape-to-close for free — all of
  * which are laborious and easy to get subtly wrong by hand.
  *
- * Two things the native element does not do, and this does:
- *  - closes when the backdrop is clicked, but not when a drag that started
- *    inside the panel ends on the backdrop
- *  - plays the exit animation before actually closing
+ * One thing it deliberately does not do: close on a click outside the panel.
+ * These dialogs hold forms, and a form half filled in is the worst thing to
+ * lose to a stray click beside it. Escape and the close button still close,
+ * and both go through `onClose` so the decision is the caller's.
  */
 import { useEffect, useLayoutEffect, useRef, type FormEvent, type ReactNode } from 'react';
 import { Button } from './Button';
@@ -38,9 +38,6 @@ export function Modal({
   busy?: boolean;
 }) {
   const ref = useRef<HTMLDialogElement>(null);
-  // Tracks where a pointer-down started, so a text selection dragged out of the
-  // panel does not read as a backdrop click.
-  const downOnBackdrop = useRef(false);
 
   // Layout, not passive: a passive effect runs after the browser has painted,
   // so a dialog that opens as its page mounts would be one frame late — the
@@ -103,13 +100,6 @@ export function Modal({
   return (
     <dialog
       ref={ref}
-      onPointerDown={(e) => {
-        downOnBackdrop.current = e.target === ref.current;
-      }}
-      onPointerUp={(e) => {
-        if (downOnBackdrop.current && e.target === ref.current && !busy) onClose();
-        downOnBackdrop.current = false;
-      }}
       className={`animate-scale-in m-auto w-[calc(100vw-2rem)] ${WIDTH[size]} rounded-[20px] border border-line bg-surface p-0 text-ink shadow-pop backdrop:bg-ink/35 backdrop:backdrop-blur-[2px]`}
     >
       {onSubmit ? (
