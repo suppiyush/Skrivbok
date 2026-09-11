@@ -96,6 +96,29 @@ export const api = {
 };
 
 /**
+ * How one value is spelled in a query string, or `null` if it cannot be.
+ *
+ * Only the three types a query string can actually carry. Anything else — an
+ * object, an array nested inside an array, a function — has no sensible
+ * spelling, and `String()` would quietly send the literal text
+ * `[object Object]` to the backend, which reads as a filter value rather than
+ * as the mistake it is. Dropping it instead means "no filter", which is the
+ * closer answer. `NaN` and `Infinity` go the same way for the same reason.
+ */
+function spell(value: unknown): string | null {
+  switch (typeof value) {
+    case 'string':
+      return value;
+    case 'number':
+      return Number.isFinite(value) ? String(value) : null;
+    case 'boolean':
+      return value ? 'true' : 'false';
+    default:
+      return null;
+  }
+}
+
+/**
  * Build a query string, dropping empty values.
  *
  * An empty search box must not send `search=`, which the backend rejects as
@@ -106,9 +129,13 @@ export function qs(params: Record<string, unknown>): string {
   for (const [key, value] of Object.entries(params)) {
     if (value === undefined || value === null || value === '') continue;
     if (Array.isArray(value)) {
-      for (const item of value) if (item !== '') search.append(key, String(item));
+      for (const item of value as unknown[]) {
+        const spelled = spell(item);
+        if (spelled !== null && spelled !== '') search.append(key, spelled);
+      }
     } else {
-      search.set(key, String(value));
+      const spelled = spell(value);
+      if (spelled !== null) search.set(key, spelled);
     }
   }
   const str = search.toString();
