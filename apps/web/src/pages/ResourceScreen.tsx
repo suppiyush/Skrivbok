@@ -23,6 +23,7 @@ import {
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { AppShell, useDensity } from '../components/layout/AppShell';
 import { Alert } from '../components/ui/Alert';
+import { AudioPlayer } from '../components/ui/AudioPlayer';
 import { Button } from '../components/ui/Button';
 import { EmptyState } from '../components/ui/EmptyState';
 import { Icon } from '../components/ui/Icon';
@@ -67,6 +68,8 @@ export interface CardView {
   meta?: string | undefined;
   /** A recording to play in place, without opening the record first. */
   audioUrl?: string | undefined;
+  /** Its length, so the bar reads correctly before anything is downloaded. */
+  audioSeconds?: number | null | undefined;
 }
 
 export interface FilterDef {
@@ -605,13 +608,7 @@ function ResourceCard({
       {/* Playable from the list. Opening a dialog to hear a thirty-second clip
           is three interactions where one will do. */}
       {view.audioUrl ? (
-        <audio
-          controls
-          preload="none"
-          src={view.audioUrl}
-          className="mt-3 h-9 w-full"
-          onClick={(e) => e.stopPropagation()}
-        />
+        <AudioPlayer src={view.audioUrl} seconds={view.audioSeconds} className="mt-3" />
       ) : null}
 
       <div className="mt-3 flex flex-none items-center gap-2">

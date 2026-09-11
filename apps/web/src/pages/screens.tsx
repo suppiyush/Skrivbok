@@ -9,6 +9,7 @@
  * sends `null` rather than `''` for cleared optional text, because the backend
  * treats an empty string as a value and `null` as "unset".
  */
+import { AudioPlayer } from '../components/ui/AudioPlayer';
 import { Field } from '../components/ui/Field';
 import { Checkbox, FieldRow, Select, Textarea } from '../components/ui/Form';
 import { Icon } from '../components/ui/Icon';
@@ -21,7 +22,14 @@ import type {
   Literature as LiteratureEntry,
   Note,
 } from '../lib/api';
-import { dateInputValue, dateTimeInputValue, dueLabel, humanise, shortAge } from '../lib/format';
+import {
+  clock,
+  dateInputValue,
+  dateTimeInputValue,
+  dueLabel,
+  humanise,
+  shortAge,
+} from '../lib/format';
 import {
   careerGoalHooks,
   deadlineHooks,
@@ -34,7 +42,7 @@ import {
   useLiteratureTags,
 } from '../lib/queries';
 import { ResourceScreen, useFieldError, type ResourceConfig } from './ResourceScreen';
-import { clock, VoiceNoteButton } from './VoiceNote';
+import { VoiceNoteButton } from './VoiceNote';
 
 /* ── Shared option lists ──────────────────────────────────────────────────── */
 
@@ -278,8 +286,9 @@ const notesConfig: ResourceConfig<Note> = {
   ],
   row: (note) => ({
     primary: note.title,
-    secondary: note.content,
-    tag: note.category,
+    secondary: note.audioUrl ? `Recording · ${clock(note.audioSeconds ?? 0)}` : note.content,
+    // A voice note is not filed under anything — see the card below.
+    ...(note.audioUrl ? {} : { tag: note.category }),
     meta: shortAge(note.updatedAt),
   }),
   // Plain cards, not sticky notes: a note is filed and found by its title and
@@ -287,12 +296,12 @@ const notesConfig: ResourceConfig<Note> = {
   // stays a panel — shorter, and no fold.
   card: (note) => ({
     primary: note.title,
-    // A voice note has no body to preview, so its length stands in for one —
-    // otherwise every recording would show as an identical empty card.
-    secondary: note.audioUrl ? `Recording · ${clock(note.audioSeconds ?? 0)}` : note.content,
-    badge: note.category,
+    // A voice note carries no category and shows no body: the player below is
+    // the content, and it already says how long the recording runs.
+    ...(note.audioUrl
+      ? { audioUrl: note.audioUrl, audioSeconds: note.audioSeconds }
+      : { secondary: note.content, badge: note.category }),
     meta: shortAge(note.updatedAt),
-    ...(note.audioUrl ? { audioUrl: note.audioUrl } : {}),
   }),
   form: (note) => (
     <>
@@ -303,31 +312,47 @@ const notesConfig: ResourceConfig<Note> = {
         required
         error={Err('title')}
       />
-      {/* Category before the body, as on an idea: it is one decision, and a
-          seven-row textarea buries anything under it. */}
-      <Select
-        label="Category"
-        name="category"
-        defaultValue={note?.category ?? 'general'}
-        options={categoryOptions(note?.category)}
-        error={Err('category')}
-      />
-      <Textarea
-        label="Note"
-        name="content"
-        rows={7}
-        defaultValue={note?.content ?? ''}
-        error={Err('content')}
-      />
+      {note?.audioUrl ? (
+        // Editing a recording means retitling it, so the clip is here to be
+        // heard while you do. There is nothing else about it to change.
+        <AudioPlayer
+          src={note.audioUrl}
+          seconds={note.audioSeconds}
+          className="rounded-xl border border-line bg-surface-5 px-3 py-2.5"
+        />
+      ) : (
+        <>
+          {/* Category before the body, as on an idea: it is one decision, and a
+              seven-row textarea buries anything under it. */}
+          <Select
+            label="Category"
+            name="category"
+            defaultValue={note?.category ?? 'general'}
+            options={categoryOptions(note?.category)}
+            error={Err('category')}
+          />
+          <Textarea
+            label="Note"
+            name="content"
+            rows={7}
+            defaultValue={note?.content ?? ''}
+            error={Err('content')}
+          />
+        </>
+      )}
     </>
   ),
   // No `color`. The column still exists and still defaults to YELLOW on the
   // server, but a note does not ask for one, so nothing is sent: create takes
   // the default, and update leaves whatever is stored alone.
+  //
+  // Only the fields the form actually offered are sent. A voice note's form has
+  // neither a category nor a body, and `text()` reads a missing field as null —
+  // so sending them unconditionally would blank both on every save.
   toInput: (form) => ({
     title: required(form, 'title'),
-    content: text(form, 'content'),
-    category: text(form, 'category') ?? 'general',
+    ...(form.has('content') ? { content: text(form, 'content') } : {}),
+    ...(form.has('category') ? { category: text(form, 'category') ?? 'general' } : {}),
   }),
   emptyTitle: 'No notes yet',
   emptyBody: 'Notes hold the longer writing — a method, a summary, a half-finished argument.',

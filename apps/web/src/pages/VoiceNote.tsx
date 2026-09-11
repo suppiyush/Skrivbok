@@ -14,12 +14,14 @@
  * so it is reported in the dialog.
  */
 import { useEffect, useRef, useState } from 'react';
+import { AudioPlayer } from '../components/ui/AudioPlayer';
 import { Button } from '../components/ui/Button';
 import { Field } from '../components/ui/Field';
 import { Icon } from '../components/ui/Icon';
 import { Modal } from '../components/ui/Modal';
 import { useToast } from '../components/ui/Toast';
 import { ApiError, notes as notesApi } from '../lib/api';
+import { clock } from '../lib/format';
 import { noteHooks } from '../lib/queries';
 
 /** Whether this browser can record at all. Firefox and Chrome can; older
@@ -30,13 +32,6 @@ function canRecord(): boolean {
     typeof window.MediaRecorder !== 'undefined' &&
     navigator.mediaDevices?.getUserMedia !== undefined
   );
-}
-
-/** `3:07`, from a count of seconds. */
-export function clock(totalSeconds: number): string {
-  const minutes = Math.floor(totalSeconds / 60);
-  const seconds = totalSeconds % 60;
-  return `${minutes}:${String(seconds).padStart(2, '0')}`;
 }
 
 type Stage = 'idle' | 'recording' | 'recorded' | 'saving';
@@ -274,9 +269,11 @@ function VoiceNoteDialog({
           </p>
 
           {/* The clip is playable before it is saved: nobody should have to
-              commit a recording they have not heard. */}
+              commit a recording they have not heard. The length comes from the
+              recorder's own clock — a WebM stream carries no duration of its
+              own, so the file cannot be asked. */}
           {clip && stage !== 'recording' ? (
-            <audio controls src={clip.url} className="mt-1 w-full max-w-[320px]" />
+            <AudioPlayer src={clip.url} seconds={seconds} className="mt-1 w-full max-w-[320px]" />
           ) : null}
         </div>
 

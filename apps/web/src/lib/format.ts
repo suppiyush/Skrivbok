@@ -25,6 +25,17 @@ export function relative(iso: string | Date | null | undefined): string {
   return rtf.format(Math.round(seconds / 31_536_000), 'year');
 }
 
+/**
+ * A duration as a clock reading: `0:07`, `3:07`, `12:40`.
+ *
+ * Seconds only — nothing here runs to an hour, and `0:07` is read at a glance
+ * where `7s` beside `3:07` is not.
+ */
+export function clock(totalSeconds: number): string {
+  const whole = Math.max(0, Math.floor(totalSeconds));
+  return `${Math.floor(whole / 60)}:${String(whole % 60).padStart(2, '0')}`;
+}
+
 /** A compact relative age for list rows: "2d", "3w", "1y". */
 export function shortAge(iso: string | Date | null | undefined): string {
   if (!iso) return '—';
