@@ -75,6 +75,7 @@ export function PageHeader({
   actions,
   meta,
   crumbs,
+  icon,
   serif = false,
 }: {
   title: string;
@@ -83,6 +84,8 @@ export function PageHeader({
   meta?: ReactNode;
   /** The trail below the dashboard. Omit on the dashboard itself. */
   crumbs?: Crumb[];
+  /** A tile beside the title — the section's own icon, as on its dashboard card. */
+  icon?: string;
   serif?: boolean;
 }) {
   return (
@@ -93,25 +96,37 @@ export function PageHeader({
             <Breadcrumb trail={crumbs} />
           </div>
         ) : null}
-        <h1
-          className={
-            serif
-              ? 'font-serif text-[31px] leading-tight font-semibold tracking-[-0.01em]'
-              : 'text-[26px] leading-tight font-extrabold tracking-[-0.03em]'
-          }
-        >
-          {title}
-        </h1>
-        {description ? (
-          <p
-            className={`mt-1.5 max-w-[68ch] leading-relaxed text-ink-3 ${
-              serif ? 'font-serif text-[15.5px]' : 'text-[14px]'
-            }`}
-          >
-            {description}
-          </p>
-        ) : null}
-        {meta ? <div className="mt-3">{meta}</div> : null}
+        <div className="flex items-start gap-3.5">
+          {icon ? (
+            <span
+              className="mt-0.5 grid size-11 flex-none place-items-center rounded-[13px] bg-brand-tint text-brand-ink-2"
+              aria-hidden="true"
+            >
+              <Icon name={icon} size={23} />
+            </span>
+          ) : null}
+          <div className="min-w-0">
+            <h1
+              className={
+                serif
+                  ? 'font-serif text-[31px] leading-tight font-semibold tracking-[-0.01em]'
+                  : 'text-[26px] leading-tight font-extrabold tracking-[-0.03em]'
+              }
+            >
+              {title}
+            </h1>
+            {description ? (
+              <p
+                className={`mt-1.5 max-w-[68ch] leading-relaxed text-ink-3 ${
+                  serif ? 'font-serif text-[15.5px]' : 'text-[14px]'
+                }`}
+              >
+                {description}
+              </p>
+            ) : null}
+            {meta ? <div className="mt-3">{meta}</div> : null}
+          </div>
+        </div>
       </div>
       {actions ? <div className="flex flex-none items-center gap-2">{actions}</div> : null}
     </header>
@@ -173,6 +188,50 @@ export function CardHeader({
 }
 
 /** Filter/search strip. One row, wrapping, consistent control height. */
+/**
+ * A small capitals heading with a rule running off to the right — the kind
+ * that names a region of a page without competing with the page title.
+ */
+export function SectionLabel({ children }: { children: ReactNode }) {
+  return (
+    <div className="flex items-center gap-3">
+      <h2 className="flex-none text-[11px] font-bold tracking-[0.1em] text-ink-4 uppercase">
+        {children}
+      </h2>
+      <span className="h-px flex-1 bg-line-2" aria-hidden="true" />
+    </div>
+  );
+}
+
+/**
+ * One figure about a collection — a count, a percentage — with its name
+ * beneath and a bar of brand colour down the left edge. Four of these in a
+ * row are a summary; one on its own is a badge.
+ */
+export function MetricCard({
+  value,
+  label,
+  loading = false,
+}: {
+  value: string | number;
+  label: string;
+  loading?: boolean;
+}) {
+  return (
+    <div className="relative overflow-hidden rounded-[16px] border border-line bg-surface py-5 pr-5 pl-6">
+      <span className="absolute inset-y-0 left-0 w-1 bg-brand" aria-hidden="true" />
+      <p
+        className={`text-[30px] leading-none font-extrabold tracking-[-0.02em] text-brand-ink tabular ${
+          loading ? 'opacity-40' : ''
+        }`}
+      >
+        {loading ? '—' : value}
+      </p>
+      <p className="mt-2 text-[13.5px] text-ink-3">{label}</p>
+    </div>
+  );
+}
+
 export function Toolbar({ children }: { children: ReactNode }) {
   return <div className="flex flex-wrap items-center gap-2">{children}</div>;
 }

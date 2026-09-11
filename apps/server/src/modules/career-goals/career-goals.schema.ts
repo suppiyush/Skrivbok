@@ -61,7 +61,11 @@ export const updateCareerGoalSchema = goalFields
 
 export const listCareerGoalsSchema = paginationSchema.extend({
   goalType: goalTypeSchema.optional(),
-  status: z.enum(['all', 'active', 'achieved']).default('all'),
+  /**
+   * Where a goal is. `active` is everything not yet achieved; `not_started`
+   * and `in_progress` split it by whether a stage has been reached.
+   */
+  status: z.enum(['all', 'active', 'not_started', 'in_progress', 'achieved']).default('all'),
   search: z.string().trim().min(1).max(200).optional(),
   sort: z.enum(['newest', 'oldest', 'progress', 'target', 'title']).default('newest'),
 });

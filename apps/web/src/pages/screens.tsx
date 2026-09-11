@@ -30,8 +30,10 @@ import {
   literatureHooks,
   noteHooks,
   useCareerQuota,
+  useCareerSummary,
   useLiteratureTags,
 } from '../lib/queries';
+import { MetricCard } from '../components/ui/Layout';
 import { ResourceScreen, useFieldError, type ResourceConfig } from './ResourceScreen';
 import { VoiceNoteButton } from './VoiceNote';
 
@@ -682,27 +684,65 @@ function TagSidebar({ active, onPick }: { active: string; onPick: (tag: string) 
 
 /* ── Career goals ─────────────────────────────────────────────────────────── */
 
+/**
+ * The kinds of goal offered when creating one.
+ *
+ * The column is free text and always has been, so a goal may carry a type
+ * outside this list; `goalTypeOptions` appends it rather than letting a select
+ * silently rewrite it on the next edit.
+ */
+const GOAL_TYPES = ['publication', 'grant', 'teaching', 'skill', 'career', 'personal', 'general'];
+
+function goalTypeOptions(current: string | undefined) {
+  const values = current && !GOAL_TYPES.includes(current) ? [...GOAL_TYPES, current] : GOAL_TYPES;
+  return values.map((value) => ({ value, label: humanise(value) }));
+}
+
+/** The four figures over the list. All four come from one summary request. */
+function CareerStats() {
+  const { data, isPending } = useCareerSummary();
+  return (
+    <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+      <MetricCard label="Total goals" value={data?.total ?? 0} loading={isPending} />
+      <MetricCard label="Completed" value={data?.achieved ?? 0} loading={isPending} />
+      <MetricCard
+        label="Avg progress"
+        value={`${data?.averageProgress ?? 0}%`}
+        loading={isPending}
+      />
+      <MetricCard label="Active goals" value={data?.active ?? 0} loading={isPending} />
+    </div>
+  );
+}
+
 const careerGoalsConfig: ResourceConfig<CareerGoal> = {
   title: 'Career goals',
   icon: 'trending_up',
   noun: 'goal',
-  blurb:
-    'Longer-running goals broken into stages, so progress is something you can point at rather than estimate.',
-  createLabel: 'New goal',
+  blurb: 'Set, track, and achieve your career aspirations and personal goals.',
+  createLabel: 'Add goal',
   hooks: careerGoalHooks as never,
   useQuota: useCareerQuota,
+  stats: () => <CareerStats />,
+  listLabel: 'Your goals',
   filters: [
     {
+      name: 'goalType',
+      label: 'Type',
+      options: GOAL_TYPES.map((value) => ({ value, label: humanise(value) })),
+    },
+    {
       name: 'status',
-      label: 'Status',
+      label: 'Progress',
       options: [
-        { value: 'active', label: 'Active' },
-        { value: 'achieved', label: 'Achieved' },
+        { value: 'not_started', label: 'Not started' },
+        { value: 'in_progress', label: 'In progress' },
+        { value: 'achieved', label: 'Completed' },
       ],
     },
   ],
   sorts: [
-    { value: 'newest', label: 'Newest' },
+    { value: 'newest', label: 'Date added' },
     { value: 'progress', label: 'Progress' },
     { value: 'target', label: 'Target date' },
     { value: 'title', label: 'Title' },
@@ -712,7 +752,7 @@ const careerGoalsConfig: ResourceConfig<CareerGoal> = {
     return {
       primary: goal.title,
       secondary: goal.stageDescription ?? goal.description,
-      tag: goal.achievedAt ? 'Achieved' : goal.goalType,
+      tag: goal.achievedAt ? 'Achieved' : humanise(goal.goalType),
       tone: goal.achievedAt ? 'success' : 'brand',
       meta: `${goal.currentStage}/${goal.totalStages}`,
       extra: (
@@ -745,11 +785,11 @@ const careerGoalsConfig: ResourceConfig<CareerGoal> = {
         error={Err('description')}
       />
       <FieldRow>
-        <Field
+        <Select
           label="Type"
           name="goalType"
           defaultValue={goal?.goalType ?? 'general'}
-          placeholder="Publication"
+          options={goalTypeOptions(goal?.goalType)}
           error={Err('goalType')}
         />
         <Field
@@ -796,7 +836,7 @@ const careerGoalsConfig: ResourceConfig<CareerGoal> = {
     startAt: text(form, 'startAt'),
     targetAt: text(form, 'targetAt'),
   }),
-  emptyTitle: 'No goals set',
+  emptyTitle: 'No goals yet',
   emptyBody:
     'Break something long-running into stages — a paper, a grant, a course rebuild — and track it here.',
 };

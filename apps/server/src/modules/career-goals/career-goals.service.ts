@@ -57,6 +57,8 @@ function buildWhere(userId: string, query: ListCareerGoalsQuery): Prisma.CareerG
     ...(query.goalType ? { goalType: query.goalType } : {}),
     ...(query.status === 'achieved' ? { achievedAt: { not: null } } : {}),
     ...(query.status === 'active' ? { achievedAt: null } : {}),
+    ...(query.status === 'not_started' ? { achievedAt: null, currentStage: 0 } : {}),
+    ...(query.status === 'in_progress' ? { achievedAt: null, currentStage: { gt: 0 } } : {}),
     ...(query.search
       ? {
           OR: [

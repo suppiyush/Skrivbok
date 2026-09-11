@@ -27,7 +27,15 @@ import { AudioPlayer } from '../components/ui/AudioPlayer';
 import { Button } from '../components/ui/Button';
 import { EmptyState } from '../components/ui/EmptyState';
 import { Icon } from '../components/ui/Icon';
-import { Card, PageHeader, Pagination, Pill, SearchInput, Toolbar } from '../components/ui/Layout';
+import {
+  Card,
+  PageHeader,
+  Pagination,
+  Pill,
+  SearchInput,
+  SectionLabel,
+  Toolbar,
+} from '../components/ui/Layout';
 import { Modal, ConfirmDialog } from '../components/ui/Modal';
 import { Reveal } from '../components/ui/Motion';
 import { Skeleton, useSlowLoad } from '../components/ui/Skeleton';
@@ -122,6 +130,15 @@ export interface ResourceConfig<T extends { id: string }> {
    * on the first, and it does not belong in the shared create form.
    */
   extraAction?: () => ReactNode;
+
+  /**
+   * Rendered between the header and the toolbar — a row of figures about the
+   * whole collection, where the list below shows only a page of it.
+   */
+  stats?: () => ReactNode;
+
+  /** A small heading over the list, e.g. "Your goals". */
+  listLabel?: string;
 
   /** Rendered to the left of the list, e.g. the literature tag filter. */
   aside?: (state: {
@@ -283,6 +300,7 @@ export function ResourceScreen<T extends { id: string }>({
         title={config.title}
         description={config.blurb}
         crumbs={[{ label: config.title }]}
+        icon={config.icon}
         meta={limit?.limited ? <QuotaMeter status={limit} /> : undefined}
         actions={
           <>
@@ -316,6 +334,8 @@ export function ResourceScreen<T extends { id: string }>({
           unlimited on every plan.
         </Alert>
       ) : null}
+
+      {config.stats?.()}
 
       {(config.searchable ?? true) || config.filters?.length || config.sorts?.length ? (
         <Toolbar>
@@ -351,6 +371,8 @@ export function ResourceScreen<T extends { id: string }>({
           ) : null}
         </Toolbar>
       ) : null}
+
+      {config.listLabel ? <SectionLabel>{config.listLabel}</SectionLabel> : null}
 
       <div className={config.aside ? 'grid items-start gap-5 lg:grid-cols-[228px_1fr]' : ''}>
         {config.aside?.({ filters, setFilter })}
