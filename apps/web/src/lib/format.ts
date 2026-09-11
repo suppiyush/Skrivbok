@@ -64,6 +64,21 @@ export function longDate(iso: string | Date | null | undefined, timeZone?: strin
   }).format(d);
 }
 
+/** "11 Sep 2026" — a date that has to fit on one line of a list. */
+export function shortDate(iso: string | Date | null | undefined): string {
+  if (!iso) return '—';
+  const d = typeof iso === 'string' ? new Date(iso) : iso;
+  if (Number.isNaN(d.getTime())) return '—';
+  return new Intl.DateTimeFormat(undefined, {
+    day: 'numeric',
+    month: 'short',
+    year: 'numeric',
+    // A journal date is a calendar day stored at UTC midnight; read in local
+    // time it would roll back a day for anyone west of Greenwich.
+    timeZone: 'UTC',
+  }).format(d);
+}
+
 /** "Mon 7 Sep, 17:00" — the form used everywhere a deadline is listed. */
 export function dateTime(iso: string | Date | null | undefined, timeZone?: string): string {
   if (!iso) return '—';
