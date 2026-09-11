@@ -24,6 +24,7 @@ import { CareerGoals, Deadlines, FutureWork, Ideas, Literature, Notes } from './
 const Legal = lazy(chunks.legal);
 const Projects = lazy(chunks.projects);
 const ProjectDetail = lazy(chunks.projectDetail);
+const ProjectMeetings = lazy(chunks.projectMeetings);
 const Admin = lazy(chunks.admin);
 const Calendar = lazy(chunks.calendar);
 const Meetings = lazy(() => chunks.calendar().then((m) => ({ default: m.Meetings })));
@@ -100,6 +101,8 @@ export const router = createBrowserRouter([
   // before this screen existed the route rendered the list instead — so a
   // notification about one project opened all of them.
   { path: '/projects/:id', element: guarded(<ProjectDetail />) },
+  // The same project's meetings — a page beside the brief, not a section of it.
+  { path: '/projects/:id/meetings', element: guarded(<ProjectMeetings />) },
   { path: '/literature', element: guarded(<Literature />) },
   { path: '/future-work', element: guarded(<FutureWork />) },
   { path: '/deadlines', element: guarded(<Deadlines />) },

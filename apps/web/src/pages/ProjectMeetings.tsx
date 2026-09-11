@@ -1,5 +1,5 @@
 /**
- * A project's meetings, as a timeline.
+ * A project's meetings, as a timeline — a page of its own, beside the brief.
  *
  * One list serves both halves of the job. A meeting entered with a date ahead
  * is scheduled; the same meeting, once the date has passed and the notes are
@@ -12,16 +12,31 @@
  * details already filled in, so the message is theirs and comes from them.
  */
 import { useMemo, useState } from 'react';
+import { Link, useParams } from 'react-router-dom';
+import { AppShell } from '../components/layout/AppShell';
 import { Button } from '../components/ui/Button';
+import { EmptyState } from '../components/ui/EmptyState';
 import { Field } from '../components/ui/Field';
 import { FieldRow, Textarea } from '../components/ui/Form';
 import { Icon } from '../components/ui/Icon';
-import { SectionLabel } from '../components/ui/Layout';
+import { PageHeader } from '../components/ui/Layout';
 import { ConfirmDialog, Modal } from '../components/ui/Modal';
+import { Skeleton, useSlowLoad } from '../components/ui/Skeleton';
 import { useToast } from '../components/ui/Toast';
-import { ApiError, type MeetingInput, type ProjectMeeting, type ProjectMember } from '../lib/api';
+import {
+  ApiError,
+  type MeetingInput,
+  type Project,
+  type ProjectMeeting,
+  type ProjectMember,
+} from '../lib/api';
 import { dateInputValue, dateTime, initials, timeInputValue } from '../lib/format';
-import { useProjectMeetingActions, useProjectMeetings, useProjectMembers } from '../lib/queries';
+import {
+  projectHooks,
+  useProjectMeetingActions,
+  useProjectMeetings,
+  useProjectMembers,
+} from '../lib/queries';
 
 /* ── Mail ─────────────────────────────────────────────────────────────────── */
 
@@ -60,21 +75,24 @@ function openMail(to: string[], subject: string, body: string) {
   window.open(gmailComposeUrl(to, subject, body), '_blank', 'noopener,noreferrer');
 }
 
-/* ── The section ──────────────────────────────────────────────────────────── */
+/* ── The page ─────────────────────────────────────────────────────────────── */
 
-export function ProjectMeetings({
-  projectId,
-  projectName,
-  canEdit,
-}: {
-  projectId: string;
-  projectName: string;
-  canEdit: boolean;
-}) {
+export default function ProjectMeetingsPage() {
+  const { id = null } = useParams<{ id: string }>();
   const toast = useToast();
-  const meetingsQuery = useProjectMeetings(projectId);
-  const membersQuery = useProjectMembers(projectId);
-  const actions = useProjectMeetingActions(projectId);
+
+  // Resolved the same way the brief page resolves it: from the list the user
+  // can already see, which carries their role on it.
+  const list = projectHooks.useList({ limit: 100 });
+  const project = ((list.data?.data ?? []) as Project[]).find((p) => p.id === id) ?? null;
+  const canEdit = project?.myRole === 'OWNER' || project?.myRole === 'EDITOR';
+
+  const meetingsQuery = useProjectMeetings(id);
+  const membersQuery = useProjectMembers(id);
+  const actions = useProjectMeetingActions(id);
+
+  const loading = list.isPending || meetingsQuery.isPending;
+  const showSkeleton = useSlowLoad(loading);
 
   /** `null` = adding, a meeting = editing, `undefined` = closed. */
   const [editing, setEditing] = useState<ProjectMeeting | null | undefined>(undefined);
@@ -117,31 +135,79 @@ export function ProjectMeetings({
     }
   }
 
-  return (
-    <section className="flex flex-col gap-4 no-print">
-      <div className="flex items-center gap-3">
-        <div className="min-w-0 flex-1">
-          <SectionLabel>Meetings</SectionLabel>
-        </div>
-        {canEdit ? (
-          <Button variant="brand" size="sm" icon="add" onClick={() => setEditing(null)}>
-            Add meeting
-          </Button>
+  if (loading) {
+    return (
+      <AppShell>
+        {showSkeleton ? (
+          <div className="shimmer flex flex-col gap-4">
+            <Skeleton h={72} radius={14} />
+            <Skeleton h={320} radius={18} />
+          </div>
         ) : null}
-      </div>
+      </AppShell>
+    );
+  }
 
-      {meetingsQuery.isPending ? null : meetings.length === 0 ? (
-        <div className="rounded-[18px] border border-dashed border-line-2 px-6 py-10 text-center">
-          <span className="mx-auto grid size-12 place-items-center rounded-[14px] bg-brand-tint text-brand-ink-2">
-            <Icon name="groups" size={24} />
-          </span>
-          <p className="mt-3 text-[15px] font-bold text-ink">No meetings yet</p>
-          <p className="mx-auto mt-1 max-w-[46ch] text-[13.5px] leading-relaxed text-ink-3">
-            {canEdit
-              ? 'Schedule one ahead, or write up one that has already happened — who was there, and what was said.'
-              : 'Nothing has been scheduled or written up for this project.'}
-          </p>
-        </div>
+  if (!project) {
+    return (
+      <AppShell>
+        <EmptyState
+          icon="folder_off"
+          title="Project not found"
+          action={
+            <Link to="/projects">
+              <Button variant="brand" icon="arrow_back">
+                Back to projects
+              </Button>
+            </Link>
+          }
+        >
+          It may have been deleted, or you may no longer be a member of it.
+        </EmptyState>
+      </AppShell>
+    );
+  }
+
+  const projectName = project.name;
+
+  return (
+    <AppShell>
+      <PageHeader
+        title="Meetings"
+        description={`Who met about ${projectName}, when, and what was said.`}
+        crumbs={[
+          { label: 'Projects', to: '/projects' },
+          { label: projectName, to: `/projects/${project.id}` },
+          { label: 'Meetings' },
+        ]}
+        icon="groups"
+        actions={
+          canEdit ? (
+            <Button variant="brand" size="sm" icon="add" onClick={() => setEditing(null)}>
+              Add meeting
+            </Button>
+          ) : undefined
+        }
+      />
+
+      {meetings.length === 0 ? (
+        <EmptyState
+          icon="groups"
+          title="No meetings yet"
+          {...(canEdit
+            ? {
+                action: (
+                  <Button variant="brand" icon="add" onClick={() => setEditing(null)}>
+                    Add meeting
+                  </Button>
+                ),
+              }
+            : {})}
+        >
+          {canEdit
+            ? 'Schedule one ahead, or write up one that has already happened — who was there, and what was said.'
+            : 'Nothing has been scheduled or written up for this project.'}
+        </EmptyState>
       ) : (
         <div className="flex flex-col gap-6">
           {upcoming.length > 0 ? (
@@ -186,7 +252,7 @@ export function ProjectMeetings({
         what={deleting?.title ?? ''}
         busy={actions.remove.isPending}
       />
-    </section>
+    </AppShell>
   );
 }
 

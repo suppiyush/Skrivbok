@@ -275,6 +275,7 @@ export default function Projects() {
                   onEdit={() => setEditing(project)}
                   onDelete={() => setDeleting(project)}
                   onMembers={() => setManaging(project)}
+                  onMeetings={() => navigate(`/projects/${project.id}/meetings`)}
                 />
               </Reveal>
             ))}
@@ -527,6 +528,7 @@ function ProjectCard({
   onEdit,
   onDelete,
   onMembers,
+  onMeetings,
 }: {
   project: Project;
   accepting: boolean;
@@ -534,6 +536,7 @@ function ProjectCard({
   onEdit: () => void;
   onDelete: () => void;
   onMembers: () => void;
+  onMeetings: () => void;
 }) {
   const owner = project.myRole === 'OWNER';
 
@@ -614,6 +617,9 @@ function ProjectCard({
 
         <span className="ml-auto text-[11.5px] text-ink-4">{relative(project.updatedAt)}</span>
 
+        {/* Meetings for everyone on the project — a viewer can read the log —
+            and the two that change the project itself for its owner only. */}
+        <IconAction icon="groups" label="Meetings" onClick={onMeetings} />
         {owner ? (
           <>
             <IconAction icon="edit" label="Edit project" onClick={onEdit} />
