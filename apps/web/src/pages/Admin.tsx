@@ -18,8 +18,17 @@ import {
   SearchInput,
   Toolbar,
 } from '../components/ui/Layout';
+import { Textarea } from '../components/ui/Form';
+import { Modal } from '../components/ui/Modal';
 import { useToast } from '../components/ui/Toast';
-import { useAdminReviews, useModerateReview } from '../lib/queries';
+import { ApiError, type AdminReport, type ReportStatus } from '../lib/api';
+import { relative } from '../lib/format';
+import {
+  useAdminReports,
+  useAdminReviews,
+  useModerateReview,
+  useUpdateReport,
+} from '../lib/queries';
 
 type Tab = 'overview' | 'users' | 'subscriptions' | 'reports' | 'reviews';
 
@@ -94,37 +103,6 @@ const USERS = [
   },
 ];
 
-const REPORTS = [
-  {
-    type: 'BUG',
-    title: 'Recurrence off by an hour',
-    from: 'a.lindqvist@uni.se',
-    status: 'OPEN',
-    date: '2 Sep',
-  },
-  {
-    type: 'FEATURE',
-    title: 'iCal export for the calendar',
-    from: 'r.mehta@uni.se',
-    status: 'OPEN',
-    date: '28 Aug',
-  },
-  {
-    type: 'BUG',
-    title: 'Tag filter drops the last tag',
-    from: 'k.osei@uni.se',
-    status: 'IN_PROGRESS',
-    date: '26 Aug',
-  },
-  {
-    type: 'FEEDBACK',
-    title: 'Tag filters are excellent',
-    from: '(deleted account)',
-    status: 'RESOLVED',
-    date: '20 Aug',
-  },
-];
-
 const REPORT_TONE = {
   OPEN: 'brand',
   IN_PROGRESS: 'warning',
@@ -136,9 +114,12 @@ export default function Admin() {
   const [tab, setTab] = useState<Tab>('overview');
   const [query, setQuery] = useState('');
 
-  // The review queue is real; the rest of this screen is still sample data.
+  // Reviews and reports are real; Overview, Users and Subscriptions are still
+  // sample data.
   const pendingQueue = useAdminReviews({ status: 'PENDING', limit: 1 });
   const pendingReviews = pendingQueue.data?.pagination.total ?? 0;
+  const openQueue = useAdminReports({ status: 'OPEN', limit: 1 });
+  const openReports = openQueue.data?.statusCounts.OPEN ?? 0;
 
   return (
     <AppShell>
@@ -168,6 +149,11 @@ export default function Admin() {
             {t === 'reviews' && pendingReviews > 0 ? (
               <span className="ml-1.5 rounded-full bg-danger-strong px-1.5 py-0.5 text-[10px] text-white">
                 {pendingReviews}
+              </span>
+            ) : null}
+            {t === 'reports' && openReports > 0 ? (
+              <span className="ml-1.5 rounded-full bg-danger-strong px-1.5 py-0.5 text-[10px] text-white">
+                {openReports}
               </span>
             ) : null}
           </button>
@@ -345,42 +331,276 @@ export default function Admin() {
         </Card>
       ) : null}
 
-      {tab === 'reports' ? (
-        <Card padded={false}>
-          <ul>
-            {REPORTS.map((r) => (
-              <li key={r.title} className="border-t border-line first:border-t-0">
-                <div className="flex flex-wrap items-start gap-3 px-5 py-4">
+      {tab === 'reports' ? <ReportQueue /> : null}
+      {tab === 'reviews' ? <ReviewQueue /> : null}
+    </AppShell>
+  );
+}
+
+/* ── Report triage ────────────────────────────────────────────────────────── */
+
+const REPORT_STATUSES: { value: ReportStatus; label: string }[] = [
+  { value: 'OPEN', label: 'Open' },
+  { value: 'IN_PROGRESS', label: 'In progress' },
+  { value: 'RESOLVED', label: 'Resolved' },
+  { value: 'DISMISSED', label: 'Dismissed' },
+];
+
+const REPORT_TYPES = [
+  { value: 'BUG', label: 'Bug report' },
+  { value: 'FEEDBACK', label: 'General feedback' },
+  { value: 'FEATURE', label: 'Feature request' },
+];
+
+/**
+ * Where reports land, and where they are answered.
+ *
+ * A report is a person telling us something went wrong or could be better.
+ * Every one is answered from here: closing it — resolved or dismissed — asks
+ * for a note the author sees on their Help page, so "closed" is never
+ * silent. Taking one on marks it in progress, so two admins do not start on
+ * the same one.
+ */
+function ReportQueue() {
+  const toast = useToast();
+  const [status, setStatus] = useState<ReportStatus>('OPEN');
+  const [type, setType] = useState<string>('');
+  const [closing, setClosing] = useState<{ report: AdminReport; to: ReportStatus } | null>(null);
+  const [note, setNote] = useState('');
+
+  const list = useAdminReports({ status, ...(type ? { type } : {}), limit: 50, sort: 'newest' });
+  const update = useUpdateReport();
+
+  const reports = list.data?.data ?? [];
+  const counts = list.data?.statusCounts;
+
+  function move(id: string, to: ReportStatus, resolution?: string | null) {
+    void update
+      .mutateAsync({ id, status: to, ...(resolution !== undefined ? { resolution } : {}) })
+      .then(() => {
+        toast.success(
+          to === 'IN_PROGRESS'
+            ? 'Taken on'
+            : to === 'RESOLVED'
+              ? 'Resolved — the author can see your note'
+              : to === 'DISMISSED'
+                ? 'Dismissed'
+                : 'Reopened',
+        );
+        setClosing(null);
+        setNote('');
+      })
+      .catch((error: unknown) =>
+        toast.error(error instanceof ApiError ? error.message : 'Could not update that report.'),
+      );
+  }
+
+  return (
+    <>
+      <Toolbar>
+        <div className="flex flex-none rounded-xl border border-line bg-surface p-1">
+          {REPORT_STATUSES.map((s) => (
+            <button
+              key={s.value}
+              type="button"
+              onClick={() => setStatus(s.value)}
+              className={`press flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-[13px] font-semibold transition ${
+                status === s.value ? 'bg-brand-tint text-brand-deep' : 'text-ink-3 hover:text-ink'
+              }`}
+            >
+              {s.label}
+              {counts ? (
+                <span className="text-[11.5px] font-bold opacity-60 tabular">
+                  {counts[s.value]}
+                </span>
+              ) : null}
+            </button>
+          ))}
+        </div>
+        <div className="flex flex-none rounded-xl border border-line bg-surface p-1">
+          {[{ value: '', label: 'All types' }, ...REPORT_TYPES].map((t) => (
+            <button
+              key={t.value}
+              type="button"
+              onClick={() => setType(t.value)}
+              className={`press rounded-lg px-3 py-1.5 text-[13px] font-semibold transition ${
+                type === t.value ? 'bg-brand-tint text-brand-deep' : 'text-ink-3 hover:text-ink'
+              }`}
+            >
+              {t.label}
+            </button>
+          ))}
+        </div>
+      </Toolbar>
+
+      {list.isPending ? (
+        <p className="py-10 text-center text-[13.5px] text-ink-3">Loading…</p>
+      ) : reports.length === 0 ? (
+        <Card className="grid place-items-center gap-2 py-14 text-center">
+          <Icon name="inbox" size={28} className="text-ink-5" />
+          <p className="text-[14px] text-ink-3">
+            {status === 'OPEN'
+              ? 'Nothing open. Good.'
+              : `No ${status.toLowerCase().replace('_', ' ')} reports.`}
+          </p>
+        </Card>
+      ) : (
+        <div className="flex flex-col gap-3">
+          {reports.map((r) => {
+            const open = r.status === 'OPEN' || r.status === 'IN_PROGRESS';
+            return (
+              <Card key={r.id}>
+                <div className="flex flex-wrap items-start justify-between gap-3">
                   <div className="min-w-0 flex-1">
                     <div className="flex flex-wrap items-center gap-2">
-                      <h3 className="text-[14px] font-semibold">{r.title}</h3>
+                      <h3 className="text-[14.5px] font-bold">
+                        {r.title ?? REPORT_TYPES.find((t) => t.value === r.type)?.label ?? r.type}
+                      </h3>
                       <Pill tone={REPORT_TONE[r.status as keyof typeof REPORT_TONE]}>
                         {r.status.toLowerCase().replace('_', ' ')}
                       </Pill>
-                      <Pill>{r.type.toLowerCase()}</Pill>
+                      <Pill>{REPORT_TYPES.find((t) => t.value === r.type)?.label ?? r.type}</Pill>
                     </div>
                     <p className="mt-1 text-[12.5px] text-ink-3">
-                      {r.from} · {r.date}
+                      {r.user
+                        ? r.user.name
+                          ? `${r.user.name} · ${r.user.email}`
+                          : r.user.email
+                        : 'Deleted account'}
+                      {' · '}
+                      {relative(r.createdAt)}
+                      {r.featurePage ? ` · ${r.featurePage}` : ''}
                     </p>
                   </div>
-                  {r.status === 'OPEN' || r.status === 'IN_PROGRESS' ? (
-                    <div className="flex flex-none gap-2">
-                      <Button variant="ghost" size="sm">
-                        Dismiss
+
+                  <div className="flex flex-none flex-wrap gap-2">
+                    {r.status === 'OPEN' ? (
+                      <Button
+                        variant="secondary"
+                        size="sm"
+                        icon="play_arrow"
+                        disabled={update.isPending}
+                        onClick={() => move(r.id, 'IN_PROGRESS')}
+                      >
+                        Take on
                       </Button>
-                      <Button variant="secondary" size="sm" icon="check">
-                        Resolve
+                    ) : null}
+                    {open ? (
+                      <>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          disabled={update.isPending}
+                          onClick={() => setClosing({ report: r, to: 'DISMISSED' })}
+                        >
+                          Dismiss
+                        </Button>
+                        <Button
+                          variant="brand"
+                          size="sm"
+                          icon="check"
+                          disabled={update.isPending}
+                          onClick={() => setClosing({ report: r, to: 'RESOLVED' })}
+                        >
+                          Resolve
+                        </Button>
+                      </>
+                    ) : (
+                      <Button
+                        variant="secondary"
+                        size="sm"
+                        icon="undo"
+                        disabled={update.isPending}
+                        onClick={() => move(r.id, 'OPEN', null)}
+                      >
+                        Reopen
                       </Button>
-                    </div>
-                  ) : null}
+                    )}
+                  </div>
                 </div>
-              </li>
-            ))}
-          </ul>
-        </Card>
-      ) : null}
-      {tab === 'reviews' ? <ReviewQueue /> : null}
-    </AppShell>
+
+                <p className="mt-3 max-w-[80ch] text-[14px] leading-[1.7] whitespace-pre-wrap text-ink-2">
+                  {r.description}
+                </p>
+
+                {r.resolution ? (
+                  <p className="mt-3 rounded-xl bg-surface-2 px-3 py-2 text-[12.5px] text-ink-3">
+                    Note to author: {r.resolution}
+                  </p>
+                ) : null}
+              </Card>
+            );
+          })}
+        </div>
+      )}
+
+      {/* Closing asks for a note. It is what the author reads on their Help
+          page, and the one thing that makes "resolved" mean something. */}
+      <Modal
+        open={closing !== null}
+        onClose={() => {
+          setClosing(null);
+          setNote('');
+        }}
+        title={closing?.to === 'RESOLVED' ? 'Resolve this report' : 'Dismiss this report'}
+        description={
+          closing?.to === 'RESOLVED'
+            ? 'Say what was done. The author sees this on their Help page.'
+            : 'Say why. The author sees this on their Help page.'
+        }
+        busy={update.isPending}
+        onSubmit={(e) => {
+          e.preventDefault();
+          if (closing) move(closing.report.id, closing.to, note.trim() || null);
+        }}
+        footer={
+          <>
+            <Button
+              type="button"
+              variant="secondary"
+              size="sm"
+              onClick={() => {
+                setClosing(null);
+                setNote('');
+              }}
+              disabled={update.isPending}
+            >
+              Cancel
+            </Button>
+            <Button
+              type="submit"
+              variant={closing?.to === 'RESOLVED' ? 'brand' : 'caution'}
+              size="sm"
+              loading={update.isPending}
+            >
+              {closing?.to === 'RESOLVED' ? 'Mark resolved' : 'Dismiss'}
+            </Button>
+          </>
+        }
+      >
+        {closing ? (
+          <div className="flex flex-col gap-4">
+            <p className="rounded-xl bg-surface-2 px-3 py-2 text-[13px] text-ink-2">
+              {closing.report.title ?? closing.report.type} —{' '}
+              {closing.report.description.slice(0, 200)}
+              {closing.report.description.length > 200 ? '…' : ''}
+            </p>
+            <Textarea
+              label="Note to the author"
+              rows={4}
+              value={note}
+              onChange={(e) => setNote(e.target.value)}
+              placeholder={
+                closing.to === 'RESOLVED'
+                  ? 'Fixed in today’s release — thank you for the clear steps.'
+                  : 'Not something we plan to change, because…'
+              }
+              autoFocus
+            />
+          </div>
+        ) : null}
+      </Modal>
+    </>
   );
 }
 

@@ -37,6 +37,7 @@ import {
   uploadAvatar,
   type MeetingInput,
   type Paginated,
+  type ReportStatus,
 } from './api';
 
 /**
@@ -521,4 +522,27 @@ export const useAdminPayments = (query: Record<string, unknown> = {}) =>
   useQuery({ queryKey: [...keys.admin, 'payments', query], queryFn: () => admin.payments(query) });
 
 export const useAdminReports = (query: Record<string, unknown> = {}) =>
-  useQuery({ queryKey: [...keys.admin, 'reports', query], queryFn: () => admin.reports(query) });
+  useQuery({
+    queryKey: [...keys.admin, 'reports', query],
+    queryFn: () => admin.reports(query),
+    placeholderData: (previous) => previous,
+  });
+
+export function useUpdateReport() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({
+      id,
+      ...input
+    }: {
+      id: string;
+      status?: ReportStatus;
+      resolution?: string | null;
+    }) => admin.updateReport(id, input),
+    // The author's own Help page lists their reports, so it goes stale too.
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: [...keys.admin, 'reports'] });
+      void qc.invalidateQueries({ queryKey: keys.reports });
+    },
+  });
+}

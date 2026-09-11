@@ -960,9 +960,18 @@ export const admin = {
     input: { status: 'APPROVED' | 'REJECTED'; adminNote?: string | null },
   ) => api.patch<{ review: OwnReview }>(`/admin/reviews/${id}`, input),
   reports: (query: Record<string, unknown> = {}) =>
-    api.get<Paginated<Report & { user?: { email: string; name: string | null } }>>(
+    api.get<Paginated<AdminReport> & { statusCounts: Record<ReportStatus, number> }>(
       `/admin/reports${qs(query)}`,
     ),
+  updateReport: (id: string, input: { status?: ReportStatus; resolution?: string | null }) =>
+    api.patch<AdminReport>(`/admin/reports/${id}`, input),
+};
+
+export type ReportStatus = 'OPEN' | 'IN_PROGRESS' | 'RESOLVED' | 'DISMISSED';
+
+/** A report as the admin sees it: with who sent it, or null if they have gone. */
+export type AdminReport = Report & {
+  user: { id: string; email: string; name: string | null } | null;
 };
 
 /** Coarse public counters for the marketing page. */
