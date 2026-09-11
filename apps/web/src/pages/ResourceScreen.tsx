@@ -456,7 +456,7 @@ export function ResourceScreen<T extends { id: string }>({
                                 </span>
                               ) : null}
 
-                              <RowMenu
+                              <RowActions
                                 onEdit={() => setEditing(item)}
                                 onDelete={() => setDeleting(item)}
                               />
@@ -582,8 +582,8 @@ function ResourceCard({
     >
       {sticky ? <span className="note-fold" aria-hidden="true" /> : null}
 
-      {/* The face opens it; the menu lives in the footer instead of the corner,
-          which the fold occupies on a note. */}
+      {/* The face opens it; the actions live in the footer instead of the
+          corner, which the fold occupies on a note. */}
       <button
         type="button"
         onClick={onEdit}
@@ -619,7 +619,7 @@ function ResourceCard({
         ) : null}
         {view.meta ? <span className="ml-auto text-[11.5px] text-ink-3">{view.meta}</span> : null}
         <span className={view.meta ? '' : 'ml-auto'}>
-          <RowMenu onEdit={onEdit} onDelete={onDelete} />
+          <RowActions onEdit={onEdit} onDelete={onDelete} />
         </span>
       </div>
     </div>
@@ -729,47 +729,26 @@ function SelectFilter({
   );
 }
 
-/** Per-row edit and delete. Kept behind a menu so rows stay quiet while scanning. */
-function RowMenu({ onEdit, onDelete }: { onEdit: () => void; onDelete: () => void }) {
-  const [open, setOpen] = useState(false);
-
-  useEffect(() => {
-    if (!open) return;
-    const close = () => setOpen(false);
-    // Deferred so the click that opened it does not immediately close it.
-    const timer = window.setTimeout(() => document.addEventListener('click', close), 0);
-    return () => {
-      window.clearTimeout(timer);
-      document.removeEventListener('click', close);
-    };
-  }, [open]);
-
+/**
+ * Per-row edit and delete.
+ *
+ * Both actions in the open rather than behind a menu. There are only ever two
+ * of them, and a menu to reach two things costs a click and a guess at what is
+ * inside — the pencil and the bin say what they do without being opened.
+ *
+ * They sit quiet until wanted: grey at rest, and the bin only turns red under
+ * the pointer, so a wall of cards is not a wall of red.
+ */
+function RowActions({ onEdit, onDelete }: { onEdit: () => void; onDelete: () => void }) {
   return (
-    <div className="relative flex-none">
-      <button
-        type="button"
-        aria-label="Actions"
-        aria-expanded={open}
-        onClick={(e) => {
-          e.stopPropagation();
-          setOpen((v) => !v);
-        }}
-        className="press grid size-8 place-items-center rounded-lg text-ink-4 transition hover:bg-surface-2 hover:text-ink"
-      >
-        <Icon name="more_horiz" size={19} />
-      </button>
-
-      {open ? (
-        <div className="animate-slide-down absolute top-full right-0 z-20 mt-1 w-40 overflow-hidden rounded-xl border border-line bg-surface py-1 shadow-pop">
-          <MenuItem icon="edit" label="Edit" onClick={onEdit} />
-          <MenuItem icon="delete" label="Delete" onClick={onDelete} danger />
-        </div>
-      ) : null}
+    <div className="flex flex-none items-center gap-0.5">
+      <RowAction icon="edit" label="Edit" onClick={onEdit} />
+      <RowAction icon="delete" label="Delete" onClick={onDelete} danger />
     </div>
   );
 }
 
-function MenuItem({
+function RowAction({
   icon,
   label,
   onClick,
@@ -783,13 +762,19 @@ function MenuItem({
   return (
     <button
       type="button"
-      onClick={onClick}
-      className={`flex w-full items-center gap-2.5 px-3 py-2 text-left text-[13.5px] font-medium transition hover:bg-surface-2 ${
-        danger ? 'text-danger-ink' : 'text-ink-2'
+      aria-label={label}
+      title={label}
+      // Stopped here because a card's whole face opens the record: without it,
+      // deleting would open the dialog on the way out.
+      onClick={(e) => {
+        e.stopPropagation();
+        onClick();
+      }}
+      className={`press grid size-8 place-items-center rounded-lg text-ink-4 transition ${
+        danger ? 'hover:bg-danger-tint hover:text-danger-ink' : 'hover:bg-surface-2 hover:text-ink'
       }`}
     >
       <Icon name={icon} size={17} />
-      {label}
     </button>
   );
 }
