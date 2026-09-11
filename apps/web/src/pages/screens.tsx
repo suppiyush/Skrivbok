@@ -9,6 +9,7 @@
  * sends `null` rather than `''` for cleared optional text, because the backend
  * treats an empty string as a value and `null` as "unset".
  */
+import { useId, useState } from 'react';
 import { AudioPlayer } from '../components/ui/AudioPlayer';
 import { Field } from '../components/ui/Field';
 import { Checkbox, FieldRow, Select, Textarea } from '../components/ui/Form';
@@ -29,6 +30,7 @@ import {
   ideaHooks,
   literatureHooks,
   noteHooks,
+  useCareerGoalEdit,
   useCareerQuota,
   useCareerSummary,
   useLiteratureTags,
@@ -698,6 +700,77 @@ function goalTypeOptions(current: string | undefined) {
   return values.map((value) => ({ value, label: humanise(value) }));
 }
 
+/**
+ * Stages: how many there are, and how many are done.
+ *
+ * The two are one control because one bounds the other — the slider's maximum
+ * is whatever the number box says, and lowering the total below the current
+ * stage clamps the stage back down rather than leaving it past the end.
+ *
+ * Both inputs keep their `name`, so the dialog reads them out of `FormData`
+ * as it reads everything else. `previousStage` rides along as a hidden field:
+ * on edit the stage is moved through its own endpoint, and only if it changed.
+ */
+function StageFields({ goal }: { goal: CareerGoal | null }) {
+  const totalId = useId();
+  const stageId = useId();
+  const [total, setTotal] = useState(goal?.totalStages ?? 5);
+  const [stage, setStage] = useState(goal?.currentStage ?? 0);
+
+  const bounded = Math.min(stage, total);
+  const pct = total > 0 ? Math.round((bounded / total) * 100) : 0;
+
+  return (
+    <>
+      <div className="flex flex-col gap-1.5">
+        <label htmlFor={totalId} className="text-[13px] font-semibold text-ink-2">
+          Total stages
+        </label>
+        <input
+          id={totalId}
+          name="totalStages"
+          type="number"
+          min={2}
+          max={50}
+          value={total}
+          onChange={(e) => {
+            const next = Math.max(2, Math.min(50, Number(e.target.value) || 2));
+            setTotal(next);
+            setStage((s) => Math.min(s, next));
+          }}
+          className="h-11 rounded-[11px] border border-line-2 bg-surface px-3.5 text-[14.5px] text-ink outline-none transition focus:border-brand"
+        />
+      </div>
+
+      <div className="flex flex-col gap-1.5 sm:col-span-2">
+        <div className="flex items-baseline justify-between">
+          <label htmlFor={stageId} className="text-[13px] font-semibold text-ink-2">
+            Stages completed
+          </label>
+          <span className="text-[13px] font-bold text-brand-deep tabular">
+            {bounded} of {total} · {pct}%
+          </span>
+        </div>
+        <input
+          id={stageId}
+          name="currentStage"
+          type="range"
+          min={0}
+          max={total}
+          step={1}
+          value={bounded}
+          onChange={(e) => setStage(Number(e.target.value))}
+          className="range mt-1"
+          style={{
+            background: `linear-gradient(to right, var(--color-brand) ${pct}%, var(--color-surface-2) ${pct}%)`,
+          }}
+        />
+        {goal ? <input type="hidden" name="previousStage" value={goal.currentStage} /> : null}
+      </div>
+    </>
+  );
+}
+
 /** The four figures over the list. All four come from one summary request. */
 function CareerStats() {
   const { data, isPending } = useCareerSummary();
@@ -721,7 +794,7 @@ const careerGoalsConfig: ResourceConfig<CareerGoal> = {
   noun: 'goal',
   blurb: 'Set, track, and achieve your career aspirations and personal goals.',
   createLabel: 'Add goal',
-  hooks: careerGoalHooks as never,
+  hooks: { ...careerGoalHooks, useUpdate: useCareerGoalEdit } as never,
   useQuota: useCareerQuota,
   stats: () => <CareerStats />,
   listLabel: 'Your goals',
@@ -777,13 +850,9 @@ const careerGoalsConfig: ResourceConfig<CareerGoal> = {
         required
         error={Err('title')}
       />
-      <Textarea
-        label="Description"
-        name="description"
-        rows={3}
-        defaultValue={goal?.description ?? ''}
-        error={Err('description')}
-      />
+      {/* Type and stages before the body: they are the shape of the goal, and
+          a three-row textarea buries anything under it. The slider spans the
+          row beneath, since a bar that short says nothing. */}
       <FieldRow>
         <Select
           label="Type"
@@ -792,16 +861,15 @@ const careerGoalsConfig: ResourceConfig<CareerGoal> = {
           options={goalTypeOptions(goal?.goalType)}
           error={Err('goalType')}
         />
-        <Field
-          label="Total stages"
-          name="totalStages"
-          type="number"
-          min={2}
-          max={50}
-          defaultValue={goal?.totalStages ?? 5}
-          error={Err('totalStages')}
-        />
+        <StageFields goal={goal} />
       </FieldRow>
+      <Textarea
+        label="Description"
+        name="description"
+        rows={3}
+        defaultValue={goal?.description ?? ''}
+        error={Err('description')}
+      />
       <FieldRow>
         <Field
           label="Start"
@@ -819,7 +887,7 @@ const careerGoalsConfig: ResourceConfig<CareerGoal> = {
         />
       </FieldRow>
       <Field
-        label="Current stage description"
+        label="Stage description"
         name="stageDescription"
         defaultValue={goal?.stageDescription ?? ''}
         placeholder="What is happening right now"
@@ -832,6 +900,9 @@ const careerGoalsConfig: ResourceConfig<CareerGoal> = {
     description: text(form, 'description'),
     goalType: text(form, 'goalType') ?? 'general',
     totalStages: Number(form.get('totalStages') ?? 5),
+    currentStage: Number(form.get('currentStage') ?? 0),
+    // Only present on edit; `useCareerGoalEdit` compares the two and strips both.
+    ...(form.has('previousStage') ? { previousStage: Number(form.get('previousStage')) } : {}),
     stageDescription: text(form, 'stageDescription'),
     startAt: text(form, 'startAt'),
     targetAt: text(form, 'targetAt'),

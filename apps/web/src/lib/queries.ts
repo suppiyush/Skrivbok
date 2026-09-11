@@ -143,6 +143,45 @@ export const eventHooks = resourceHooks(keys.calendar, calendar);
 export const useDeadlineSummary = () =>
   useQuery({ queryKey: [...keys.deadlines, 'summary'], queryFn: deadlines.summary });
 
+/**
+ * Edit a goal, stage included.
+ *
+ * `PATCH` refuses `currentStage` on purpose — a stage change must go through
+ * the stage endpoint so it leaves a history entry. The edit dialog offers the
+ * stage as a slider all the same, so this hook takes the two apart: the other
+ * fields are patched, and the stage is moved only if it actually moved. The
+ * server rejects a move to the stage a goal is already at, so that check is
+ * done here rather than found out the hard way.
+ */
+export const useCareerGoalEdit = (): ReturnType<typeof careerGoalHooks.useUpdate> => {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ id, input }: { id: string; input: Record<string, unknown> }) => {
+      const { currentStage, previousStage, ...rest } = input;
+      const moving =
+        typeof currentStage === 'number' &&
+        typeof previousStage === 'number' &&
+        currentStage !== previousStage;
+
+      // Order matters, because each half checks the other's bound. The server
+      // refuses a total below the stage a goal is at, and a stage beyond its
+      // total — so a move down goes first (it makes room for a lower total),
+      // and a move up goes last (a higher total has to be there to move into).
+      if (moving && currentStage < previousStage) {
+        await careerGoals.setStage(id, currentStage);
+        return careerGoals.update(id, rest);
+      }
+
+      const goal = await careerGoals.update(id, rest);
+      return moving ? careerGoals.setStage(id, currentStage) : goal;
+    },
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: keys.careerGoals });
+      for (const derived of DERIVED) void qc.invalidateQueries({ queryKey: derived });
+    },
+  });
+};
+
 export const useCareerSummary = () =>
   useQuery({ queryKey: [...keys.careerGoals, 'summary'], queryFn: careerGoals.summary });
 

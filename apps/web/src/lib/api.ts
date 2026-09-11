@@ -606,6 +606,9 @@ export const careerGoals = {
     ),
   advance: (id: string, description?: string) =>
     api.post<CareerGoal>(`/career-goals/${id}/advance`, { description: description ?? null }),
+  /** Jump to a stage, forwards or back. Writes a history entry; refuses a no-op. */
+  setStage: (id: string, stage: number, description?: string | null) =>
+    api.put<CareerGoal>(`/career-goals/${id}/stage`, { stage, description: description ?? null }),
 };
 
 export const projects = {
