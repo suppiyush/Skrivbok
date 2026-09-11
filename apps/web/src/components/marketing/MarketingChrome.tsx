@@ -10,6 +10,7 @@ import { useEffect, useState, type ReactNode } from 'react';
 import { Link } from 'react-router-dom';
 import { Icon } from '../ui/Icon';
 import { Button } from '../ui/Button';
+import { useAuth } from '../../lib/auth';
 
 const NAV = [
   { label: 'Features', href: '#features' },
@@ -110,6 +111,19 @@ export function MarketingNav({
 
   const [menuOpen, setMenuOpen] = useState(false);
 
+  // Only the sign-out action is needed here — `isSignedIn` stays a prop so
+  // every page that renders this nav keeps deciding for itself when the
+  // session check has actually resolved, rather than each copy of the nav
+  // guessing independently.
+  const { signOut } = useAuth();
+  const [signingOut, setSigningOut] = useState(false);
+
+  const handleSignOut = async () => {
+    setSigningOut(true);
+    await signOut();
+    setSigningOut(false);
+  };
+
   return (
     <header
       className={`sticky top-0 z-50 transition-colors ${
@@ -137,11 +151,26 @@ export function MarketingNav({
 
         <div className="ml-auto flex items-center gap-2 lg:ml-0">
           {isSignedIn ? (
-            <Link to="/dashboard">
-              <Button variant="primary" size="sm" className={`!rounded-full !px-5 ${ctaClassName}`}>
-                Open Skrivbok
+            <>
+              <Button
+                variant="ghost"
+                size="sm"
+                loading={signingOut}
+                onClick={() => void handleSignOut()}
+                className="hidden !rounded-full sm:inline-flex"
+              >
+                Logout
               </Button>
-            </Link>
+              <Link to="/dashboard">
+                <Button
+                  variant="primary"
+                  size="sm"
+                  className={`!rounded-full !px-5 ${ctaClassName}`}
+                >
+                  Dashboard
+                </Button>
+              </Link>
+            </>
           ) : (
             <>
               <Link
@@ -151,7 +180,11 @@ export function MarketingNav({
                 Log In
               </Link>
               <Link to="/register">
-                <Button variant="primary" size="sm" className={`!rounded-full !px-5 ${ctaClassName}`}>
+                <Button
+                  variant="primary"
+                  size="sm"
+                  className={`!rounded-full !px-5 ${ctaClassName}`}
+                >
                   Get Started
                 </Button>
               </Link>

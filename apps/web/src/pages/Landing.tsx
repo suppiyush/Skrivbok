@@ -15,6 +15,7 @@ import { Link } from 'react-router-dom';
 import { Button } from '../components/ui/Button';
 import { Icon } from '../components/ui/Icon';
 import { usePublishedReviews } from '../lib/queries';
+import { useAuth } from '../lib/auth';
 import { Reveal, Stagger } from '../components/ui/Motion';
 import {
   ArtPlaceholder,
@@ -205,9 +206,18 @@ const FAQS = [
 ];
 
 export default function Landing() {
+  // Without this, the nav always renders its signed-out state — Log In and
+  // Get Started stay in the header even after signing in, and following
+  // either link back to a page RedirectIfAuthed doesn't cover reads as if
+  // the session never took.
+  const { user } = useAuth();
+
   return (
     <div className="theme-sticky min-h-screen bg-canvas-alt">
-      <MarketingNav ctaClassName="!bg-[color:var(--color-brand-deep)] hover:!brightness-110" />
+      <MarketingNav
+        isSignedIn={Boolean(user)}
+        ctaClassName="!bg-[color:var(--color-brand-deep)] hover:!brightness-110"
+      />
       <main>
         <Hero />
         <Features />
@@ -394,10 +404,7 @@ function Why() {
               key={p.title}
               className="grid w-full flex-none snap-center items-center gap-10 lg:grid-cols-2"
             >
-              <div
-                onMouseEnter={() => setPaused(true)}
-                onMouseLeave={() => setPaused(false)}
-              >
+              <div onMouseEnter={() => setPaused(true)} onMouseLeave={() => setPaused(false)}>
                 <ArtPlaceholder
                   label={p.art}
                   icon={p.icon}
@@ -413,9 +420,7 @@ function Why() {
                 <h3 className="mt-3 text-[clamp(26px,3.2vw,38px)] leading-[1.12] font-extrabold tracking-[-0.035em]">
                   {p.title}
                 </h3>
-                <p className="mt-4 max-w-[50ch] text-[17px] leading-[1.75] text-ink-3">
-                  {p.text}
-                </p>
+                <p className="mt-4 max-w-[50ch] text-[17px] leading-[1.75] text-ink-3">{p.text}</p>
               </div>
             </div>
           ))}
@@ -620,4 +625,3 @@ function Faq() {
     </Section>
   );
 }
-

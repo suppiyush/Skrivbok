@@ -40,3 +40,20 @@ export function RequireAdmin({ children }: { children: ReactNode }) {
   if (user.role !== 'ADMIN') return <Navigate to="/dashboard" replace />;
   return <>{children}</>;
 }
+
+/**
+ * The inverse guard, for `/login` and `/register`.
+ *
+ * Without this, a signed-in visitor who follows a stale "Log In" link (or one
+ * from a page that has not yet learned they are signed in) lands back on the
+ * sign-in page and can press "Continue with Google" again — which is not
+ * broken, just pointless, and reads as if the first sign-in did not take.
+ * Sending them straight to the dashboard is the same trust already placed in
+ * `RequireAuth` above, just pointed the other way.
+ */
+export function RedirectIfAuthed({ children }: { children: ReactNode }) {
+  const { user, loading } = useAuth();
+  if (loading) return null;
+  if (user) return <Navigate to="/dashboard" replace />;
+  return <>{children}</>;
+}

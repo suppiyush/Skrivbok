@@ -9,7 +9,7 @@
  */
 import { lazy, Suspense, type ReactNode } from 'react';
 import { createBrowserRouter, Navigate } from 'react-router-dom';
-import { RequireAdmin, RequireAuth } from './components/layout/RequireAuth';
+import { RedirectIfAuthed, RequireAdmin, RequireAuth } from './components/layout/RequireAuth';
 import { useAuth } from './lib/auth';
 import Landing from './pages/Landing';
 import AuthPage from './pages/Auth';
@@ -71,8 +71,22 @@ export const router = createBrowserRouter([
   // Sign-in and sign-up are the same Google button, so both paths render the
   // same page. They are kept apart only so the wording matches the link the
   // visitor followed — and so existing links to /register keep working.
-  { path: '/login', element: <AuthPage mode="login" /> },
-  { path: '/register', element: <AuthPage mode="register" /> },
+  {
+    path: '/login',
+    element: (
+      <RedirectIfAuthed>
+        <AuthPage mode="login" />
+      </RedirectIfAuthed>
+    ),
+  },
+  {
+    path: '/register',
+    element: (
+      <RedirectIfAuthed>
+        <AuthPage mode="register" />
+      </RedirectIfAuthed>
+    ),
+  },
 
   { path: '/terms', element: page(<Legal doc="terms" />) },
   { path: '/privacy-policy', element: page(<Legal doc="privacy" />) },

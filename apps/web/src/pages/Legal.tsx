@@ -6,6 +6,7 @@
  * reachable from every public footer.
  */
 import { MarketingFooter, MarketingNav, Section } from '../components/marketing/MarketingChrome';
+import { useAuth } from '../lib/auth';
 
 const DOCS = {
   terms: { title: 'Terms of Service', updated: 'September 2026' },
@@ -17,10 +18,11 @@ const DOCS = {
 
 export default function Legal({ doc }: { doc: keyof typeof DOCS }) {
   const meta = DOCS[doc];
+  const { user } = useAuth();
 
   return (
     <div className="min-h-screen bg-canvas-alt">
-      <MarketingNav />
+      <MarketingNav isSignedIn={Boolean(user)} />
       <main>
         <Section className="py-16">
           <div className="mx-auto max-w-[72ch]">
@@ -44,7 +46,10 @@ export default function Legal({ doc }: { doc: keyof typeof DOCS }) {
               </p>
               <p className="mt-5 text-[15px] leading-[1.8] text-ink-3">
                 Questions in the meantime:{' '}
-                <a href="mailto:hello@skrivbok.app" className="font-semibold text-brand-ink">hello@skrivbok.app</a>.
+                <a href="mailto:hello@skrivbok.app" className="font-semibold text-brand-ink">
+                  hello@skrivbok.app
+                </a>
+                .
               </p>
             </div>
           </div>
