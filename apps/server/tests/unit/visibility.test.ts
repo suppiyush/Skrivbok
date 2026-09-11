@@ -33,6 +33,7 @@ function occurrence(overrides: Partial<EventOccurrence> = {}): EventOccurrence {
     recurrence: 'NONE',
     recurrenceEndAt: null,
     meetingRequestId: null,
+    meetingGroupId: null,
     createdAt: new Date('2027-01-01T00:00:00Z'),
     updatedAt: new Date('2027-01-01T00:00:00Z'),
     isRecurrence: false,

@@ -703,6 +703,10 @@ model CalendarEvent {
   /// Set when this event was created by accepting a meeting request, so both
   /// sides' copies can be updated or removed together.
   meetingRequestId String?
+  /// Set on every event belonging to a group meet — the requester's, made when
+  /// it was sent, and each attendee's, made on accepting — so cancelling the
+  /// meet removes all of them at once.
+  meetingGroupId   String?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -712,6 +716,7 @@ model CalendarEvent {
 
   @@index([userId, startAt])
   @@index([meetingRequestId])
+  @@index([meetingGroupId])
   @@map("calendar_events")
 }
 
@@ -731,6 +736,12 @@ model MeetingRequest {
   status      MeetingStatus @default(PENDING)
   respondedAt DateTime?
 
+  /// Set when this request is one of several sent together — one meeting,
+  /// many attendees. Every request in the group shares it, and so does the
+  /// requester's own calendar event, so the meeting can be found and
+  /// cancelled as one thing.
+  groupId String?
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -743,6 +754,7 @@ model MeetingRequest {
   @@index([receiverId, status])
   @@index([senderId, status])
   @@index([startAt])
+  @@index([groupId])
   @@map("meeting_requests")
 }
 

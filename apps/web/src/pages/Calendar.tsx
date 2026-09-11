@@ -32,6 +32,7 @@ import {
   type Recurrence,
 } from '../lib/api';
 import { paletteFor } from '../lib/features';
+import { RequestMeetButton } from './RequestMeet';
 import { dateTime, dateTimeInputValue, humanise, timeOnly } from '../lib/format';
 import { eventHooks, useEventRange, useMeetingActions, useMeetings } from '../lib/queries';
 
@@ -185,9 +186,12 @@ export default function Calendar() {
         icon="calendar_month"
         description="Events, recurring commitments and meetings. Recurring events stay correct across daylight-saving changes."
         actions={
-          <Button variant="brand" size="sm" icon="add" onClick={() => setEditing(null)}>
-            Add event
-          </Button>
+          <>
+            <RequestMeetButton />
+            <Button variant="brand" size="sm" icon="add" onClick={() => setEditing(null)}>
+              Add event
+            </Button>
+          </>
         }
       />
 
@@ -572,7 +576,7 @@ export function Meetings() {
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
 
   const list = useMeetings({ box, limit: 25, sort: 'soonest' });
-  const { accept, decline, cancel, create } = useMeetingActions();
+  const { accept, decline, cancel, create, cancelGroup } = useMeetingActions();
   const incoming = useMeetings({ box: 'incoming', status: 'PENDING', limit: 1 });
 
   const requests = list.data?.data ?? [];
@@ -624,9 +628,12 @@ export function Meetings() {
         icon="groups"
         description="Propose a time and see it accepted or declined. Accepting puts the event on both calendars at once; cancelling removes it from both."
         actions={
-          <Button variant="brand" size="sm" icon="add" onClick={() => setProposing(true)}>
-            Propose a meeting
-          </Button>
+          <>
+            <RequestMeetButton />
+            <Button variant="brand" size="sm" icon="add" onClick={() => setProposing(true)}>
+              Propose a meeting
+            </Button>
+          </>
         }
       />
 
@@ -676,18 +683,32 @@ export function Meetings() {
         </EmptyState>
       ) : (
         <div className="flex flex-col gap-3">
-          {requests.map((request, i) => (
-            <Reveal key={request.id} delay={i * 45}>
-              <MeetingCard
-                request={request}
-                box={box}
-                onAccept={() =>
-                  act(accept, request.id, 'Meeting accepted — it is on both calendars')
-                }
-                onDecline={() => act(decline, request.id, 'Meeting declined')}
-                onCancel={() => act(cancel, request.id, 'Meeting cancelled')}
-                busy={accept.isPending || decline.isPending || cancel.isPending}
-              />
+          {groupOutgoing(requests, box).map((item, i) => (
+            <Reveal key={item.kind === 'group' ? item.groupId : item.request.id} delay={i * 45}>
+              {item.kind === 'group' ? (
+                <GroupMeetCard
+                  requests={item.requests}
+                  onCancel={() => act(cancelGroup, item.groupId, 'Meet cancelled for everyone')}
+                  busy={cancelGroup.isPending}
+                />
+              ) : (
+                <MeetingCard
+                  request={item.request}
+                  box={box}
+                  onAccept={() =>
+                    act(
+                      accept,
+                      item.request.id,
+                      item.request.groupId
+                        ? 'Accepted — it is on your calendar'
+                        : 'Meeting accepted — it is on both calendars',
+                    )
+                  }
+                  onDecline={() => act(decline, item.request.id, 'Meeting declined')}
+                  onCancel={() => act(cancel, item.request.id, 'Meeting cancelled')}
+                  busy={accept.isPending || decline.isPending || cancel.isPending}
+                />
+              )}
             </Reveal>
           ))}
         </div>
@@ -753,6 +774,106 @@ export function Meetings() {
         </div>
       </Modal>
     </AppShell>
+  );
+}
+
+/**
+ * Outgoing requests that were sent together are shown together.
+ *
+ * The server keeps one request per attendee — that is what each person
+ * answers — but the sender arranged one meet, and reading three cards for it
+ * would be reading the same meeting three times. Incoming requests stay one
+ * per card: each is addressed to this user and is theirs alone to answer.
+ */
+type ListItem =
+  | { kind: 'one'; request: MeetingRequest }
+  | { kind: 'group'; groupId: string; requests: MeetingRequest[] };
+
+function groupOutgoing(requests: MeetingRequest[], box: 'incoming' | 'outgoing'): ListItem[] {
+  if (box === 'incoming') return requests.map((request) => ({ kind: 'one', request }));
+
+  const items: ListItem[] = [];
+  const groups = new Map<string, ListItem & { kind: 'group' }>();
+
+  for (const request of requests) {
+    if (!request.groupId) {
+      items.push({ kind: 'one', request });
+      continue;
+    }
+    const existing = groups.get(request.groupId);
+    if (existing) {
+      existing.requests.push(request);
+    } else {
+      const group = { kind: 'group' as const, groupId: request.groupId, requests: [request] };
+      groups.set(request.groupId, group);
+      items.push(group);
+    }
+  }
+  return items;
+}
+
+function GroupMeetCard({
+  requests,
+  onCancel,
+  busy,
+}: {
+  requests: MeetingRequest[];
+  onCancel: () => void;
+  busy: boolean;
+}) {
+  const first = requests[0]!;
+  const live = requests.some((r) => r.status === 'PENDING' || r.status === 'ACCEPTED');
+  const accepted = requests.filter((r) => r.status === 'ACCEPTED').length;
+
+  return (
+    <Card>
+      <div className="flex flex-wrap items-start gap-3">
+        <div className="min-w-0 flex-1">
+          <div className="flex flex-wrap items-center gap-2">
+            <h2 className="text-[15.5px] font-bold">{first.title}</h2>
+            <Pill tone={live ? (accepted > 0 ? 'success' : 'warning') : 'neutral'}>
+              {live ? `${accepted} of ${requests.length} accepted` : 'Cancelled'}
+            </Pill>
+          </div>
+
+          <p className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-[13px] text-ink-2">
+            <span className="flex items-center gap-1.5">
+              <Icon name="schedule" size={16} className="text-ink-4" />
+              {dateTime(first.startAt)} – {timeOnly(first.endAt)}
+            </span>
+            <span className="flex items-center gap-1.5 text-ink-3">
+              <Icon name="public" size={15} className="text-ink-4" />
+              {first.timezone}
+            </span>
+          </p>
+
+          {/* One line per person, with where they stand. */}
+          <ul className="mt-3 flex flex-wrap gap-1.5">
+            {requests.map((r) => (
+              <li
+                key={r.id}
+                className="flex h-7 items-center gap-1.5 rounded-full border border-line-2 bg-surface-2 pr-1.5 pl-2.5 text-[12px] font-semibold text-ink-2"
+              >
+                {r.receiver?.name ?? r.receiver?.email ?? 'Someone'}
+                <Pill tone={STATUS_TONE[r.status]}>{humanise(r.status)}</Pill>
+              </li>
+            ))}
+          </ul>
+
+          {first.description ? (
+            <p className="mt-2 text-[13px] leading-relaxed text-ink-3 italic">
+              “{first.description}”
+            </p>
+          ) : null}
+        </div>
+
+        {live ? (
+          <Button variant="secondary" size="sm" onClick={onCancel} disabled={busy}>
+            Cancel meet
+          </Button>
+        ) : null}
+      </div>
+    </Card>
   );
 }
 

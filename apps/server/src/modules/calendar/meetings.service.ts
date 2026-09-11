@@ -50,6 +50,7 @@ const requestSelect = {
   timezone: true,
   status: true,
   respondedAt: true,
+  groupId: true,
   createdAt: true,
   updatedAt: true,
   sender: party,
@@ -332,21 +333,31 @@ export async function accept(userId: string, id: string): Promise<MeetingRequest
     // blocked slot to anyone either has granted calendar access to.
     visibility: 'BUSY',
     meetingRequestId: id,
+    meetingGroupId: request.groupId,
   } as const;
+
+  // A group meet already put the requester's event on their calendar when it
+  // was sent, with everyone asked listed on it; only the accepter's is made
+  // here. A pair request makes both, as it always has.
+  const group = request.groupId !== null;
 
   await prisma.$transaction([
     prisma.meetingRequest.update({
       where: { id },
       data: { status: 'ACCEPTED', respondedAt: new Date() },
     }),
-    prisma.calendarEvent.create({
-      data: {
-        ...sharedEventFields,
-        userId: request.senderId,
-        title: request.title,
-        attendees: [request.receiver.email],
-      },
-    }),
+    ...(group
+      ? []
+      : [
+          prisma.calendarEvent.create({
+            data: {
+              ...sharedEventFields,
+              userId: request.senderId,
+              title: request.title,
+              attendees: [request.receiver.email],
+            },
+          }),
+        ]),
     prisma.calendarEvent.create({
       data: {
         ...sharedEventFields,
@@ -359,20 +370,25 @@ export async function accept(userId: string, id: string): Promise<MeetingRequest
       data: {
         userId: request.senderId,
         type: 'MEETING_ACCEPTED',
-        title: 'Meeting request accepted',
-        message: request.title,
-        link: `/calendar?request=${id}`,
+        title: group ? 'Someone accepted your meet' : 'Meeting request accepted',
+        message: group
+          ? `${request.receiver.name ?? request.receiver.email} · ${request.title}`
+          : request.title,
+        link: group ? '/meetings' : `/calendar?request=${id}`,
       },
     }),
   ]);
 
-  sendMeetingResponse(request.senderId, request.sender.email, {
-    responderName: request.receiver.name ?? request.receiver.email,
-    title: request.title,
-    accepted: true,
-    startAt: request.startAt,
-    timezone: request.timezone,
-  });
+  // A group meet notifies in the app only, by request.
+  if (!group) {
+    sendMeetingResponse(request.senderId, request.sender.email, {
+      responderName: request.receiver.name ?? request.receiver.email,
+      title: request.title,
+      accepted: true,
+      startAt: request.startAt,
+      timezone: request.timezone,
+    });
+  }
 
   log.info({ requestId: id }, 'Meeting request accepted; paired events created');
   return getById(userId, id);

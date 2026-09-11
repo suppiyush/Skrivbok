@@ -309,8 +309,16 @@ export function useMeetingActions() {
       onSuccess: invalidate,
     }),
     cancel: useMutation({ mutationFn: (id: string) => meetings.cancel(id), onSuccess: invalidate }),
+    createGroup: useMutation({ mutationFn: meetings.createGroup, onSuccess: invalidate }),
+    cancelGroup: useMutation({
+      mutationFn: (groupId: string) => meetings.cancelGroup(groupId),
+      onSuccess: invalidate,
+    }),
   };
 }
+
+export const useMeetContacts = () =>
+  useQuery({ queryKey: [...keys.meetings, 'contacts'], queryFn: meetings.contacts });
 
 /* ── Profile ──────────────────────────────────────────────────────────────── */
 

@@ -7,8 +7,28 @@ import type {
   RescheduleInput,
 } from './meetings.schema.js';
 import * as service from './meetings.service.js';
+import * as groups from './group-meetings.service.js';
+import type { CreateGroupMeetInput } from './meetings.schema.js';
 
 const requestId = (req: Request): string => req.params['id'] as string;
+
+// ── Group meets ───────────────────────────────────────────────────────────────
+
+export const contacts: RequestHandler = async (req, res) => {
+  const user = currentUser(req);
+  res.json({ contacts: await groups.contacts(user.id) });
+};
+
+export const createGroup: RequestHandler = async (req, res) => {
+  const user = currentUser(req);
+  res.status(201).json(await groups.create(user.id, req.body as CreateGroupMeetInput));
+};
+
+export const cancelGroup: RequestHandler = async (req, res) => {
+  const user = currentUser(req);
+  await groups.cancel(user.id, req.params['groupId'] as string);
+  res.status(204).end();
+};
 
 export const list: RequestHandler = async (req, res) => {
   const user = currentUser(req);

@@ -390,6 +390,8 @@ export interface MeetingRequest {
   endAt: string;
   timezone: string;
   status: MeetingStatus;
+  /** Set when this is one of several sent together — one meet, many people. */
+  groupId: string | null;
   respondedAt: string | null;
   createdAt: string;
   sender?: { id: string; name: string | null; email: string };
@@ -752,7 +754,36 @@ export const meetings = {
   accept: (id: string) => api.post<MeetingRequest>(`/calendar/meeting-requests/${id}/accept`),
   decline: (id: string) => api.post<MeetingRequest>(`/calendar/meeting-requests/${id}/decline`),
   cancel: (id: string) => api.post<MeetingRequest>(`/calendar/meeting-requests/${id}/cancel`),
+
+  /** The people who share a project with the user — who a meet can be with. */
+  contacts: () => api.get<{ contacts: MeetContact[] }>('/calendar/meeting-requests/contacts'),
+  /** One meet, several teammates. Wall-clock times in a zone; the server converts. */
+  createGroup: (input: GroupMeetInput) =>
+    api.post<{ groupId: string; eventId: string; requestIds: string[] }>(
+      '/calendar/meeting-requests/group',
+      input,
+    ),
+  cancelGroup: (groupId: string) =>
+    api.post<void>(`/calendar/meeting-requests/group/${groupId}/cancel`),
 };
+
+export interface MeetContact {
+  id: string;
+  name: string | null;
+  email: string;
+  /** The projects the two of you share, by name. */
+  projects: string[];
+}
+
+export interface GroupMeetInput {
+  attendeeIds: string[];
+  title: string;
+  description?: string | null;
+  date: string;
+  startTime: string;
+  endTime: string;
+  timezone: string;
+}
 
 /* ── Account ──────────────────────────────────────────────────────────────── */
 

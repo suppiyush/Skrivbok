@@ -20,6 +20,8 @@ import {
   createMeetingRequestSchema,
   listMeetingRequestsSchema,
   rescheduleSchema,
+  createGroupMeetSchema,
+  groupParamSchema,
 } from './meetings.schema.js';
 import {
   approveAccessSchema,
@@ -63,6 +65,19 @@ calendarRouter.post(
   validate({ body: createMeetingRequestSchema }),
   meetings.create,
 );
+// Group meets: several teammates at once. Literal paths before '/:id'.
+calendarRouter.get('/meeting-requests/contacts', meetings.contacts);
+calendarRouter.post(
+  '/meeting-requests/group',
+  validate({ body: createGroupMeetSchema }),
+  meetings.createGroup,
+);
+calendarRouter.post(
+  '/meeting-requests/group/:groupId/cancel',
+  validate({ params: groupParamSchema }),
+  meetings.cancelGroup,
+);
+
 calendarRouter.get('/meeting-requests/:id', validate({ params: idParamSchema }), meetings.getById);
 calendarRouter.patch(
   '/meeting-requests/:id',
