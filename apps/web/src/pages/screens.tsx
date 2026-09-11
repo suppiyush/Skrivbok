@@ -22,14 +22,7 @@ import type {
   Literature as LiteratureEntry,
   Note,
 } from '../lib/api';
-import {
-  clock,
-  dateInputValue,
-  dateTimeInputValue,
-  dueLabel,
-  humanise,
-  shortAge,
-} from '../lib/format';
+import { clock, dateInputValue, dueLabel, humanise, shortAge, timeInputValue } from '../lib/format';
 import {
   careerGoalHooks,
   deadlineHooks,
@@ -93,6 +86,9 @@ const PRIORITIES = [
   { value: 'URGENT', label: 'Urgent' },
 ];
 
+/** The time a new deadline opens on, when the user has not said otherwise. */
+const DEFAULT_DUE_TIME = '17:00';
+
 const DEADLINE_STATUSES = [
   { value: 'PENDING', label: 'Pending' },
   { value: 'IN_PROGRESS', label: 'In progress' },
@@ -121,11 +117,21 @@ function required(form: FormData, name: string): string {
   return String(form.get(name) ?? '').trim();
 }
 
-/** A `datetime-local` value is wall-clock with no zone; the browser's zone is
- *  the one the user meant, so it is resolved here and sent as an instant. */
-function instant(form: FormData, name: string): string {
-  const value = String(form.get(name) ?? '');
-  return value ? new Date(value).toISOString() : '';
+/**
+ * A date box and a time box, back into the one instant the API takes.
+ *
+ * Both halves are wall-clock with no zone, and the browser's zone is the one
+ * the user typed them in — so they are resolved here and sent as an instant.
+ * A missing time means midnight; the server requires the date, so that is the
+ * half worth reporting an error against.
+ */
+function instantFrom(form: FormData, dateName: string, timeName: string): string {
+  const date = String(form.get(dateName) ?? '').trim();
+  if (!date) return '';
+
+  const time = String(form.get(timeName) ?? '').trim() || '00:00';
+  const at = new Date(`${date}T${time}`);
+  return Number.isNaN(at.getTime()) ? '' : at.toISOString();
 }
 
 /** Errors are reported by the server against the field name. */
@@ -472,43 +478,57 @@ const deadlinesConfig: ResourceConfig<Deadline> = {
         defaultValue={deadline?.description ?? ''}
         error={Err('description')}
       />
+      {/* Two boxes rather than one `datetime-local`. The combined control is a
+          single tab stop the browser splits into segments in its own order, and
+          it is the one field people most often leave half-filled. The date is
+          also the half that carries the server's error, since a deadline
+          without one cannot be saved at all. */}
       <FieldRow>
         <Field
-          label="Due"
-          name="dueAt"
-          type="datetime-local"
-          defaultValue={dateTimeInputValue(deadline?.dueAt)}
+          label="Due date"
+          name="dueDate"
+          type="date"
+          defaultValue={dateInputValue(deadline?.dueAt)}
           required
           error={Err('dueAt')}
         />
+        <Field
+          label="Due time"
+          name="dueTime"
+          type="time"
+          // End of the working day, for a new one. A deadline almost always
+          // means "by the end of that day", and a time box that opens empty is
+          // one more decision for the commonest answer.
+          defaultValue={timeInputValue(deadline?.dueAt) || DEFAULT_DUE_TIME}
+          required
+        />
+      </FieldRow>
+      <FieldRow>
         <Select
           label="Priority"
           name="priority"
           defaultValue={deadline?.priority ?? 'MEDIUM'}
           options={PRIORITIES}
         />
-      </FieldRow>
-      <FieldRow>
         <Select
           label="Status"
           name="status"
           defaultValue={deadline?.status ?? 'PENDING'}
           options={DEADLINE_STATUSES}
         />
-        <div className="flex items-end pb-2.5">
-          <Checkbox
-            name="reminderEnabled"
-            label="Email me a reminder"
-            defaultChecked={deadline?.reminderEnabled ?? true}
-          />
-        </div>
       </FieldRow>
+      <Checkbox
+        name="reminderEnabled"
+        label="Email me a reminder"
+        hint="Sent at the notification time and days you set under Settings."
+        defaultChecked={deadline?.reminderEnabled ?? true}
+      />
     </>
   ),
   toInput: (form) => ({
     title: required(form, 'title'),
     description: text(form, 'description'),
-    dueAt: instant(form, 'dueAt'),
+    dueAt: instantFrom(form, 'dueDate', 'dueTime'),
     // The browser's zone is the one the user typed the local time in.
     timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
     priority: form.get('priority'),

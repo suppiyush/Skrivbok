@@ -102,6 +102,15 @@ export function dateInputValue(iso: string | Date | null | undefined): string {
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
 }
 
+/** `HH:mm` in local time — for `<input type="time">`. */
+export function timeInputValue(iso: string | Date | null | undefined): string {
+  if (!iso) return '';
+  const d = typeof iso === 'string' ? new Date(iso) : iso;
+  if (Number.isNaN(d.getTime())) return '';
+  const pad = (n: number) => String(n).padStart(2, '0');
+  return `${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+
 /** `YYYY-MM-DDTHH:mm` in local time — for `<input type="datetime-local">`. */
 export function dateTimeInputValue(iso: string | Date | null | undefined): string {
   if (!iso) return '';
