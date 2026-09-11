@@ -83,6 +83,42 @@ export const upsertBriefSchema = z.object({
     .max(100, 'A brief cannot have more than 100 sections'),
 });
 
+// ── Meetings ──────────────────────────────────────────────────────────────────
+
+const memberIdSchema = z.string().min(20).max(40);
+
+/**
+ * A meeting is one instant, a title, who was there, and what was said.
+ *
+ * Attendees are member ids, not emails or user ids: the membership row is the
+ * one thing every person on a project has, signed up or not. Whether each id
+ * actually belongs to this project is the service's check, since it needs the
+ * project to know.
+ */
+const meetingFields = z.object({
+  title: z.string().trim().min(1, 'A meeting needs a title').max(200),
+  heldAt: z.coerce.date(),
+  location: z.string().trim().max(200).nullish(),
+  notes: z.string().max(50_000).nullish(),
+  attendeeIds: z.array(memberIdSchema).max(100),
+});
+
+export const createMeetingSchema = meetingFields.extend({
+  attendeeIds: z.array(memberIdSchema).max(100).default([]),
+});
+
+/** Built from the defaults-free base — see the note in `ideas.schema.ts`. */
+export const updateMeetingSchema = meetingFields
+  .partial()
+  .refine((v) => Object.keys(v).length > 0, {
+    message: 'Provide at least one field to update',
+  });
+
+export const meetingParamSchema = z.object({
+  id: z.string().min(20).max(40),
+  meetingId: z.string().min(20).max(40),
+});
+
 export type CreateProjectInput = z.infer<typeof createProjectSchema>;
 export type UpdateProjectInput = z.infer<typeof updateProjectSchema>;
 export type ListProjectsQuery = z.infer<typeof listProjectsSchema>;
@@ -90,3 +126,5 @@ export type AddMemberInput = z.infer<typeof addMemberSchema>;
 export type UpdateMemberInput = z.infer<typeof updateMemberSchema>;
 export type UpsertBriefInput = z.infer<typeof upsertBriefSchema>;
 export type TransferOwnershipInput = z.infer<typeof transferOwnershipSchema>;
+export type CreateMeetingInput = z.infer<typeof createMeetingSchema>;
+export type UpdateMeetingInput = z.infer<typeof updateMeetingSchema>;

@@ -16,6 +16,9 @@ import {
   updateMemberSchema,
   updateProjectSchema,
   upsertBriefSchema,
+  createMeetingSchema,
+  meetingParamSchema,
+  updateMeetingSchema,
 } from './projects.schema.js';
 
 export const projectsRouter: Router = Router();
@@ -70,4 +73,22 @@ projectsRouter.put(
   '/:id/brief',
   validate({ params: idParamSchema, body: upsertBriefSchema }),
   controller.saveBrief,
+);
+
+// ── Meetings ──────────────────────────────────────────────────────────────────
+projectsRouter.get('/:id/meetings', validate({ params: idParamSchema }), controller.listMeetings);
+projectsRouter.post(
+  '/:id/meetings',
+  validate({ params: idParamSchema, body: createMeetingSchema }),
+  controller.createMeeting,
+);
+projectsRouter.patch(
+  '/:id/meetings/:meetingId',
+  validate({ params: meetingParamSchema, body: updateMeetingSchema }),
+  controller.updateMeeting,
+);
+projectsRouter.delete(
+  '/:id/meetings/:meetingId',
+  validate({ params: meetingParamSchema }),
+  controller.removeMeeting,
 );

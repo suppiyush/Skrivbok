@@ -30,6 +30,7 @@ import { useToast } from '../components/ui/Toast';
 import { ApiError, type Project } from '../lib/api';
 import { humanise, longDate, relative } from '../lib/format';
 import { projectHooks, useProjectBrief, useSaveBrief } from '../lib/queries';
+import { ProjectMeetings } from './ProjectMeetings';
 
 /** A section being edited. `key` is local and exists only to keep React rows
  *  stable while they are reordered — a new section has no id yet. */
@@ -312,6 +313,13 @@ export default function ProjectDetail() {
           ) : null}
         </article>
       )}
+
+      {/* Below the brief, and out of the way while the brief is being written:
+          the editor is a document to concentrate on, and a second section
+          under it would only be somewhere to lose the scroll position. */}
+      {!editing ? (
+        <ProjectMeetings projectId={project.id} projectName={project.name} canEdit={canEdit} />
+      ) : null}
 
       <ConfirmDialog
         open={discarding}

@@ -349,8 +349,9 @@ model Project {
   updatedAt DateTime @updatedAt
 
   owner   User            @relation("ProjectOwner", fields: [ownerId], references: [id], onDelete: Cascade)
-  members ProjectMember[]
-  brief   ProjectBrief?
+  members  ProjectMember[]
+  brief    ProjectBrief?
+  meetings ProjectMeeting[]
 
   @@index([ownerId, updatedAt])
   @@map("projects")
@@ -375,13 +376,57 @@ model ProjectMember {
   invitedAt  DateTime  @default(now())
   acceptedAt DateTime?
 
-  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  user    User?   @relation(fields: [userId], references: [id], onDelete: SetNull)
+  project  Project                  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  user     User?                    @relation(fields: [userId], references: [id], onDelete: SetNull)
+  meetings ProjectMeetingAttendee[]
 
   @@unique([projectId, email])
   @@index([userId])
   @@index([email])
   @@map("project_members")
+}
+
+/// A meeting of the project's people — scheduled ahead, or written up after.
+///
+/// This is the project's own record and nothing more: it does not go on
+/// anyone's calendar and it sends no invitations. The point is the log — who
+/// met, when, and what was said — so that a project's history is something
+/// you can read back rather than reconstruct.
+model ProjectMeeting {
+  id        String @id @default(cuid())
+  projectId String
+
+  title String
+  /// The instant the meeting is (or was) at. Before now it is history; after,
+  /// it is still to come — that one comparison is the whole of the timeline.
+  heldAt   DateTime
+  location String?
+  /// What was discussed, written up during or after. Empty until then.
+  notes    String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  project   Project                  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  attendees ProjectMeetingAttendee[]
+
+  @@index([projectId, heldAt])
+  @@map("project_meetings")
+}
+
+/// Who was (or will be) in the room. Points at the membership rather than
+/// the user, so someone invited by email and not yet signed up can be listed
+/// — and so a member who leaves the project leaves its meetings too.
+model ProjectMeetingAttendee {
+  meetingId String
+  memberId  String
+
+  meeting ProjectMeeting @relation(fields: [meetingId], references: [id], onDelete: Cascade)
+  member  ProjectMember  @relation(fields: [memberId], references: [id], onDelete: Cascade)
+
+  @@id([meetingId, memberId])
+  @@index([memberId])
+  @@map("project_meeting_attendees")
 }
 
 /// The project brief: a document the team writes, section by section.

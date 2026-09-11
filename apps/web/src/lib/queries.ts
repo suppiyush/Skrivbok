@@ -35,6 +35,7 @@ import {
   reports,
   reviews,
   uploadAvatar,
+  type MeetingInput,
   type Paginated,
 } from './api';
 
@@ -432,6 +433,35 @@ export function useSaveBrief(projectId: string | null) {
     // `updatedAt`, which the cards show as "edited 2 minutes ago".
     onSuccess: () => void qc.invalidateQueries({ queryKey: keys.projects }),
   });
+}
+
+export const useProjectMeetings = (id: string | null) =>
+  useQuery({
+    queryKey: [...keys.projects, id, 'meetings'],
+    queryFn: () => projects.meetings(id as string),
+    enabled: id !== null,
+  });
+
+export function useProjectMeetingActions(projectId: string | null) {
+  const qc = useQueryClient();
+  const invalidate = () =>
+    void qc.invalidateQueries({ queryKey: [...keys.projects, projectId, 'meetings'] });
+
+  return {
+    create: useMutation({
+      mutationFn: (input: MeetingInput) => projects.createMeeting(projectId as string, input),
+      onSuccess: invalidate,
+    }),
+    update: useMutation({
+      mutationFn: ({ meetingId, input }: { meetingId: string; input: Partial<MeetingInput> }) =>
+        projects.updateMeeting(projectId as string, meetingId, input),
+      onSuccess: invalidate,
+    }),
+    remove: useMutation({
+      mutationFn: (meetingId: string) => projects.removeMeeting(projectId as string, meetingId),
+      onSuccess: invalidate,
+    }),
+  };
 }
 
 export function useProjectMemberActions(projectId: string | null) {

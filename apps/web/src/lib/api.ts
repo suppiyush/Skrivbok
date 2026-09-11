@@ -291,6 +291,32 @@ export interface ProjectMember {
   createdAt: string;
 }
 
+/**
+ * A meeting of the project's people — scheduled ahead, or written up after.
+ * The project's own record: nothing goes on a calendar and nothing is sent.
+ */
+export interface ProjectMeeting {
+  id: string;
+  projectId: string;
+  title: string;
+  /** The instant it is (or was) at; before now is history, after is to come. */
+  heldAt: string;
+  location: string | null;
+  notes: string | null;
+  attendees: { id: string; email: string; name: string | null; role: ProjectRole }[];
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface MeetingInput {
+  title: string;
+  heldAt: string;
+  location?: string | null;
+  notes?: string | null;
+  /** Member ids. The server refuses one from another project. */
+  attendeeIds?: string[];
+}
+
 export interface BriefSection {
   id: string;
   heading: string;
@@ -640,6 +666,14 @@ export const projects = {
   /** Saved whole: the array sent is the document, in order. */
   saveBrief: (id: string, sections: { heading: string; body: string }[]) =>
     api.put<{ brief: ProjectBrief }>(`/projects/${id}/brief`, { sections }),
+
+  meetings: (id: string) => api.get<{ meetings: ProjectMeeting[] }>(`/projects/${id}/meetings`),
+  createMeeting: (id: string, input: MeetingInput) =>
+    api.post<ProjectMeeting>(`/projects/${id}/meetings`, input),
+  updateMeeting: (id: string, meetingId: string, input: Partial<MeetingInput>) =>
+    api.patch<ProjectMeeting>(`/projects/${id}/meetings/${meetingId}`, input),
+  removeMeeting: (id: string, meetingId: string) =>
+    api.delete<void>(`/projects/${id}/meetings/${meetingId}`),
 };
 
 /* ── Calendar ─────────────────────────────────────────────────────────────── */

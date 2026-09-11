@@ -3,6 +3,7 @@ import type { Request, RequestHandler } from 'express';
 import { currentUser } from '../../middleware/auth.js';
 import { getLimitStatus } from '../billing/limits.service.js';
 import * as briefService from './brief.service.js';
+import * as meetingsService from './meetings.service.js';
 import * as memberService from './members.service.js';
 import type {
   AddMemberInput,
@@ -12,6 +13,8 @@ import type {
   UpdateMemberInput,
   UpdateProjectInput,
   UpsertBriefInput,
+  CreateMeetingInput,
+  UpdateMeetingInput,
 } from './projects.schema.js';
 import * as service from './projects.service.js';
 
@@ -103,4 +106,38 @@ export const saveBrief: RequestHandler = async (req, res) => {
   // Wrapped to match `getBrief`, so the client reads one shape from both.
   const brief = await briefService.upsert(user.id, projectId(req), req.body as UpsertBriefInput);
   res.json({ brief });
+};
+
+// ── Meetings ──────────────────────────────────────────────────────────────────
+
+const meetingId = (req: Request): string => req.params['meetingId'] as string;
+
+export const listMeetings: RequestHandler = async (req, res) => {
+  const user = currentUser(req);
+  res.json({ meetings: await meetingsService.list(user.id, projectId(req)) });
+};
+
+export const createMeeting: RequestHandler = async (req, res) => {
+  const user = currentUser(req);
+  res
+    .status(201)
+    .json(await meetingsService.create(user.id, projectId(req), req.body as CreateMeetingInput));
+};
+
+export const updateMeeting: RequestHandler = async (req, res) => {
+  const user = currentUser(req);
+  res.json(
+    await meetingsService.update(
+      user.id,
+      projectId(req),
+      meetingId(req),
+      req.body as UpdateMeetingInput,
+    ),
+  );
+};
+
+export const removeMeeting: RequestHandler = async (req, res) => {
+  const user = currentUser(req);
+  await meetingsService.remove(user.id, projectId(req), meetingId(req));
+  res.status(204).end();
 };
