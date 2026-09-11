@@ -629,13 +629,7 @@ function FreePlanCard({
     : [];
 
   return (
-    <div
-      className="sidebar-label relative mb-2"
-      onMouseEnter={() => setShowCaps(true)}
-      onMouseLeave={() => setShowCaps(false)}
-      onFocus={() => setShowCaps(true)}
-      onBlur={() => setShowCaps(false)}
-    >
+    <div className="sidebar-label relative mb-2">
       {showCaps ? (
         // Above the card: this sits near the bottom of the sidebar, so a
         // tooltip below it would open off the edge of the screen.
@@ -671,14 +665,28 @@ function FreePlanCard({
         <p className="flex items-center gap-1.5 text-[12.5px] font-bold">
           <Crown size={15} />
           Free plan
-          <Icon name="info" size={14} className="ml-auto flex-none text-ink-5" />
+          {/* The caps show on the (i) alone, not the whole card — a card that
+              pops something up whenever the pointer crosses it is a card you
+              cannot move past without being interrupted. A button, so the
+              keyboard can reach it too. */}
+          <button
+            type="button"
+            aria-label="What the free plan includes"
+            aria-describedby={showCaps ? 'free-plan-caps' : undefined}
+            onMouseEnter={() => setShowCaps(true)}
+            onMouseLeave={() => setShowCaps(false)}
+            onFocus={() => setShowCaps(true)}
+            onBlur={() => setShowCaps(false)}
+            className="ml-auto grid size-6 flex-none place-items-center rounded-md text-ink-5 transition hover:bg-surface-2 hover:text-ink"
+          >
+            <Icon name="info" size={14} />
+          </button>
         </p>
 
         {/* Styled as the primary button rather than built from `Button`: a
             <button> inside a link is not a thing the browser handles well. */}
         <Link
           to="/upgrade"
-          aria-describedby={showCaps ? 'free-plan-caps' : undefined}
           className="press mt-2.5 flex h-9 items-center justify-center rounded-[10px] bg-ink text-[13px] font-semibold text-white transition hover:bg-[#1a2130]"
         >
           Upgrade to PRO
