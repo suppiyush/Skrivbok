@@ -72,6 +72,6 @@ desktop.ini
 # ───────────────────────────── Local data ───────────────────────────────
 tmp/
 temp/
-uploads/
+/uploads/
 *.local
 docker/postgres-data/
