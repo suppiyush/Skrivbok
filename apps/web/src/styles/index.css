@@ -495,6 +495,21 @@
    slider asking to be dragged. The fill is a gradient set inline from the
    play position, which is the only way to colour the left of the thumb in
    both engines. */
+/* The full-screen loader. A ring drawn in CSS rather than an icon glyph, so
+   it looks the same before any font has loaded — which is exactly when it is
+   shown. */
+@utility loader-ring {
+  width: 34px;
+  height: 34px;
+  border-radius: 9999px;
+  border: 3px solid var(--color-brand-tint);
+  border-top-color: var(--color-brand);
+  animation: spin 0.8s linear infinite;
+  @media (prefers-reduced-motion: reduce) {
+    animation-duration: 2s;
+  }
+}
+
 @utility scrubber {
   appearance: none;
   width: 100%;

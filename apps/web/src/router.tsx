@@ -49,12 +49,20 @@ function NotFound() {
   return <Navigate to={user ? '/dashboard' : '/'} replace />;
 }
 
+/**
+ * Shown while the session is checked and while a page's code arrives — the
+ * one moment nothing else is on screen, and on a first visit the one moment
+ * the icon font may not have loaded yet. So no icon: a CSS ring and the name.
+ */
 function Loading() {
   return (
-    <div className="grid min-h-screen place-items-center bg-canvas">
-      <span className="ms animate-spin text-[26px] text-brand" aria-hidden="true">
-        progress_activity
-      </span>
+    <div
+      className="grid min-h-screen place-content-center justify-items-center gap-4 bg-canvas"
+      role="status"
+      aria-label="Loading"
+    >
+      <span className="loader-ring" aria-hidden="true" />
+      <span className="font-serif text-[17px] tracking-[-0.01em] text-ink-3">Skrivbok</span>
     </div>
   );
 }
