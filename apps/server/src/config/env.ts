@@ -113,6 +113,9 @@ const schema = z.object({
   ENABLE_REMINDER_WORKER: bool.default(true),
   REMINDER_CRON: z.string().min(1).default('*/5 * * * *'),
   REMINDER_CRON_TZ: z.string().min(1).default('UTC'),
+  // Lets an external scheduler run the reminder pass over HTTP, for hosts with
+  // no long-lived process to run the worker in. Unset means the route is off.
+  CRON_SECRET: optionalStr.pipe(z.string().min(24).optional()),
 
   // Image uploads (optional) — Cloudinary
   CLOUDINARY_CLOUD_NAME: optionalStr,
@@ -250,6 +253,7 @@ export const env = {
     enabled: raw.ENABLE_REMINDER_WORKER,
     cron: raw.REMINDER_CRON,
     cronTz: raw.REMINDER_CRON_TZ,
+    cronSecret: raw.CRON_SECRET,
   },
 
   uploads: uploadsOn

@@ -38,7 +38,8 @@
     "db:test:setup": "npm run db:test:setup --workspace @skrivbok/server",
     "dev:web": "npm run dev --workspace @skrivbok/web",
     "dev:server": "npm run dev --workspace @skrivbok/server",
-    "build:web": "npm run build --workspace @skrivbok/web"
+    "build:web": "npm run build --workspace @skrivbok/web",
+    "build:vercel": "prisma generate --schema apps/server/prisma/schema.prisma && npm run build && npm run build:web"
   },
   "devDependencies": {
     "@eslint/js": "^9.39.4",

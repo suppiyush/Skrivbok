@@ -30,6 +30,8 @@ process.env['LOG_LEVEL'] = 'fatal';
 // its disabled path, which is worth covering anyway.
 process.env['SMTP_HOST'] = '';
 process.env['BREVO_API_KEY'] = '';
+// So the scheduler routes exist and can be exercised with a known secret.
+process.env['CRON_SECRET'] = 'test-only-scheduler-secret-0123';
 process.env['RAZORPAY_KEY_ID'] = '';
 process.env['RAZORPAY_KEY_SECRET'] = '';
 

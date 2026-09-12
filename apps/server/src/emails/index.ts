@@ -6,6 +6,7 @@
  * request. `sendMail` already swallows its own errors; these add the
  * preference check.
  */
+import { waitUntil } from '@vercel/functions';
 import { prisma } from '../db/prisma.js';
 import { createLogger } from '../config/logger.js';
 import * as templates from './templates.js';
@@ -21,9 +22,16 @@ type Preference = 'meetingRequestsEnabled' | 'always';
  *
  * The caller does not await this: a project invite should not be slower, or
  * fail, because a mail server is unreachable. Errors are logged inside.
+ *
+ * On a serverless host the function can be frozen the moment it responds,
+ * which would cut the send off mid-flight. `waitUntil` tells Vercel to keep the
+ * instance alive until the promise settles; anywhere else it is a no-op.
  */
 function dispatch(promise: Promise<unknown>): void {
-  promise.catch((error: unknown) => log.error({ err: error }, 'Transactional email failed'));
+  const settled = promise.catch((error: unknown) =>
+    log.error({ err: error }, 'Transactional email failed'),
+  );
+  waitUntil(settled);
 }
 
 async function wants(userId: string, preference: Preference): Promise<boolean> {

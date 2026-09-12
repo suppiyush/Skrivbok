@@ -18,6 +18,7 @@ import { careerGoalsRouter } from '../modules/career-goals/index.js';
 import { deadlinesRouter } from '../modules/deadlines/index.js';
 import { futureWorkRouter } from '../modules/future-work/index.js';
 import { ideasRouter } from '../modules/ideas/index.js';
+import { internalRouter } from '../modules/internal/index.js';
 import { journalRouter } from '../modules/journal/index.js';
 import { literatureRouter } from '../modules/literature/index.js';
 import { notesRouter } from '../modules/notes/index.js';
@@ -55,6 +56,8 @@ apiRouter.use('/admin', adminRouter);
 apiRouter.use('/admin/reviews', adminReviewsRouter);
 // Unauthenticated: the provider signature authenticates these.
 apiRouter.use('/webhooks', billingWebhookRouter);
+// Scheduled passes for hosts without a worker process; secret-gated.
+apiRouter.use('/internal', internalRouter);
 // Public: reachable without a session. Approved reviews and coarse counters
 // are the only things the marketing site reads.
 apiRouter.use('/public', publicReviewsRouter);
