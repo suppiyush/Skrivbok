@@ -86,7 +86,7 @@ function matchPages(q: string): Suggestion[] {
 
 /* ── The box ──────────────────────────────────────────────────────────────── */
 
-export function GlobalSearch() {
+export function GlobalSearch({ autoFocus = false }: { autoFocus?: boolean } = {}) {
   const navigate = useNavigate();
   const listId = useId();
 
@@ -147,6 +147,12 @@ export function GlobalSearch() {
 
   // A new list starts at the top.
   useEffect(() => setActive(0), [suggestions]);
+
+  // The phone's search is behind a button, so opening it is already the
+  // intent — the keyboard should come up without a second tap.
+  useEffect(() => {
+    if (autoFocus) input.current?.focus();
+  }, [autoFocus]);
 
   // Outside click and Escape close it; the box keeps its text.
   useEffect(() => {

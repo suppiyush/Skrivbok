@@ -220,7 +220,7 @@ function NewMenu() {
       </Button>
 
       {open ? (
-        <div className="animate-slide-down absolute top-full right-0 z-20 mt-1.5 w-48 overflow-hidden rounded-xl border border-line bg-surface py-1 shadow-pop">
+        <div className="animate-slide-down absolute top-full right-0 z-20 mt-1.5 w-48 max-w-[calc(100vw-2rem)] overflow-hidden rounded-xl border border-line bg-surface py-1 shadow-pop">
           {NEW_ITEMS.map((item) => (
             <button
               key={item.to}

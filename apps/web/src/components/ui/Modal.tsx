@@ -69,7 +69,7 @@ export function Modal({
 
   const bodyContent = (
     <>
-      <header className="flex items-start gap-4 border-b border-line px-6 py-5">
+      <header className="flex items-start gap-4 border-b border-line px-5 py-5 sm:px-6">
         <div className="min-w-0 flex-1">
           <h2 className="text-[17px] leading-tight font-bold">{title}</h2>
           {description ? (
@@ -87,10 +87,10 @@ export function Modal({
         </button>
       </header>
 
-      <div className="max-h-[min(62vh,560px)] overflow-y-auto px-6 py-5">{children}</div>
+      <div className="max-h-[min(62vh,560px)] overflow-y-auto px-5 py-5 sm:px-6">{children}</div>
 
       {footer ? (
-        <footer className="flex items-center justify-end gap-2 border-t border-line bg-surface-5 px-6 py-4">
+        <footer className="flex flex-wrap items-center justify-end gap-2 border-t border-line bg-surface-5 px-5 py-4 sm:px-6">
           {footer}
         </footer>
       ) : null}

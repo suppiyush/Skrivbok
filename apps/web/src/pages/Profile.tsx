@@ -280,7 +280,7 @@ export default function Profile() {
             <h2 className="truncate text-[20px] leading-tight font-extrabold tracking-[-0.02em]">
               {displayName}
             </h2>
-            <p className="mt-0.5 text-[13px] text-ink-3">{user?.email}</p>
+            <p className="mt-0.5 truncate text-[13px] text-ink-3">{user?.email}</p>
           </div>
           {uploadsEnabled ? (
             <div className="flex flex-none gap-2">

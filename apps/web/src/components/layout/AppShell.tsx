@@ -126,6 +126,9 @@ export function AppShell({ children, fill = false }: { children: ReactNode; fill
   const [collapsed, setCollapsed] = useState(() => readPref(COLLAPSE_KEY, 'false') === 'true');
   const [mobileNav, setMobileNav] = useState(false);
   const [notifOpen, setNotifOpen] = useState(false);
+  // Search is a bar on a wide screen and a button below `md`, where there is
+  // no room for it beside the logo and the bell.
+  const [searchOpen, setSearchOpen] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
 
   const notifRef = useDismiss(() => setNotifOpen(false));
@@ -145,8 +148,17 @@ export function AppShell({ children, fill = false }: { children: ReactNode; fill
     }
   }, [collapsed]);
 
+  // Arriving somewhere is the end of a search, and of a trip to the drawer.
+  useEffect(() => {
+    setSearchOpen(false);
+    setMobileNav(false);
+  }, [pathname]);
+
   const BAR = 64;
-  const expanded = !collapsed;
+  // The drawer is only ever open below `md`, where there is room for the full
+  // rail — so an open drawer counts as expanded regardless of the collapse
+  // preference, and the labels, metrics and plan card come with it.
+  const expanded = !collapsed || mobileNav;
 
   // Admins get one more group. It is added here rather than listed with the
   // others, so that a user who is not one never sees a route they cannot open.
@@ -199,14 +211,24 @@ export function AppShell({ children, fill = false }: { children: ReactNode; fill
         className="fixed inset-x-0 top-0 z-40 flex items-center gap-3 border-b border-line-2 bg-canvas px-4 sm:px-5"
         style={{ height: BAR }}
       >
+        {/* Two buttons, because the gesture means two different things and CSS
+            is what knows which screen we are on. One button doing both left
+            the drawer tied to the desktop collapse preference: the first tap
+            on a phone opened it *collapsed*, a 72px rail of unlabelled icons. */}
         <button
           type="button"
-          onClick={() => {
-            setCollapsed((v) => !v);
-            setMobileNav((v) => !v);
-          }}
+          onClick={() => setMobileNav((v) => !v)}
+          aria-label={mobileNav ? 'Close navigation' : 'Open navigation'}
+          aria-expanded={mobileNav}
+          className="grid size-10 flex-none place-items-center rounded-[10px] text-ink-2 hover:bg-surface-2 md:hidden"
+        >
+          <Icon name={mobileNav ? 'close' : 'menu'} size={23} />
+        </button>
+        <button
+          type="button"
+          onClick={() => setCollapsed((v) => !v)}
           aria-label={collapsed ? 'Expand navigation' : 'Collapse navigation'}
-          className="grid size-10 flex-none place-items-center rounded-[10px] text-ink-2 hover:bg-surface-2"
+          className="hidden size-10 flex-none place-items-center rounded-[10px] text-ink-2 hover:bg-surface-2 md:grid"
         >
           <Icon name="menu" size={23} />
         </button>
@@ -222,6 +244,16 @@ export function AppShell({ children, fill = false }: { children: ReactNode; fill
         </div>
 
         <div className="ml-auto flex flex-none items-center gap-1 md:ml-0">
+          <button
+            type="button"
+            onClick={() => setSearchOpen((v) => !v)}
+            aria-label={searchOpen ? 'Close search' : 'Search everything'}
+            aria-expanded={searchOpen}
+            className="press grid size-10 place-items-center rounded-full text-ink-2 transition hover:bg-surface-2 md:hidden"
+          >
+            <Icon name={searchOpen ? 'close' : 'search'} size={22} />
+          </button>
+
           {overdue > 0 ? (
             <Link
               to="/deadlines"
@@ -293,14 +325,30 @@ export function AppShell({ children, fill = false }: { children: ReactNode; fill
             ) : null}
           </div>
         </div>
+
+        {searchOpen ? (
+          <div className="animate-slide-down absolute inset-x-0 top-full border-b border-line-2 bg-canvas px-4 py-2.5 md:hidden">
+            <GlobalSearch autoFocus />
+          </div>
+        ) : null}
       </header>
 
       {/* ── Sidebar ──────────────────────────────────────────────────────────── */}
+      {/* Tapping the page behind the drawer closes it — the expected gesture,
+          and the only way out that does not require finding the button again. */}
+      {mobileNav ? (
+        <button
+          type="button"
+          aria-label="Close navigation"
+          onClick={() => setMobileNav(false)}
+          className="animate-fade-in fixed inset-0 top-16 z-20 bg-ink/25 md:hidden"
+        />
+      ) : null}
+
       <aside
-        className={`sidebar-motion fixed top-16 bottom-0 left-0 z-30 flex-col overflow-x-hidden border-r border-line-2 bg-canvas ${
+        className={`sidebar-motion fixed top-16 bottom-0 left-0 z-30 w-[236px] flex-col overflow-x-hidden border-r border-line-2 bg-canvas md:w-[var(--sidebar-w)] ${
           mobileNav ? 'flex' : 'hidden'
         } md:flex`}
-        style={{ width: expanded ? 236 : 72 }}
       >
         <nav aria-label="Sections" className="flex-1 overflow-y-auto px-3 py-4">
           {navGroups.map((g, gi) => (

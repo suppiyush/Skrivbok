@@ -261,72 +261,82 @@ export default function Calendar() {
       ) : (
         <Reveal>
           <Card padded={false} className="overflow-hidden">
-            <div className="grid grid-cols-7 border-b border-line bg-surface-5">
-              {WEEKDAYS.map((d) => (
-                <div
-                  key={d}
-                  className="px-2 py-2.5 text-center text-[11.5px] font-bold tracking-[0.06em] text-ink-4 uppercase"
-                >
-                  {d}
-                </div>
-              ))}
-            </div>
-
-            <div className="grid grid-cols-7">
-              {cells.map((day) => {
-                const inMonth = day.getMonth() === cursor.getMonth();
-                const isToday = sameLocalDay(today.toISOString(), day);
-                const dayEvents = events.filter((e) => sameLocalDay(e.startAt, day));
-
-                return (
-                  <div
-                    key={day.toISOString()}
-                    className={`min-h-[104px] border-r border-b border-line p-1.5 last:border-r-0 ${
-                      inMonth ? '' : 'bg-surface-5'
-                    }`}
-                  >
-                    <span
-                      className={`ml-1 inline-grid size-6 place-items-center rounded-full text-[12px] tabular ${
-                        isToday
-                          ? 'bg-ink font-bold text-white'
-                          : inMonth
-                            ? 'font-medium text-ink-3'
-                            : 'text-ink-5'
-                      }`}
+            {/* Seven columns cannot be squeezed into a phone: at 390px a day
+                cell is under 40px of usable width, which is narrower than the
+                time on the chip inside it. So the month keeps its real width
+                and the grid scrolls sideways, the same bargain the wide tables
+                in the admin panel make. `min-w-0` on the wrapper keeps the
+                card from being stretched by it. */}
+            <div className="min-w-0 overflow-x-auto">
+              <div className="min-w-[700px]">
+                <div className="grid grid-cols-7 border-b border-line bg-surface-5">
+                  {WEEKDAYS.map((d) => (
+                    <div
+                      key={d}
+                      className="px-2 py-2.5 text-center text-[11.5px] font-bold tracking-[0.06em] text-ink-4 uppercase"
                     >
-                      {day.getDate()}
-                    </span>
-
-                    <div className="mt-1 flex flex-col gap-1">
-                      {dayEvents.slice(0, 3).map((event, n) => (
-                        <EventChip
-                          key={`${event.id}-${n}`}
-                          event={event}
-                          // A project meeting is changed in its project's log,
-                          // so opening it goes there rather than to the editor.
-                          // What came from another section is changed there:
-                          // a team meeting in its project's log, a deadline in
-                          // Deadlines — opened searching for it by name.
-                          onOpen={() =>
-                            event.redacted
-                              ? undefined
-                              : event.project
-                                ? navigate(`/projects/${event.project.id}/meetings`)
-                                : event.deadline
-                                  ? navigate('/deadlines', { state: { search: event.title } })
-                                  : setEditing(event)
-                          }
-                        />
-                      ))}
-                      {dayEvents.length > 3 ? (
-                        <span className="px-1 text-[10.5px] font-semibold text-ink-4">
-                          +{dayEvents.length - 3} more
-                        </span>
-                      ) : null}
+                      {d}
                     </div>
-                  </div>
-                );
-              })}
+                  ))}
+                </div>
+
+                <div className="grid grid-cols-7">
+                  {cells.map((day) => {
+                    const inMonth = day.getMonth() === cursor.getMonth();
+                    const isToday = sameLocalDay(today.toISOString(), day);
+                    const dayEvents = events.filter((e) => sameLocalDay(e.startAt, day));
+
+                    return (
+                      <div
+                        key={day.toISOString()}
+                        className={`min-h-[104px] border-r border-b border-line p-1.5 last:border-r-0 ${
+                          inMonth ? '' : 'bg-surface-5'
+                        }`}
+                      >
+                        <span
+                          className={`ml-1 inline-grid size-6 place-items-center rounded-full text-[12px] tabular ${
+                            isToday
+                              ? 'bg-ink font-bold text-white'
+                              : inMonth
+                                ? 'font-medium text-ink-3'
+                                : 'text-ink-5'
+                          }`}
+                        >
+                          {day.getDate()}
+                        </span>
+
+                        <div className="mt-1 flex flex-col gap-1">
+                          {dayEvents.slice(0, 3).map((event, n) => (
+                            <EventChip
+                              key={`${event.id}-${n}`}
+                              event={event}
+                              // A project meeting is changed in its project's log,
+                              // so opening it goes there rather than to the editor.
+                              // What came from another section is changed there:
+                              // a team meeting in its project's log, a deadline in
+                              // Deadlines — opened searching for it by name.
+                              onOpen={() =>
+                                event.redacted
+                                  ? undefined
+                                  : event.project
+                                    ? navigate(`/projects/${event.project.id}/meetings`)
+                                    : event.deadline
+                                      ? navigate('/deadlines', { state: { search: event.title } })
+                                      : setEditing(event)
+                              }
+                            />
+                          ))}
+                          {dayEvents.length > 3 ? (
+                            <span className="px-1 text-[10.5px] font-semibold text-ink-4">
+                              +{dayEvents.length - 3} more
+                            </span>
+                          ) : null}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
             </div>
           </Card>
         </Reveal>

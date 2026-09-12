@@ -128,7 +128,18 @@ export function PageHeader({
           </div>
         </div>
       </div>
-      {actions ? <div className="flex flex-none items-center gap-2">{actions}</div> : null}
+      {/* Its own full-width row until `sm`, aligned right.
+          The header wraps by hypothetical width, so on a narrow screen the
+          actions drop to a second line — and a lone item there would sit at
+          the *left* under `justify-between`, which put every `right-0`
+          dropdown anchored to it (the dashboard's "New" menu) off the left
+          edge of the screen. Right-aligning the row keeps those anchors
+          correct and matches where the buttons sit on a wide screen. */}
+      {actions ? (
+        <div className="flex w-full flex-wrap items-center justify-end gap-2 sm:w-auto sm:flex-none">
+          {actions}
+        </div>
+      ) : null}
     </header>
   );
 }

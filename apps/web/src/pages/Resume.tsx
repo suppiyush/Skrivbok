@@ -121,7 +121,7 @@ function ResumeDocument({ profile: p }: { profile: Profile }) {
   const outreach = lines(p.outreach);
 
   return (
-    <article className="print-document mx-auto w-full max-w-[820px] rounded-[18px] border border-line bg-surface px-10 py-12 print:max-w-none print:rounded-none print:border-0 print:px-0 print:py-0">
+    <article className="print-document mx-auto w-full max-w-[820px] rounded-[18px] border border-line bg-surface px-5 py-8 sm:px-10 sm:py-12 print:max-w-none print:rounded-none print:border-0 print:px-0 print:py-0">
       {/* Head */}
       <header className="border-b-2 border-ink pb-5">
         <h1 className="text-[30px] leading-tight font-extrabold tracking-[-0.02em]">
