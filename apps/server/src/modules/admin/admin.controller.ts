@@ -12,6 +12,7 @@ import type {
 } from './admin.schema.js';
 import * as service from './admin.service.js';
 import * as analyticsService from './analytics.service.js';
+import { sendTestMessage } from '../../emails/index.js';
 
 const targetId = (req: Request): string => req.params['id'] as string;
 
@@ -24,6 +25,15 @@ export const stats: RequestHandler = async (_req, res) => {
 export const analytics: RequestHandler = async (req, res) => {
   const { days } = req.query as unknown as AnalyticsQuery;
   res.json(await analyticsService.analytics(days));
+};
+
+/**
+ * Send a test message to the admin's own address and report what the provider
+ * said. Always their own address: this must not become a way to mail anyone.
+ */
+export const testMail: RequestHandler = async (req, res) => {
+  const admin = currentUser(req);
+  res.json({ to: admin.email, ...(await sendTestMessage(admin.email)) });
 };
 
 // ── Users ─────────────────────────────────────────────────────────────────────

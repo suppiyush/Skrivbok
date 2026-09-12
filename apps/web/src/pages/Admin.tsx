@@ -36,6 +36,7 @@ import {
   useAdminUserActions,
   useAdminUsers,
   useModerateReview,
+  useTestMail,
   useUpdateReport,
 } from '../lib/queries';
 
@@ -157,6 +158,38 @@ const n = (value: number) => value.toLocaleString();
  * pulse is the one that matters — reminders that silently stopped look
  * exactly like reminders that are working, until someone checks.
  */
+/**
+ * Fires a test message at the admin's own inbox and says what the provider
+ * replied. Sending is fire-and-forget everywhere else, so this is the one place
+ * a person can see "mail is configured" turn into "mail actually arrives".
+ */
+function TestMailButton() {
+  const toast = useToast();
+  const test = useTestMail();
+
+  return (
+    <Button
+      type="button"
+      variant="secondary"
+      size="sm"
+      icon="outgoing_mail"
+      loading={test.isPending}
+      onClick={() =>
+        test
+          .mutateAsync()
+          .then((result) => {
+            if (result.sent) toast.success(`Sent — check ${result.to}`);
+            else if (result.skipped) toast.error('Mail is not configured on the server.');
+            else toast.error(`The mail provider refused it: ${result.error ?? 'unknown error'}`);
+          })
+          .catch(() => toast.error('Could not reach the server.'))
+      }
+    >
+      Send test email
+    </Button>
+  );
+}
+
 function SystemHealth({ system }: { system: PlatformStats['system'] }) {
   const lastTick = system.workerLastTickAt ? new Date(system.workerLastTickAt) : null;
   const ageMinutes = lastTick ? (Date.now() - lastTick.getTime()) / 60_000 : null;
@@ -164,18 +197,21 @@ function SystemHealth({ system }: { system: PlatformStats['system'] }) {
   const workerStale = ageMinutes === null || ageMinutes > 120;
 
   const missing = [
-    !system.mailConfigured ? 'email (SMTP)' : null,
+    !system.mailConfigured ? 'email' : null,
     !system.uploadsConfigured ? 'uploads (Cloudinary)' : null,
     !system.billingConfigured ? 'billing (Razorpay)' : null,
   ].filter((x): x is string => x !== null);
 
   if (!workerStale && missing.length === 0) {
     return (
-      <p className="flex items-center gap-2 text-[12.5px] text-ink-3">
-        <Icon name="check_circle" size={15} className="text-[#2e7d55]" />
-        Reminders last ran {relative(system.workerLastTickAt as string)} · email, uploads and
-        billing configured
-      </p>
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <p className="flex items-center gap-2 text-[12.5px] text-ink-3">
+          <Icon name="check_circle" size={15} className="text-[#2e7d55]" />
+          Reminders last ran {relative(system.workerLastTickAt as string)} · email, uploads and
+          billing configured
+        </p>
+        <TestMailButton />
+      </div>
     );
   }
 
@@ -192,8 +228,14 @@ function SystemHealth({ system }: { system: PlatformStats['system'] }) {
         <Alert tone="warning" title={`Not configured: ${missing.join(', ')}`}>
           {system.mailConfigured
             ? 'The features that need these keys hide themselves until they are set.'
-            : 'Without SMTP, every email is logged by the server instead of delivered. In-app notifications still work.'}
+            : 'Without a BREVO_API_KEY or SMTP_HOST, every email is logged by the server instead of delivered. In-app notifications still work.'}
         </Alert>
+      ) : null}
+      {system.mailConfigured ? (
+        <div className="flex flex-wrap items-center gap-3 text-[12.5px] text-ink-3">
+          Email is configured; confirm it actually delivers:
+          <TestMailButton />
+        </div>
       ) : null}
     </div>
   );

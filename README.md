@@ -31,7 +31,7 @@ skrivbok/
 │       │   ├── routes/         the /api/v1 router index
 │       │   ├── modules/        one folder per feature — see modules/README.md
 │       │   ├── jobs/           reminder worker + cleanup
-│       │   ├── emails/         templates + SMTP transport
+│       │   ├── emails/         templates + mail transport (Brevo API or SMTP)
 │       │   ├── types/          Express request augmentation
 │       │   ├── utils/          errors.ts and shared helpers
 │       │   ├── app.ts          Express assembly (no listen)

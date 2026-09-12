@@ -815,3 +815,27 @@ export function reportUpdate(
 
   return { to, subject: `${resolved ? 'Resolved' : 'Closed'}: ${data.title}`, html, text };
 }
+
+/**
+ * The message behind the admin panel's "Send test email" button. Says which
+ * path it took so that a person reading it in their inbox knows the settings
+ * that produced it.
+ */
+export function testMessage(to: string, data: { via: 'brevo' | 'smtp' }): Mail {
+  const route = data.via === 'brevo' ? 'Brevo over HTTPS' : 'SMTP';
+  const { html, text } = layout({
+    heading: 'Mail is working',
+    intro: `This is a test message from your Skrivbok server, sent via ${route}.`,
+    bodyHtml: panel(
+      'If you can read this, invitations, receipts and reminders will reach people the same way.',
+      'accent',
+    ),
+    bodyText:
+      'If you can read this, invitations, receipts and reminders will reach people the same way.',
+    actionLabel: 'Open admin',
+    actionPath: '/admin',
+    footerNote: 'You are receiving this because an administrator sent a test from the admin panel.',
+  });
+
+  return { to, subject: 'Skrivbok test email', html, text };
+}

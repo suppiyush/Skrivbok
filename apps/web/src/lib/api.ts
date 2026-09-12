@@ -1030,6 +1030,11 @@ export const admin = {
     }),
   revokeSessions: (id: string) =>
     api.post<{ revoked: number }>(`/admin/users/${id}/revoke-sessions`),
+  /** Sends to the calling admin's own address and reports the provider's answer. */
+  testMail: () =>
+    api.post<{ to: string; sent: boolean; skipped?: 'mail-disabled'; error?: string }>(
+      '/admin/mail/test',
+    ),
   subscriptions: (query: Record<string, unknown> = {}) =>
     api.get<Paginated<AdminSubscription>>(`/admin/subscriptions${qs(query)}`),
   payments: (query: Record<string, unknown> = {}) =>

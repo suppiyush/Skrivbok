@@ -97,7 +97,9 @@ const schema = z.object({
   GOOGLE_CLIENT_SECRET: optionalStr,
   GOOGLE_CALLBACK_URL: optionalStr,
 
-  // SMTP (optional)
+  // Mail (optional). Either an HTTPS provider key or an SMTP host enables it;
+  // the key wins when both are set, because some hosts block outbound SMTP.
+  BREVO_API_KEY: optionalStr,
   SMTP_HOST: optionalStr,
   SMTP_PORT: port.default(587),
   SMTP_SECURE: bool.default(false),
@@ -232,7 +234,8 @@ export const env = {
     : ({ enabled: false } as const),
 
   mail: {
-    enabled: Boolean(raw.SMTP_HOST),
+    enabled: Boolean(raw.BREVO_API_KEY || raw.SMTP_HOST),
+    brevoApiKey: raw.BREVO_API_KEY,
     host: raw.SMTP_HOST,
     port: raw.SMTP_PORT,
     secure: raw.SMTP_SECURE,

@@ -28,6 +28,7 @@ adminRouter.use(requireAuth, requireAdmin);
 // ── Dashboard ─────────────────────────────────────────────────────────────────
 adminRouter.get('/stats', controller.stats);
 adminRouter.get('/analytics', validate({ query: analyticsSchema }), controller.analytics);
+adminRouter.post('/mail/test', controller.testMail);
 
 // ── Users ─────────────────────────────────────────────────────────────────────
 adminRouter.get('/users', validate({ query: listUsersSchema }), controller.listUsers);

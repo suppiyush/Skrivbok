@@ -9,7 +9,7 @@
 import { prisma } from '../db/prisma.js';
 import { createLogger } from '../config/logger.js';
 import * as templates from './templates.js';
-import { sendMail } from './transport.js';
+import { mailRoute, sendMail, type SendResult } from './transport.js';
 
 const log = createLogger('mail');
 
@@ -175,4 +175,14 @@ export function sendReportUpdate(
   },
 ): void {
   dispatch(sendMail(templates.reportUpdate(to, data)));
+}
+
+/**
+ * The one send that *is* awaited: the admin's "does mail work?" button. The
+ * caller wants the provider's actual answer on screen, not a log line.
+ */
+export async function sendTestMessage(to: string): Promise<SendResult> {
+  const via = mailRoute();
+  if (!via) return { sent: false, skipped: 'mail-disabled' };
+  return sendMail(templates.testMessage(to, { via }));
 }

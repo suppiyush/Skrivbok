@@ -523,6 +523,8 @@ export function useCreateReport() {
 export const useAdminStats = () =>
   useQuery({ queryKey: [...keys.admin, 'stats'], queryFn: admin.stats });
 
+export const useTestMail = () => useMutation({ mutationFn: admin.testMail });
+
 export const useAdminAnalytics = (days: number) =>
   useQuery({ queryKey: [...keys.admin, 'analytics', days], queryFn: () => admin.analytics(days) });
 

@@ -29,6 +29,7 @@ process.env['LOG_LEVEL'] = 'fatal';
 // Mail and billing stay unconfigured: nothing is sent, and billing exercises
 // its disabled path, which is worth covering anyway.
 process.env['SMTP_HOST'] = '';
+process.env['BREVO_API_KEY'] = '';
 process.env['RAZORPAY_KEY_ID'] = '';
 process.env['RAZORPAY_KEY_SECRET'] = '';
 
