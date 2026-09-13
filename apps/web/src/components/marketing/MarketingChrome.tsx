@@ -253,14 +253,45 @@ export function ArtPlaceholder({
   );
 }
 
+/**
+ * The policies and the contact page, on every public page.
+ *
+ * The Terms and Refund Policy are a payment-provider requirement and must be
+ * reachable from the public site without signing in; until now the only links
+ * to any of them were in the small print under the sign-in form.
+ */
+const FOOTER_LINKS = [
+  { label: 'Terms of Service', to: '/terms' },
+  { label: 'Privacy Policy', to: '/privacy-policy' },
+  { label: 'Refund Policy', to: '/refund-policy' },
+  { label: 'End User Agreement', to: '/end-user-agreement' },
+  { label: 'Contact us', to: '/contact' },
+];
+
 export function MarketingFooter() {
   const year = new Date().getFullYear();
 
   return (
     <footer className="border-t border-line bg-surface">
-      <p className="mx-auto max-w-[1200px] px-5 py-5 text-center text-[13px] text-ink-3">
-        © {year} Skrivbok. All rights reserved.
-      </p>
+      <div className="mx-auto flex max-w-[1200px] flex-col items-center gap-3 px-5 py-6 md:flex-row md:justify-between">
+        <p className="text-center text-[13px] text-ink-3">
+          © {year} Skrivbok. All rights reserved.
+        </p>
+        <nav aria-label="Policies and contact">
+          <ul className="flex flex-wrap justify-center gap-x-5 gap-y-2">
+            {FOOTER_LINKS.map((link) => (
+              <li key={link.to}>
+                <Link
+                  to={link.to}
+                  className="text-[13px] font-medium text-ink-3 transition hover:text-ink hover:underline"
+                >
+                  {link.label}
+                </Link>
+              </li>
+            ))}
+          </ul>
+        </nav>
+      </div>
     </footer>
   );
 }
