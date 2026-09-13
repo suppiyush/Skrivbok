@@ -282,6 +282,15 @@ export interface CareerGoal {
   updatedAt: string;
 }
 
+/** One step on a goal's timeline: the stage reached, when, and what happened. */
+export interface CareerStageEntry {
+  id: string;
+  goalId: string;
+  stage: number;
+  description: string | null;
+  recordedAt: string;
+}
+
 export interface ProjectMember {
   id: string;
   email: string;
@@ -720,6 +729,8 @@ export const careerGoals = {
   /** Jump to a stage, forwards or back. Writes a history entry; refuses a no-op. */
   setStage: (id: string, stage: number, description?: string | null) =>
     api.put<CareerGoal>(`/career-goals/${id}/stage`, { stage, description: description ?? null }),
+  /** Newest first. */
+  history: (id: string) => api.get<{ history: CareerStageEntry[] }>(`/career-goals/${id}/history`),
 };
 
 export const projects = {

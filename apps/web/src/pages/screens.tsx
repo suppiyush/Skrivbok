@@ -9,13 +9,17 @@
  * sends `null` rather than `''` for cleared optional text, because the backend
  * treats an empty string as a value and `null` as "unset".
  */
-import { useId, useState } from 'react';
+import { useId, useState, type FormEvent } from 'react';
 import { AudioPlayer } from '../components/ui/AudioPlayer';
 import { Button } from '../components/ui/Button';
 import { Field } from '../components/ui/Field';
 import { Checkbox, FieldRow, Select, TagInput, Textarea } from '../components/ui/Form';
+import { Modal } from '../components/ui/Modal';
+import { Skeleton } from '../components/ui/Skeleton';
+import { useToast } from '../components/ui/Toast';
 import { Icon } from '../components/ui/Icon';
 import {
+  ApiError,
   literature as literatureApi,
   type CareerGoal,
   type Deadline,
@@ -35,10 +39,12 @@ import {
   useCareerGoalEdit,
   useCareerQuota,
   useCareerSummary,
+  useGoalHistory,
   useLiteratureTags,
+  useRecordStage,
 } from '../lib/queries';
 import { MetricCard, Pill } from '../components/ui/Layout';
-import { ResourceScreen, useFieldError, type ResourceConfig } from './ResourceScreen';
+import { ResourceScreen, RowAction, useFieldError, type ResourceConfig } from './ResourceScreen';
 import { VoiceNoteButton } from './VoiceNote';
 
 /* ── Shared option lists ──────────────────────────────────────────────────── */
@@ -948,6 +954,164 @@ function StageFields({ goal }: { goal: CareerGoal | null }) {
   );
 }
 
+/* ── A goal's timeline ─────────────────────────────────────────────────── */
+
+const WHEN = new Intl.DateTimeFormat(undefined, { dateStyle: 'medium', timeStyle: 'short' });
+
+/** The stage a "record progress" form should offer first: the next one, or the
+ *  one before the last when there is no next. The server refuses the current one. */
+function nextStage(current: number, total: number): number {
+  return current < total ? current + 1 : Math.max(1, total - 1);
+}
+
+/** The row's button, and the dialog it opens. */
+function GoalTimeline({ goal }: { goal: CareerGoal }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <>
+      <RowAction
+        icon="timeline"
+        label={`Timeline for ${goal.title}`}
+        onClick={() => setOpen(true)}
+      />
+      {open ? <GoalTimelineDialog goal={goal} onClose={() => setOpen(false)} /> : null}
+    </>
+  );
+}
+
+/**
+ * Every stage a goal has reached, oldest first, and the place to add the next.
+ *
+ * Recording goes through the stage endpoint, which moves the goal and writes
+ * the entry in one transaction — so the timeline and the goal's progress bar
+ * cannot disagree. The dialog reads the goal from the list, which refreshes
+ * after each entry, so "stage 2 of 5" above the log is always current.
+ */
+function GoalTimelineDialog({ goal, onClose }: { goal: CareerGoal; onClose: () => void }) {
+  const toast = useToast();
+  const history = useGoalHistory(goal.id);
+  const record = useRecordStage();
+
+  const [stage, setStage] = useState(() => nextStage(goal.currentStage, goal.totalStages));
+  const [description, setDescription] = useState('');
+  const [error, setError] = useState<string | null>(null);
+
+  // The API returns newest first; a timeline reads the way it happened.
+  const entries = [...(history.data?.history ?? [])].reverse();
+  const choices = Array.from({ length: goal.totalStages }, (_, i) => i + 1).filter(
+    (s) => s !== goal.currentStage,
+  );
+  const pct = Math.round((goal.currentStage / Math.max(1, goal.totalStages)) * 100);
+
+  async function onRecord(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setError(null);
+    try {
+      await record.mutateAsync({ id: goal.id, stage, description: description.trim() || null });
+      toast.success(`Stage ${stage} recorded`);
+      setDescription('');
+      setStage(nextStage(stage, goal.totalStages));
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : 'Could not record that stage.');
+    }
+  }
+
+  return (
+    <Modal
+      open
+      onClose={onClose}
+      title={goal.title}
+      description={`Stage ${goal.currentStage} of ${goal.totalStages} · ${pct}%${
+        goal.achievedAt ? ' · Achieved' : ''
+      }`}
+      busy={record.isPending}
+    >
+      {history.isPending ? (
+        <div className="shimmer flex flex-col gap-3">
+          {Array.from({ length: 3 }, (_, i) => (
+            <Skeleton key={i} h={48} radius={12} />
+          ))}
+        </div>
+      ) : history.isError ? (
+        <p className="text-[13.5px] text-danger-ink">The timeline could not be loaded.</p>
+      ) : (
+        <ol className="ml-2 flex flex-col gap-5 border-l-2 border-line pl-6">
+          <li className="relative">
+            <span
+              aria-hidden="true"
+              className="absolute top-1 -left-[32px] size-3.5 rounded-full border-2 border-surface bg-line-2"
+            />
+            <p className="text-[13px] font-semibold text-ink-3">Goal created</p>
+            <p className="text-[12px] text-ink-4">{WHEN.format(new Date(goal.createdAt))}</p>
+          </li>
+
+          {entries.map((entry, i) => {
+            const latest = i === entries.length - 1;
+            return (
+              <li key={entry.id} className="relative">
+                <span
+                  aria-hidden="true"
+                  className={`absolute top-1 -left-[32px] size-3.5 rounded-full border-2 border-surface ${
+                    latest ? 'bg-brand' : 'bg-brand-tint'
+                  }`}
+                />
+                <p className="text-[14px] font-bold text-ink">
+                  Stage {entry.stage} of {goal.totalStages}
+                  {entry.stage >= goal.totalStages ? ' · Final' : ''}
+                </p>
+                <p className="text-[12px] text-ink-4">{WHEN.format(new Date(entry.recordedAt))}</p>
+                {entry.description ? (
+                  <p className="mt-1.5 text-[13.5px] leading-relaxed whitespace-pre-line text-ink-2">
+                    {entry.description}
+                  </p>
+                ) : null}
+              </li>
+            );
+          })}
+
+          {entries.length === 0 ? (
+            <li className="text-[13px] leading-relaxed text-ink-3">
+              No stages recorded yet. Record the first one below.
+            </li>
+          ) : null}
+        </ol>
+      )}
+
+      <form
+        onSubmit={(e) => void onRecord(e)}
+        className="mt-6 flex flex-col gap-3 border-t border-line pt-5"
+        noValidate
+      >
+        <p className="text-[13px] font-semibold text-ink-2">Record progress</p>
+        {error ? <p className="text-[12.5px] text-danger-ink">{error}</p> : null}
+        <Select
+          label="Stage reached"
+          value={String(stage)}
+          onChange={(e) => setStage(Number(e.target.value))}
+          options={choices.map((s) => ({
+            value: String(s),
+            label: `Stage ${s}${s === goal.totalStages ? ' (final)' : ''}${
+              s < goal.currentStage ? ' — moving back' : ''
+            }`,
+          }))}
+        />
+        <Textarea
+          label="What happened"
+          rows={3}
+          value={description}
+          onChange={(e) => setDescription(e.target.value)}
+          placeholder="Submitted the first draft to the journal"
+        />
+        <div className="flex justify-end">
+          <Button type="submit" variant="brand" size="sm" icon="add" loading={record.isPending}>
+            Add to timeline
+          </Button>
+        </div>
+      </form>
+    </Modal>
+  );
+}
+
 /** The four figures over the list. All four come from one summary request. */
 function CareerStats() {
   const { data, isPending } = useCareerSummary();
@@ -975,6 +1139,7 @@ const careerGoalsConfig: ResourceConfig<CareerGoal> = {
   useQuota: useCareerQuota,
   stats: () => <CareerStats />,
   listLabel: 'Your goals',
+  rowActions: (goal) => <GoalTimeline goal={goal} />,
   filters: [
     {
       name: 'goalType',
@@ -1068,6 +1233,7 @@ const careerGoalsConfig: ResourceConfig<CareerGoal> = {
         name="stageDescription"
         defaultValue={goal?.stageDescription ?? ''}
         placeholder="What is happening right now"
+        hint="Saved to the goal's timeline with the stage. Later stages are added from the timeline button on the goal."
         error={Err('stageDescription')}
       />
     </>

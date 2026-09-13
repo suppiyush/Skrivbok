@@ -170,14 +170,46 @@ export const useCareerGoalEdit = (): ReturnType<typeof careerGoalHooks.useUpdate
       // refuses a total below the stage a goal is at, and a stage beyond its
       // total — so a move down goes first (it makes room for a lower total),
       // and a move up goes last (a higher total has to be there to move into).
+      // The stage description travels with the move, so the timeline entry
+      // says what happened rather than only that something did.
+      const description =
+        typeof rest['stageDescription'] === 'string' ? rest['stageDescription'] : null;
+
       if (moving && currentStage < previousStage) {
-        await careerGoals.setStage(id, currentStage);
+        await careerGoals.setStage(id, currentStage, description);
         return careerGoals.update(id, rest);
       }
 
       const goal = await careerGoals.update(id, rest);
-      return moving ? careerGoals.setStage(id, currentStage) : goal;
+      return moving ? careerGoals.setStage(id, currentStage, description) : goal;
     },
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: keys.careerGoals });
+      for (const derived of DERIVED) void qc.invalidateQueries({ queryKey: derived });
+    },
+  });
+};
+
+/** A goal's timeline. Keyed under the goals, so any change to a goal refreshes it. */
+export const useGoalHistory = (id: string) =>
+  useQuery({
+    queryKey: [...keys.careerGoals, 'history', id],
+    queryFn: () => careerGoals.history(id),
+  });
+
+/** Move a goal to a stage and record what happened, from its timeline. */
+export const useRecordStage = () => {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({
+      id,
+      stage,
+      description,
+    }: {
+      id: string;
+      stage: number;
+      description: string | null;
+    }) => careerGoals.setStage(id, stage, description),
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: keys.careerGoals });
       for (const derived of DERIVED) void qc.invalidateQueries({ queryKey: derived });

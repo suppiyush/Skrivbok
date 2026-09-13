@@ -136,6 +136,8 @@ export interface ResourceConfig<T extends { id: string }> {
   card?: (item: T) => CardView;
   /** Draw this resource as a table. `row` is still needed, for the same reason. */
   table?: TableColumn<T>[];
+  /** Buttons of the resource's own, placed before edit and delete on each row. */
+  rowActions?: (item: T) => ReactNode;
   /** The dialog body. `item` is null when creating. */
   form: (item: T | null) => ReactNode;
   /** Turn the submitted form into the request body. */
@@ -506,6 +508,7 @@ export function ResourceScreen<T extends { id: string }>({
                               ))}
                               <td className="px-5 text-right">
                                 <div className="flex justify-end">
+                                  {config.rowActions?.(item)}
                                   <RowActions
                                     onEdit={() => setEditing(item)}
                                     onDelete={() => setDeleting(item)}
@@ -572,6 +575,7 @@ export function ResourceScreen<T extends { id: string }>({
                                 </span>
                               ) : null}
 
+                              {config.rowActions?.(item)}
                               <RowActions
                                 onEdit={() => setEditing(item)}
                                 onDelete={() => setDeleting(item)}
@@ -835,7 +839,7 @@ function RowActions({ onEdit, onDelete }: { onEdit: () => void; onDelete: () => 
   );
 }
 
-function RowAction({
+export function RowAction({
   icon,
   label,
   onClick,
