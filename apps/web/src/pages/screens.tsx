@@ -11,16 +11,18 @@
  */
 import { useId, useState } from 'react';
 import { AudioPlayer } from '../components/ui/AudioPlayer';
+import { Button } from '../components/ui/Button';
 import { Field } from '../components/ui/Field';
-import { Checkbox, FieldRow, Select, Textarea } from '../components/ui/Form';
+import { Checkbox, FieldRow, Select, TagInput, Textarea } from '../components/ui/Form';
 import { Icon } from '../components/ui/Icon';
-import type {
-  CareerGoal,
-  Deadline,
-  FutureWork as FutureWorkItem,
-  Idea,
-  Literature as LiteratureEntry,
-  Note,
+import {
+  literature as literatureApi,
+  type CareerGoal,
+  type Deadline,
+  type FutureWork as FutureWorkItem,
+  type Idea,
+  type Literature as LiteratureEntry,
+  type Note,
 } from '../lib/api';
 import { clock, dateInputValue, dueLabel, humanise, shortAge, timeInputValue } from '../lib/format';
 import {
@@ -35,7 +37,7 @@ import {
   useCareerSummary,
   useLiteratureTags,
 } from '../lib/queries';
-import { MetricCard } from '../components/ui/Layout';
+import { MetricCard, Pill } from '../components/ui/Layout';
 import { ResourceScreen, useFieldError, type ResourceConfig } from './ResourceScreen';
 import { VoiceNoteButton } from './VoiceNote';
 
@@ -565,6 +567,18 @@ const literatureConfig: ResourceConfig<LiteratureEntry> = {
   blurb:
     'Your reading, with authors, year, links, tags and your own summary. Filter by any combination of tags.',
   createLabel: 'Add entry',
+  // The whole library, whatever the list is filtered to. A plain navigation:
+  // the response is an attachment, so the browser saves it and stays put.
+  extraAction: () => (
+    <Button
+      variant="secondary"
+      size="sm"
+      icon="download"
+      onClick={() => window.location.assign(literatureApi.exportUrl)}
+    >
+      Download CSV
+    </Button>
+  ),
   hooks: literatureHooks as never,
   sorts: [
     { value: 'newest', label: 'Newest' },
@@ -580,6 +594,77 @@ const literatureConfig: ResourceConfig<LiteratureEntry> = {
       ? `${entry.links.length} link${entry.links.length > 1 ? 's' : ''}`
       : '',
   }),
+  // The register from design/literature-1: the fields you scan a reading list
+  // by, side by side, instead of a title with the rest folded under it.
+  table: [
+    {
+      header: 'Title',
+      className: 'w-[26%]',
+      cell: (entry, open) => (
+        <button
+          type="button"
+          onClick={open}
+          className="text-left text-[14px] leading-snug font-semibold text-brand-ink transition hover:underline"
+        >
+          {entry.title}
+        </button>
+      ),
+    },
+    {
+      header: 'Links',
+      className: 'w-[13%]',
+      cell: (entry) =>
+        entry.links.length === 0 ? (
+          <span className="text-[13px] text-ink-5">—</span>
+        ) : (
+          <div className="flex flex-wrap items-center gap-1.5">
+            {entry.links.slice(0, 3).map((href, i) => (
+              <a
+                key={href}
+                href={href}
+                target="_blank"
+                rel="noopener noreferrer"
+                title={href}
+                aria-label={`Open link ${i + 1} for ${entry.title}`}
+                className="press grid size-8 place-items-center rounded-lg bg-brand-tint text-brand-ink transition hover:brightness-95"
+              >
+                <Icon name="link" size={17} />
+              </a>
+            ))}
+            {entry.links.length > 3 ? (
+              <span className="text-[12px] font-semibold text-ink-4">
+                +{entry.links.length - 3}
+              </span>
+            ) : null}
+          </div>
+        ),
+    },
+    {
+      header: 'Tags',
+      className: 'w-[22%]',
+      cell: (entry) =>
+        entry.tags.length === 0 ? (
+          <span className="text-[13px] text-ink-5">—</span>
+        ) : (
+          <div className="flex flex-wrap gap-1.5">
+            {entry.tags.map((tag) => (
+              <Pill key={tag}>{tag}</Pill>
+            ))}
+          </div>
+        ),
+    },
+    {
+      header: 'Summary',
+      cell: (entry) =>
+        entry.summary ? (
+          <p className="line-clamp-2 max-w-[52ch] text-[13.5px] leading-relaxed text-ink-3">
+            {entry.summary}
+          </p>
+        ) : (
+          <span className="text-[13px] text-ink-5">—</span>
+        ),
+    },
+  ],
   form: (entry) => (
     <>
       <Field
@@ -605,13 +690,14 @@ const literatureConfig: ResourceConfig<LiteratureEntry> = {
           error={Err('year')}
         />
       </FieldRow>
-      <Field
+      <TagInput
         label="Tags"
         name="tags"
-        defaultValue={entry?.tags.join(', ') ?? ''}
+        defaultValue={entry?.tags ?? []}
         placeholder="consensus, raft"
-        hint="Comma separated. Tags are lowercased so they group properly."
+        hint="A comma or Enter makes a tag. Tags are lowercased so they group properly."
         error={Err('tags')}
+        lowercase
       />
       <Field
         label="Links"
@@ -648,22 +734,91 @@ const literatureConfig: ResourceConfig<LiteratureEntry> = {
       summary: text(form, 'summary'),
     };
   },
-  aside: ({ filters, setFilter }) => (
-    <TagSidebar active={filters['tag'] ?? ''} onPick={(t) => setFilter('tag', t)} />
-  ),
+  aside: ({ filters, setFilter }) => {
+    const raw = filters['tag'];
+    const active = Array.isArray(raw) ? raw : raw ? [raw] : [];
+    return (
+      <TagSidebar
+        active={active}
+        match={filters['tagMatch'] === 'all' ? 'all' : 'any'}
+        onChange={(tags) => {
+          setFilter('tag', tags);
+          // "Match all" means nothing with fewer than two tags; left behind it
+          // would count as an active filter over an unfiltered list.
+          if (tags.length < 2) setFilter('tagMatch', '');
+        }}
+        // `any` is the API's default, so it is sent as nothing.
+        onMatch={(match) => setFilter('tagMatch', match === 'all' ? 'all' : '')}
+      />
+    );
+  },
   emptyTitle: 'The library is empty',
   emptyBody:
     'Add the paper you read most recently. Tags are what make it findable at three hundred.',
 };
 
-/** The literature tag filter. Counts come from the backend, not the loaded page. */
-function TagSidebar({ active, onPick }: { active: string; onPick: (tag: string) => void }) {
+/**
+ * The literature tag filter. Counts come from the backend, not the loaded page.
+ *
+ * Tags toggle independently, so several can be on at once. With two or more
+ * selected a switch appears for whether an entry needs any of them or all of
+ * them — the two readings of "these tags" are both useful, and guessing one
+ * would be wrong half the time.
+ */
+function TagSidebar({
+  active,
+  match,
+  onChange,
+  onMatch,
+}: {
+  active: string[];
+  match: 'any' | 'all';
+  onChange: (tags: string[]) => void;
+  onMatch: (match: 'any' | 'all') => void;
+}) {
   const { data, isPending } = useLiteratureTags();
   const tags = data?.tags ?? [];
 
+  const toggle = (tag: string) =>
+    onChange(active.includes(tag) ? active.filter((t) => t !== tag) : [...active, tag]);
+
   return (
     <div className="rounded-[18px] border border-line bg-surface p-4">
-      <h2 className="text-[12.5px] font-bold tracking-[0.06em] text-ink-4 uppercase">Tags</h2>
+      <div className="flex items-center justify-between gap-2">
+        <h2 className="text-[12.5px] font-bold tracking-[0.06em] text-ink-4 uppercase">Tags</h2>
+        {active.length > 0 ? (
+          <button
+            type="button"
+            onClick={() => onChange([])}
+            className="text-[12px] font-semibold text-brand-ink transition hover:underline"
+          >
+            Clear{active.length > 1 ? ` (${active.length})` : ''}
+          </button>
+        ) : null}
+      </div>
+
+      {active.length > 1 ? (
+        <div
+          role="radiogroup"
+          aria-label="Entries must have"
+          className="mt-3 grid grid-cols-2 gap-1 rounded-lg bg-surface-2 p-1"
+        >
+          {(['any', 'all'] as const).map((value) => (
+            <button
+              key={value}
+              type="button"
+              role="radio"
+              aria-checked={match === value}
+              onClick={() => onMatch(value)}
+              className={`rounded-md px-2 py-1 text-[12px] font-semibold transition ${
+                match === value ? 'bg-surface text-ink shadow-sm' : 'text-ink-3 hover:text-ink'
+              }`}
+            >
+              {value === 'any' ? 'Any tag' : 'All tags'}
+            </button>
+          ))}
+        </div>
+      ) : null}
 
       {isPending ? (
         <p className="mt-3 text-[13px] text-ink-4">Loading…</p>
@@ -673,25 +828,33 @@ function TagSidebar({ active, onPick }: { active: string; onPick: (tag: string) 
         </p>
       ) : (
         <ul className="mt-3 flex flex-col gap-0.5">
-          {tags.map(({ tag, count }) => (
-            <li key={tag}>
-              <button
-                type="button"
-                onClick={() => onPick(active === tag ? '' : tag)}
-                className={`flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left text-[13px] transition ${
-                  active === tag
-                    ? 'bg-brand-tint font-semibold text-brand-deep'
-                    : 'text-ink-2 hover:bg-surface-2'
-                }`}
-              >
-                <Icon name="label" size={15} className="flex-none text-ink-4" />
-                <span className="min-w-0 flex-1 truncate">{tag}</span>
-                <span className="flex-none font-mono text-[11.5px] text-ink-4 tabular">
-                  {count}
-                </span>
-              </button>
-            </li>
-          ))}
+          {tags.map(({ tag, count }) => {
+            const on = active.includes(tag);
+            return (
+              <li key={tag}>
+                <button
+                  type="button"
+                  aria-pressed={on}
+                  onClick={() => toggle(tag)}
+                  className={`flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left text-[13px] transition ${
+                    on
+                      ? 'bg-brand-tint font-semibold text-brand-deep'
+                      : 'text-ink-2 hover:bg-surface-2'
+                  }`}
+                >
+                  <Icon
+                    name={on ? 'check_box' : 'check_box_outline_blank'}
+                    size={16}
+                    className={`flex-none ${on ? 'text-brand-deep' : 'text-ink-4'}`}
+                  />
+                  <span className="min-w-0 flex-1 truncate">{tag}</span>
+                  <span className="flex-none font-mono text-[11.5px] text-ink-4 tabular">
+                    {count}
+                  </span>
+                </button>
+              </li>
+            );
+          })}
         </ul>
       )}
     </div>

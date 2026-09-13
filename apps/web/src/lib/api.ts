@@ -692,6 +692,8 @@ export const literature = {
     }
   >('/literature'),
   tags: () => api.get<{ tags: { tag: string; count: number }[] }>('/literature/tags'),
+  /** A CSV of the whole library. Navigated to, not fetched: the browser saves it. */
+  exportUrl: `${BASE}/literature/export`,
 };
 
 export const careerGoals = {

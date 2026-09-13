@@ -40,3 +40,14 @@ export const remove: RequestHandler = async (req, res) => {
   await service.remove(user.id, req.params['id'] as string);
   res.status(204).end();
 };
+
+/** A download, not JSON: the browser saves it under the name given. */
+export const exportCsv: RequestHandler = async (req, res) => {
+  const user = currentUser(req);
+  const { filename, csv } = await service.exportCsv(user.id);
+  res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+  res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+  // Someone's reading list: not for a shared cache.
+  res.setHeader('Cache-Control', 'no-store');
+  res.send(csv);
+};

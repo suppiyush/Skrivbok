@@ -2,6 +2,7 @@
 import type { Prisma } from '@prisma/client';
 import { prisma } from '../../db/prisma.js';
 import type { Pagination } from '../../middleware/validate.js';
+import { toCsv } from '../../utils/csv.js';
 import { NotFoundError } from '../../utils/errors.js';
 import { paginate, toSkipTake, type Paginated } from '../../utils/pagination.js';
 import type {
@@ -123,4 +124,55 @@ export async function tagCounts(userId: string): Promise<{ tag: string; count: n
     ORDER BY COUNT(*) DESC, tag ASC
   `;
   return rows.map((r) => ({ tag: r.tag, count: Number(r.count) }));
+}
+
+/** `YYYY-MM-DD` in the user's own zone — the day they would say they added it. */
+function dayIn(timezone: string): (date: Date) => string {
+  let format: Intl.DateTimeFormat;
+  try {
+    format = new Intl.DateTimeFormat('en-CA', {
+      timeZone: timezone,
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+    });
+  } catch {
+    // A zone the runtime does not know should not fail the download.
+    format = new Intl.DateTimeFormat('en-CA', { timeZone: 'UTC' });
+  }
+  return (date) => format.format(date);
+}
+
+/**
+ * The whole library as a spreadsheet: every entry, newest first, regardless of
+ * what the list on screen is filtered to — a download is a copy of the
+ * library, not of a page of it.
+ *
+ * Links go one per line inside their cell, because a URL may itself contain a
+ * comma or a semicolon; tags cannot contain commas, so they share a line.
+ */
+export async function exportCsv(userId: string): Promise<{ filename: string; csv: string }> {
+  const [user, entries] = await Promise.all([
+    prisma.user.findUnique({ where: { id: userId }, select: { timezone: true } }),
+    prisma.literature.findMany({
+      where: { userId },
+      orderBy: { createdAt: 'desc' },
+      select: { title: true, links: true, tags: true, summary: true, createdAt: true },
+    }),
+  ]);
+
+  const day = dayIn(user?.timezone ?? 'UTC');
+
+  const csv = toCsv([
+    ['Title', 'Links', 'Tags', 'Summary', 'Created Date'],
+    ...entries.map((entry) => [
+      entry.title,
+      entry.links.join('\n'),
+      entry.tags.join(', '),
+      entry.summary ?? '',
+      day(entry.createdAt),
+    ]),
+  ]);
+
+  return { filename: `skrivbok-literature-${day(new Date())}.csv`, csv };
 }

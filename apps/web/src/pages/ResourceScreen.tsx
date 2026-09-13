@@ -80,6 +80,23 @@ export interface CardView {
   audioSeconds?: number | null | undefined;
 }
 
+/**
+ * A resource drawn as a table, one column per field.
+ *
+ * For records whose value is in comparing fields across rows — a reading list
+ * scanned for which entries have links, or which share a tag. Edit and delete
+ * are appended as the last column, as they are on a row.
+ */
+export interface TableColumn<T> {
+  header: string;
+  /** `open` opens the record's edit dialog, for a cell that should. */
+  cell: (item: T, open: () => void) => ReactNode;
+  className?: string;
+}
+
+/** A filter's value: one choice, or several (the literature tags). */
+export type FilterValue = string | string[];
+
 export interface FilterDef {
   /** The query parameter sent to the backend. */
   name: string;
@@ -117,6 +134,8 @@ export interface ResourceConfig<T extends { id: string }> {
    * is about to delete, and it asks `row` for that name.
    */
   card?: (item: T) => CardView;
+  /** Draw this resource as a table. `row` is still needed, for the same reason. */
+  table?: TableColumn<T>[];
   /** The dialog body. `item` is null when creating. */
   form: (item: T | null) => ReactNode;
   /** Turn the submitted form into the request body. */
@@ -142,8 +161,8 @@ export interface ResourceConfig<T extends { id: string }> {
 
   /** Rendered to the left of the list, e.g. the literature tag filter. */
   aside?: (state: {
-    filters: Record<string, string>;
-    setFilter: (n: string, v: string) => void;
+    filters: Record<string, FilterValue>;
+    setFilter: (n: string, v: FilterValue) => void;
   }) => ReactNode;
 
   emptyTitle: string;
@@ -173,7 +192,7 @@ export function ResourceScreen<T extends { id: string }>({
   const [page, setPage] = useState(1);
   const [searchInput, setSearchInput] = useState(arrivalSearch);
   const [search, setSearch] = useState(arrivalSearch);
-  const [filters, setFilters] = useState<Record<string, string>>({});
+  const [filters, setFilters] = useState<Record<string, FilterValue>>({});
   const [sort, setSort] = useState(config.sorts?.[0]?.value ?? '');
 
   /**
@@ -232,14 +251,18 @@ export function ResourceScreen<T extends { id: string }>({
   const items = result?.data ?? [];
   const meta = result?.pagination;
 
-  const filtering = search !== '' || Object.values(filters).some(Boolean);
+  const filtering =
+    search !== '' ||
+    Object.values(filters).some((v) => (Array.isArray(v) ? v.length > 0 : v !== ''));
   const limit = quota?.data;
   const atLimit = limit?.limited === true && limit.remaining === 0;
 
-  const setFilter = (name: string, value: string) => {
+  const setFilter = (name: string, value: FilterValue) => {
     setFilters((current) => {
       const next = { ...current };
-      if (value) next[name] = value;
+      // An empty choice, or an empty set of them, is the filter switched off —
+      // dropped rather than sent, so the API applies no condition at all.
+      if (Array.isArray(value) ? value.length > 0 : value !== '') next[name] = value;
       else delete next[name];
       return next;
     });
@@ -297,6 +320,7 @@ export function ResourceScreen<T extends { id: string }>({
   // Hoisted so the narrowing survives into the render callback below, where
   // `config.card` on its own is only ever "possibly undefined".
   const asCard = config.card;
+  const asTable = config.table;
   // The quota is waited on too: it decides whether the header carries a usage
   // meter, and arriving late it would push the whole body down the page.
   const loading = list.isPending || (quota?.isPending ?? false);
@@ -359,7 +383,9 @@ export function ResourceScreen<T extends { id: string }>({
             <SelectFilter
               key={filter.name}
               label={filter.label}
-              value={filters[filter.name] ?? ''}
+              value={
+                typeof filters[filter.name] === 'string' ? (filters[filter.name] as string) : ''
+              }
               options={filter.options}
               onChange={(v) => setFilter(filter.name, v)}
             />
@@ -434,7 +460,66 @@ export function ResourceScreen<T extends { id: string }>({
             </EmptyState>
           ) : (
             <>
-              {asCard ? (
+              {asTable ? (
+                <Reveal>
+                  <Card padded={false} className="overflow-hidden">
+                    {/* Scrolls sideways on a phone rather than crushing five
+                        columns into one screen, like the other wide tables. */}
+                    <div className="overflow-x-auto">
+                      <table className="w-full min-w-[760px] border-collapse text-left">
+                        <thead>
+                          <tr className="border-b border-line bg-surface-5">
+                            {asTable.map((column) => (
+                              <th
+                                key={column.header}
+                                scope="col"
+                                className={`px-5 py-3 text-[11px] font-bold tracking-[0.08em] text-ink-4 uppercase ${
+                                  column.className ?? ''
+                                }`}
+                              >
+                                {column.header}
+                              </th>
+                            ))}
+                            <th
+                              scope="col"
+                              className="w-24 px-5 py-3 text-right text-[11px] font-bold tracking-[0.08em] text-ink-4 uppercase"
+                            >
+                              Actions
+                            </th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {items.map((item) => (
+                            <tr
+                              key={item.id}
+                              className="border-t border-line align-middle transition first:border-t-0 hover:bg-surface-3"
+                            >
+                              {asTable.map((column) => (
+                                <td
+                                  key={column.header}
+                                  className={`px-5 ${compact ? 'py-2.5' : 'py-3.5'} ${
+                                    column.className ?? ''
+                                  }`}
+                                >
+                                  {column.cell(item, () => setEditing(item))}
+                                </td>
+                              ))}
+                              <td className="px-5 text-right">
+                                <div className="flex justify-end">
+                                  <RowActions
+                                    onEdit={() => setEditing(item)}
+                                    onDelete={() => setDeleting(item)}
+                                  />
+                                </div>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </Card>
+                </Reveal>
+              ) : asCard ? (
                 <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
                   {items.map((item, i) => (
                     <Reveal key={item.id} delay={i * 35}>

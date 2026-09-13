@@ -13,8 +13,9 @@ export const literatureRouter: Router = Router();
 
 literatureRouter.use(requireAuth);
 
-// Declared before '/:id', or 'tags' would be parsed as an id.
+// Declared before '/:id', or 'tags' and 'export' would be parsed as ids.
 literatureRouter.get('/tags', controller.tags);
+literatureRouter.get('/export', controller.exportCsv);
 
 literatureRouter.get('/', validate({ query: listLiteratureSchema }), controller.list);
 literatureRouter.post('/', validate({ body: createLiteratureSchema }), controller.create);
