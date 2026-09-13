@@ -502,6 +502,11 @@ export function useProjectMemberActions(projectId: string | null) {
       mutationFn: (memberId: string) => projects.removeMember(projectId as string, memberId),
       onSuccess: invalidate,
     }),
+    updateRole: useMutation({
+      mutationFn: ({ memberId, role }: { memberId: string; role: 'EDITOR' | 'VIEWER' }) =>
+        projects.updateMemberRole(projectId as string, memberId, role),
+      onSuccess: invalidate,
+    }),
   };
 }
 

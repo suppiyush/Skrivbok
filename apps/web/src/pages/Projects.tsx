@@ -659,10 +659,49 @@ function IconAction({
 
 /* ── Members ──────────────────────────────────────────────────────────────── */
 
+/**
+ * A member's access, changeable in place.
+ *
+ * Compact and label-less beside the name — the row already says whose it is,
+ * and a full `Select` with its own label would double the row's height. The
+ * accessible name comes from `label` instead.
+ */
+function MemberRoleSelect({
+  role,
+  label,
+  disabled,
+  onChange,
+}: {
+  role: AssignableRole;
+  label: string;
+  disabled: boolean;
+  onChange: (role: AssignableRole) => void;
+}) {
+  return (
+    <div className="relative flex-none">
+      <select
+        aria-label={label}
+        value={role}
+        disabled={disabled}
+        onChange={(e) => onChange(e.target.value as AssignableRole)}
+        className="h-8 cursor-pointer appearance-none rounded-lg border border-line-2 bg-surface py-0 pr-7 pl-2.5 text-[12.5px] font-semibold text-ink-2 outline-none transition hover:bg-surface-2 focus:border-brand disabled:opacity-50"
+      >
+        <option value="EDITOR">Editor</option>
+        <option value="VIEWER">Viewer</option>
+      </select>
+      <Icon
+        name="expand_more"
+        size={15}
+        className="pointer-events-none absolute top-1/2 right-2 -translate-y-1/2 text-ink-4"
+      />
+    </div>
+  );
+}
+
 function MembersDialog({ project, onClose }: { project: Project | null; onClose: () => void }) {
   const toast = useToast();
   const { data, isPending } = useProjectMembers(project?.id ?? null);
-  const { add, remove } = useProjectMemberActions(project?.id ?? null);
+  const { add, remove, updateRole } = useProjectMemberActions(project?.id ?? null);
   const [error, setError] = useState<string | null>(null);
 
   const members = data?.members ?? [];
@@ -721,9 +760,34 @@ function MembersDialog({ project, onClose }: { project: Project | null; onClose:
                 </span>
                 <span className="block truncate text-[12px] text-ink-3">{member.email}</span>
               </span>
-              <Pill tone={member.role === 'OWNER' ? 'brand' : 'neutral'}>
-                {humanise(member.role)}
-              </Pill>
+              {/* The owner can move anyone else between editor and viewer at
+                  any time — including while the invitation is still pending.
+                  Everyone else, and the owner's own row, sees the badge. */}
+              {canManage && member.role !== 'OWNER' ? (
+                <MemberRoleSelect
+                  role={member.role as AssignableRole}
+                  label={`Access for ${member.name ?? member.email}`}
+                  disabled={updateRole.isPending && updateRole.variables?.memberId === member.id}
+                  onChange={(role) =>
+                    void updateRole
+                      .mutateAsync({ memberId: member.id, role })
+                      .then(() =>
+                        toast.success(
+                          `${member.name ?? member.email} is now ${role === 'EDITOR' ? 'an editor' : 'a viewer'}`,
+                        ),
+                      )
+                      .catch((err: unknown) =>
+                        toast.error(
+                          err instanceof ApiError ? err.message : 'Could not change that access.',
+                        ),
+                      )
+                  }
+                />
+              ) : (
+                <Pill tone={member.role === 'OWNER' ? 'brand' : 'neutral'}>
+                  {humanise(member.role)}
+                </Pill>
+              )}
               {member.acceptedAt === null ? <Pill tone="warning">Pending</Pill> : null}
               {canManage && member.role !== 'OWNER' ? (
                 <IconAction

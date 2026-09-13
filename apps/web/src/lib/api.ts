@@ -743,6 +743,9 @@ export const projects = {
   acceptInvite: (id: string) => api.post<ProjectMember>(`/projects/${id}/members/accept`),
   removeMember: (id: string, memberId: string) =>
     api.delete<void>(`/projects/${id}/members/${memberId}`),
+  /** Owner only. The owner's own row is changed by transfer, not here. */
+  updateMemberRole: (id: string, memberId: string, role: 'EDITOR' | 'VIEWER') =>
+    api.patch<ProjectMember>(`/projects/${id}/members/${memberId}`, { role }),
 
   /** `brief` is null until the document has been written for the first time. */
   brief: (id: string) => api.get<{ brief: ProjectBrief | null }>(`/projects/${id}/brief`),
