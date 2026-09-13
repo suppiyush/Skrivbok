@@ -202,6 +202,18 @@ function categoryOptions(current: string | undefined) {
   return values.map((value) => ({ value, label: humanise(value) }));
 }
 
+/**
+ * The category filter shared by ideas and notes.
+ *
+ * The six fixed categories, not the ones in use: the API filters on an exact
+ * value, and the select's own first option ("Category") is what clears it.
+ */
+const CATEGORY_FILTER = {
+  name: 'category',
+  label: 'Category',
+  options: CATEGORIES.map((value) => ({ value, label: humanise(value) })),
+};
+
 /* ── Ideas ────────────────────────────────────────────────────────────────── */
 
 const ideasConfig: ResourceConfig<Idea> = {
@@ -212,6 +224,7 @@ const ideasConfig: ResourceConfig<Idea> = {
     'Anything worth keeping, recorded before it goes. Categorise and colour them, then search across everything you have written.',
   createLabel: 'Add idea',
   hooks: ideaHooks as never,
+  filters: [CATEGORY_FILTER],
   sorts: [
     { value: 'newest', label: 'Newest' },
     { value: 'oldest', label: 'Oldest' },
@@ -287,6 +300,7 @@ const notesConfig: ResourceConfig<Note> = {
   createLabel: 'Add text note',
   extraAction: () => <VoiceNoteButton />,
   hooks: noteHooks as never,
+  filters: [CATEGORY_FILTER],
   sorts: [
     { value: 'newest', label: 'Newest' },
     { value: 'oldest', label: 'Oldest' },
