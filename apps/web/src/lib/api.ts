@@ -830,6 +830,90 @@ export const calendar = {
   categories: () => api.get<{ categories: string[] }>('/calendar/events/categories'),
 };
 
+/* ── Calendar sharing ─────────────────────────────────────────────────────── */
+
+export type CalendarAccessLevel = 'FREE_BUSY' | 'VIEW';
+
+export interface CalendarParty {
+  id: string;
+  name: string | null;
+  email: string;
+}
+
+export interface AccessRequest {
+  id: string;
+  requesterId: string;
+  targetId: string;
+  status: 'PENDING' | 'APPROVED' | 'REJECTED' | 'REVOKED';
+  message: string | null;
+  respondedAt: string | null;
+  createdAt: string;
+  requester: CalendarParty;
+  target: CalendarParty;
+  /** True when the caller is the one asking. */
+  isRequester: boolean;
+}
+
+export interface AccessGrant {
+  id: string;
+  ownerId: string;
+  viewerId: string;
+  level: CalendarAccessLevel;
+  createdAt: string;
+  owner: CalendarParty;
+  viewer: CalendarParty;
+}
+
+/**
+ * Someone else's event, as the server allows the caller to see it. When
+ * `redacted` is true only the times are present, and it is drawn as Busy.
+ */
+export interface SharedOccurrence {
+  id: string;
+  seriesId: string;
+  ownerId: string;
+  startAt: string;
+  endAt: string;
+  isAllDay: boolean;
+  showAs: string;
+  isRecurrence: boolean;
+  redacted: boolean;
+  /** The event includes the caller — as an attendee, or a meeting with them. */
+  involvesViewer: boolean;
+  title?: string;
+  description?: string | null;
+  location?: string | null;
+  category?: string;
+}
+
+export interface SharedCalendar {
+  owner: CalendarParty & { timezone: string };
+  level: CalendarAccessLevel;
+  events: SharedOccurrence[];
+}
+
+export const calendarAccess = {
+  requests: (query: Record<string, unknown> = {}) =>
+    api.get<Paginated<AccessRequest>>(`/calendar/access/requests${qs(query)}`),
+  request: (input: { targetEmail: string; message?: string | null }) =>
+    api.post<AccessRequest>('/calendar/access/requests', input),
+  /** The owner answering. The level is theirs to choose, not the requester's. */
+  approve: (id: string, level: CalendarAccessLevel) =>
+    api.post<AccessRequest>(`/calendar/access/requests/${id}/approve`, { level }),
+  reject: (id: string) => api.post<AccessRequest>(`/calendar/access/requests/${id}/reject`),
+  withdraw: (id: string) => api.delete<void>(`/calendar/access/requests/${id}`),
+  /** Calendars the caller can see. */
+  held: () => api.get<{ grants: AccessGrant[] }>('/calendar/access/held'),
+  /** People who can see the caller's calendar. */
+  granted: () => api.get<{ grants: AccessGrant[] }>('/calendar/access/granted'),
+  update: (id: string, level: CalendarAccessLevel) =>
+    api.patch<AccessGrant>(`/calendar/access/${id}`, { level }),
+  /** Either side may end a grant. */
+  revoke: (id: string) => api.delete<void>(`/calendar/access/${id}`),
+  shared: (email: string, from: string, to: string) =>
+    api.get<SharedCalendar>(`/calendar/shared/${encodeURIComponent(email)}${qs({ from, to })}`),
+};
+
 export const meetings = {
   list: (query: Record<string, unknown> = {}) =>
     api.get<Paginated<MeetingRequest>>(`/calendar/meeting-requests${qs(query)}`),

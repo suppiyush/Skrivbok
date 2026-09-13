@@ -12,6 +12,7 @@
  */
 import {
   useMutation,
+  useQueries,
   useQuery,
   useQueryClient,
   type UseMutationResult,
@@ -21,6 +22,7 @@ import {
   admin,
   billing,
   calendar,
+  calendarAccess,
   careerGoals,
   deadlines,
   futureWork,
@@ -38,6 +40,7 @@ import {
   type MeetingInput,
   type Paginated,
   type ReportStatus,
+  type CalendarAccessLevel,
   type NotificationPreferences,
 } from './api';
 
@@ -57,6 +60,7 @@ export const keys = {
   careerGoals: ['career-goals'] as const,
   projects: ['projects'] as const,
   calendar: ['calendar'] as const,
+  access: ['calendar-access'] as const,
   meetings: ['meetings'] as const,
   notifications: ['notifications'] as const,
   profile: ['profile'] as const,
@@ -261,6 +265,73 @@ export const useEventRange = (from: string, to: string) =>
     queryKey: [...keys.calendar, 'range', from, to],
     queryFn: () => calendar.range(from, to),
   });
+
+/* ── Calendar sharing ─────────────────────────────────────────────────────── */
+
+export const useAccessRequests = (query: Record<string, unknown> = {}) =>
+  useQuery({
+    queryKey: [...keys.access, 'requests', query],
+    queryFn: () => calendarAccess.requests(query),
+  });
+
+/** Calendars the user can see. */
+export const useHeldCalendars = () =>
+  useQuery({ queryKey: [...keys.access, 'held'], queryFn: calendarAccess.held });
+
+/** People who can see the user's calendar. */
+export const useSharedWithOthers = () =>
+  useQuery({ queryKey: [...keys.access, 'granted'], queryFn: calendarAccess.granted });
+
+/**
+ * Several teammates' calendars across one window, one request each.
+ *
+ * Keyed under the calendar, so accepting a meeting or saving an event — which
+ * already refreshes the calendar — refreshes these too.
+ */
+export const useSharedCalendars = (emails: string[], from: string, to: string) =>
+  useQueries({
+    queries: emails.map((email) => ({
+      queryKey: [...keys.calendar, 'shared', email, from, to],
+      queryFn: () => calendarAccess.shared(email, from, to),
+    })),
+  });
+
+export function useAccessActions() {
+  const qc = useQueryClient();
+  // A grant changing changes what the calendar shows, and each answer rings
+  // someone's bell.
+  const invalidate = () => {
+    void qc.invalidateQueries({ queryKey: keys.access });
+    void qc.invalidateQueries({ queryKey: keys.calendar });
+    void qc.invalidateQueries({ queryKey: keys.notifications });
+  };
+
+  return {
+    request: useMutation({ mutationFn: calendarAccess.request, onSuccess: invalidate }),
+    approve: useMutation({
+      mutationFn: ({ id, level }: { id: string; level: CalendarAccessLevel }) =>
+        calendarAccess.approve(id, level),
+      onSuccess: invalidate,
+    }),
+    reject: useMutation({
+      mutationFn: (id: string) => calendarAccess.reject(id),
+      onSuccess: invalidate,
+    }),
+    withdraw: useMutation({
+      mutationFn: (id: string) => calendarAccess.withdraw(id),
+      onSuccess: invalidate,
+    }),
+    update: useMutation({
+      mutationFn: ({ id, level }: { id: string; level: CalendarAccessLevel }) =>
+        calendarAccess.update(id, level),
+      onSuccess: invalidate,
+    }),
+    revoke: useMutation({
+      mutationFn: (id: string) => calendarAccess.revoke(id),
+      onSuccess: invalidate,
+    }),
+  };
+}
 
 export const useProjectQuota = () =>
   useQuery({ queryKey: [...keys.projects, 'quota'], queryFn: projects.quota });

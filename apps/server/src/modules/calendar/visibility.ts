@@ -7,18 +7,29 @@
  * row — so a column added to the schema later is invisible by default instead
  * of leaking until someone remembers to exclude it.
  *
- * The matrix:
+ * The rule, in order:
  *
- *   event.visibility │ FREE_BUSY grant │ VIEW grant
- *   ─────────────────┼─────────────────┼────────────
- *   PRIVATE          │ hidden entirely │ hidden entirely
- *   BUSY             │ opaque block    │ opaque block
- *   PUBLIC           │ opaque block    │ full detail
+ *   1. An event that involves the viewer is shown in full — they are one of
+ *      its attendees, it is a meeting between the two of them, or it is a
+ *      project meeting they attend. Nothing is revealed that they were not
+ *      already part of.
+ *   2. An event the owner marked PUBLIC, read through a VIEW grant, is shown
+ *      in full. Both halves are the owner's choice.
+ *   3. Everything else is an opaque block: the times, and that the slot is
+ *      taken. Never a title, a place, a description or who else is there.
+ *   4. Except an event marked FREE, which is not busy time and is not shown.
  *
- * PRIVATE is hidden even from a VIEW grant: granting someone access to your
- * calendar is not the same as waiving the privacy you set on a specific event.
- * PRIVATE is also the default for new events (7a), so the safe case is what
- * happens when nobody thinks about it.
+ *   visibility │ involves viewer │ FREE_BUSY grant │ VIEW grant
+ *   ───────────┼─────────────────┼─────────────────┼────────────
+ *   PRIVATE    │ full detail     │ busy block      │ busy block
+ *   BUSY       │ full detail     │ busy block      │ busy block
+ *   PUBLIC     │ full detail     │ busy block      │ full detail
+ *
+ * PRIVATE is a busy block, not hidden. It is the default for every new event,
+ * so hiding it meant a teammate given access saw an empty calendar, and a
+ * calendar shared so people can find a time is worse than useless if it claims
+ * someone is free when they are not. What PRIVATE protects is the detail, and
+ * the detail stays protected.
  */
 import type { CalendarAccessLevel } from '@prisma/client';
 import type { EventOccurrence } from './events.service.js';
@@ -35,6 +46,8 @@ export interface SharedOccurrence {
   isRecurrence: boolean;
   /** True when the details were withheld — the UI renders a plain "Busy" block. */
   redacted: boolean;
+  /** True when the viewer is part of this event, which is why they see it. */
+  involvesViewer: boolean;
 
   // Present only when `redacted` is false.
   title?: string;
@@ -50,14 +63,20 @@ export interface SharedOccurrence {
 /**
  * Project one occurrence for a viewer.
  *
- * Returns `null` when the viewer may not know the event exists at all — the
- * caller filters those out, so a PRIVATE event does not even appear as a gap.
+ * `involvesViewer` is worked out by the caller, which has the database to ask;
+ * this function stays pure so the rule above can be read in one place.
+ *
+ * Returns `null` only for a FREE slot that does not involve the viewer — the
+ * owner said that time is available, so there is nothing to show.
  */
 export function projectForViewer(
   occurrence: EventOccurrence,
   level: CalendarAccessLevel,
+  involvesViewer: boolean,
 ): SharedOccurrence | null {
-  if (occurrence.visibility === 'PRIVATE') return null;
+  const fullDetail = involvesViewer || (level === 'VIEW' && occurrence.visibility === 'PUBLIC');
+
+  if (!fullDetail && occurrence.showAs === 'FREE') return null;
 
   const base = {
     id: occurrence.id,
@@ -70,17 +89,16 @@ export function projectForViewer(
     isRecurrence: occurrence.isRecurrence,
   };
 
-  const fullDetail = level === 'VIEW' && occurrence.visibility === 'PUBLIC';
-
   if (!fullDetail) {
     // Deliberately no title, description, location, attendees or link. The
     // viewer learns only that the slot is taken.
-    return { ...base, redacted: true };
+    return { ...base, redacted: true, involvesViewer: false };
   }
 
   return {
     ...base,
     redacted: false,
+    involvesViewer,
     title: occurrence.title,
     description: occurrence.description,
     location: occurrence.location,
@@ -105,11 +123,12 @@ export interface BusyInterval {
  * become one block, so the shape of someone's day is not exposed by counting
  * the gaps between them.
  *
- * `FREE` events are excluded — that is what marking a slot free means.
+ * `FREE` events are excluded — that is what marking a slot free means. PRIVATE
+ * ones are included, for the reason given at the top of the file.
  */
 export function toBusyIntervals(occurrences: EventOccurrence[]): BusyInterval[] {
   const spans = occurrences
-    .filter((o) => o.showAs !== 'FREE' && o.visibility !== 'PRIVATE')
+    .filter((o) => o.showAs !== 'FREE')
     .map((o) => ({ startAt: o.startAt, endAt: o.endAt }))
     .sort((a, b) => a.startAt.getTime() - b.startAt.getTime());
 

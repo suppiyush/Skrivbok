@@ -119,7 +119,7 @@ const PROJECT_MEETING_HOURS = 1;
  * dozen people and a meeting three of them, and the other nine do not want it
  * on their calendar.
  */
-async function projectMeetingsInRange(
+export async function projectMeetingsInRange(
   userId: string,
   query: RangeQuery,
 ): Promise<EventOccurrence[]> {

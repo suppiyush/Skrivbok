@@ -1,18 +1,22 @@
 /**
  * Calendar and Meetings.
  *
- * The month grid is built from the *expanded* range endpoint, so a weekly
- * event appears on every week it occurs rather than only on the day the series
- * was created. The grid itself is derived from the real month — the first
- * column is Monday, and the leading blanks come from the actual weekday of the
- * 1st, not from a hard-coded offset.
+ * Five views over the same data — a day, the working week, the seven days from
+ * the cursor, the month, and the month as an agenda — all drawn from the
+ * *expanded* range endpoint, so a weekly event appears on every week it occurs
+ * rather than only on the day the series was created. The arithmetic is in
+ * `calendar/model.ts`, the drawing in `calendar/views.tsx`.
+ *
+ * Teammates who have shared their calendar can be laid over any view, each in
+ * their own colour, from the Team dialog. What of theirs is visible is decided
+ * by the server: what involves the user in full, everything else as Busy.
  *
  * A redacted occurrence — one the viewer may see the existence of but not the
  * detail of — has to look deliberate: muted, hatched and padlocked, never like
  * something that failed to load.
  */
 import { useEffect, useMemo, useState, type FormEvent } from 'react';
-import { useLocation, useNavigate } from 'react-router-dom';
+import { useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 import { AppShell } from '../components/layout/AppShell';
 import { Button } from '../components/ui/Button';
 import { EmptyState } from '../components/ui/EmptyState';
@@ -31,12 +35,36 @@ import {
   type MeetingRequest,
   type Recurrence,
 } from '../lib/api';
-import { paletteFor } from '../lib/features';
 import { RequestMeetButton } from './RequestMeet';
-import { dateTime, dateTimeInputValue, humanise, timeOnly } from '../lib/format';
-import { eventHooks, useEventRange, useMeetingActions, useMeetings } from '../lib/queries';
-
-const WEEKDAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+import { dateTime, dateTimeInputValue, humanise, longDate, timeOnly } from '../lib/format';
+import {
+  eventHooks,
+  useEventRange,
+  useHeldCalendars,
+  useMeetingActions,
+  useMeetings,
+  useSharedCalendars,
+} from '../lib/queries';
+import {
+  isView,
+  mergeCalendars,
+  shift,
+  startOfDay,
+  teamColour,
+  viewTitle,
+  viewWindow,
+  type CalendarView,
+  type DisplayEvent,
+  type Teammate,
+} from './calendar/model';
+import { TeamButton, TeamDialog } from './calendar/TeamCalendars';
+import {
+  AgendaView,
+  CalendarLegend,
+  MonthView,
+  TimeGridView,
+  ViewSwitcher,
+} from './calendar/views';
 
 const REMINDER_OPTIONS = [
   { value: '', label: 'Never' },
@@ -48,11 +76,22 @@ const REMINDER_OPTIONS = [
   { value: '1440', label: '1 day before' },
 ];
 
-const VISIBILITIES = [
-  { value: 'PRIVATE', label: 'Private — nobody else sees it' },
-  { value: 'BUSY', label: 'Busy — others see the slot only' },
-  { value: 'PUBLIC', label: 'Public — others see the details' },
-];
+/**
+ * What a teammate who can see the calendar sees of this event.
+ *
+ * Two choices now, because two outcomes are possible: busy, or the details
+ * for someone given full access. BUSY behaves exactly like PRIVATE, so it is
+ * offered only to an event that already has it (group meets are created so).
+ */
+function visibilityOptions(current: EventVisibility | undefined) {
+  const options = [
+    { value: 'PRIVATE', label: 'Private — teammates see only that you are busy' },
+    { value: 'PUBLIC', label: 'Public — teammates you allow details see what it is' },
+  ];
+  return current === 'BUSY'
+    ? [...options, { value: 'BUSY', label: 'Busy — teammates see only that you are busy' }]
+    : options;
+}
 
 const RECURRENCES = [
   { value: 'NONE', label: 'Does not repeat' },
@@ -63,77 +102,123 @@ const RECURRENCES = [
   { value: 'YEARLY', label: 'Yearly' },
 ];
 
-/** Local midnight of the 1st of `date`'s month. */
-function monthStart(date: Date): Date {
-  return new Date(date.getFullYear(), date.getMonth(), 1);
+/* ── Remembered choices ───────────────────────────────────────────────────── */
+
+const VIEW_KEY = 'skrivbok.calendar.view';
+const TEAM_KEY = 'skrivbok.calendar.team';
+
+function readView(): CalendarView {
+  try {
+    const stored = localStorage.getItem(VIEW_KEY);
+    return isView(stored) ? stored : 'month';
+  } catch {
+    return 'month';
+  }
 }
 
-/** Monday-first weekday index, 0–6. `getDay()` is Sunday-first. */
-function mondayIndex(date: Date): number {
-  return (date.getDay() + 6) % 7;
+function readTeam(): string[] {
+  try {
+    const stored: unknown = JSON.parse(localStorage.getItem(TEAM_KEY) ?? '[]');
+    return Array.isArray(stored) ? stored.filter((v): v is string => typeof v === 'string') : [];
+  } catch {
+    return [];
+  }
 }
 
-function sameLocalDay(iso: string, day: Date): boolean {
-  const d = new Date(iso);
-  return (
-    d.getFullYear() === day.getFullYear() &&
-    d.getMonth() === day.getMonth() &&
-    d.getDate() === day.getDate()
-  );
+function remember(key: string, value: string) {
+  try {
+    localStorage.setItem(key, value);
+  } catch {
+    /* A private window: the choice lasts the visit. */
+  }
 }
+
+const UNIT: Record<CalendarView, string> = {
+  day: 'day',
+  workweek: 'week',
+  week: 'week',
+  month: 'month',
+  agenda: 'month',
+};
 
 export default function Calendar() {
   const toast = useToast();
   const navigate = useNavigate();
   const location = useLocation();
+  const [params, setParams] = useSearchParams();
 
   // The header's search can send someone here for one event; it says when the
-  // event is, so the grid opens on that month rather than this one.
+  // event is, so the view opens on that day rather than today.
   const arrivalAt = (location.state as { at?: string } | null)?.at;
+  const [view, setView] = useState<CalendarView>(readView);
   const [cursor, setCursor] = useState(() =>
-    monthStart(arrivalAt ? new Date(arrivalAt) : new Date()),
+    startOfDay(arrivalAt ? new Date(arrivalAt) : new Date()),
   );
   useEffect(() => {
-    if (arrivalAt) navigate(location.pathname, { replace: true, state: null });
+    if (arrivalAt)
+      navigate(`${location.pathname}${location.search}`, { replace: true, state: null });
     // Once, on arrival.
   }, []);
+  useEffect(() => remember(VIEW_KEY, view), [view]);
+
+  // Whose calendars are laid over this one. Remembered as emails; any that are
+  // no longer shared simply stop matching a grant and are not drawn.
+  const [team, setTeam] = useState<string[]>(readTeam);
+  const [teamOpen, setTeamOpen] = useState(false);
+  useEffect(() => remember(TEAM_KEY, JSON.stringify(team)), [team]);
+  const toggleTeammate = (email: string) =>
+    setTeam((current) =>
+      current.includes(email) ? current.filter((e) => e !== email) : [...current, email],
+    );
+
+  // The access notifications link here: `?shared=` when someone has shared
+  // their calendar (so it is switched on), `?accessRequest=` when someone is
+  // asking for this one (so the dialog to answer is opened).
+  useEffect(() => {
+    const shared = params.get('shared');
+    const accessRequest = params.get('accessRequest');
+    if (!shared && !accessRequest) return;
+    if (shared) setTeam((current) => (current.includes(shared) ? current : [...current, shared]));
+    if (accessRequest) setTeamOpen(true);
+    const next = new URLSearchParams(params);
+    next.delete('shared');
+    next.delete('accessRequest');
+    setParams(next, { replace: true });
+  }, [params, setParams]);
+
   const [editing, setEditing] = useState<CalendarEvent | null | undefined>(undefined);
   const [deleting, setDeleting] = useState<CalendarEvent | null>(null);
+  const [viewing, setViewing] = useState<DisplayEvent | null>(null);
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
 
-  // The grid always shows whole weeks, so the fetched range starts on the
-  // Monday before the 1st and ends after the last visible cell.
-  const { cells, rangeFrom, rangeTo } = useMemo(() => {
-    const first = monthStart(cursor);
-    const start = new Date(first);
-    start.setDate(1 - mondayIndex(first));
+  const win = useMemo(() => viewWindow(view, cursor), [view, cursor]);
+  const from = win.from.toISOString();
+  const to = win.to.toISOString();
 
-    const daysInMonth = new Date(cursor.getFullYear(), cursor.getMonth() + 1, 0).getDate();
-    const weeks = Math.ceil((mondayIndex(first) + daysInMonth) / 7);
-    const total = weeks * 7;
+  const range = useEventRange(from, to);
+  const held = useHeldCalendars();
+  const teammates: Teammate[] = (held.data?.grants ?? []).map((grant, i) => ({
+    email: grant.owner.email,
+    name: grant.owner.name,
+    colour: teamColour(i),
+  }));
+  const shown = teammates.filter((t) => team.includes(t.email));
+  const sharedQueries = useSharedCalendars(
+    shown.map((t) => t.email),
+    from,
+    to,
+  );
+  const sharedCalendars = shown.flatMap((teammate, i) => {
+    const calendar = sharedQueries[i]?.data;
+    return calendar ? [{ calendar, teammate }] : [];
+  });
+  const failed = shown.filter((_, i) => sharedQueries[i]?.isError);
+  const display = mergeCalendars(range.data?.events ?? [], sharedCalendars);
 
-    const end = new Date(start);
-    end.setDate(start.getDate() + total);
-
-    return {
-      cells: Array.from({ length: total }, (_, i) => {
-        const day = new Date(start);
-        day.setDate(start.getDate() + i);
-        return day;
-      }),
-      rangeFrom: start.toISOString(),
-      rangeTo: end.toISOString(),
-    };
-  }, [cursor]);
-
-  const range = useEventRange(rangeFrom, rangeTo);
   const create = eventHooks.useCreate();
   const update = eventHooks.useUpdate();
   const remove = eventHooks.useRemove();
-
-  const events = range.data?.events ?? [];
   const saving = create.isPending || update.isPending;
-  const today = new Date();
 
   async function onSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -185,10 +270,24 @@ export default function Calendar() {
     setDeleting(null);
   }
 
-  const monthLabel = new Intl.DateTimeFormat(undefined, {
-    month: 'long',
-    year: 'numeric',
-  }).format(cursor);
+  /**
+   * What clicking something does.
+   *
+   * The user's own events open the editor. What came from another section is
+   * changed there: a team meeting in its project's log, a deadline in
+   * Deadlines, opened searching for it by name. A teammate's event, or any
+   * Busy block, opens a read-only summary — there is nothing to edit.
+   */
+  function open(item: DisplayEvent) {
+    const event = item.own;
+    if (!event || item.redacted) {
+      setViewing(item);
+      return;
+    }
+    if (event.project) navigate(`/projects/${event.project.id}/meetings`);
+    else if (event.deadline) navigate('/deadlines', { state: { search: event.title } });
+    else setEditing(event);
+  }
 
   return (
     <AppShell>
@@ -196,9 +295,10 @@ export default function Calendar() {
         title="Calendar"
         crumbs={[{ label: 'Calendar' }]}
         icon="calendar_month"
-        description="Events, recurring commitments and meetings. Recurring events stay correct across daylight-saving changes."
+        description="Events, recurring commitments and meetings — and your teammates' calendars beside yours, once they share them."
         actions={
           <>
+            <TeamButton onClick={() => setTeamOpen(true)} />
             <RequestMeetButton />
             <Button variant="brand" size="sm" icon="add" onClick={() => setEditing(null)}>
               Add event
@@ -208,45 +308,44 @@ export default function Calendar() {
       />
 
       <Toolbar>
+        <Button variant="secondary" size="sm" onClick={() => setCursor(startOfDay(new Date()))}>
+          Today
+        </Button>
         <div className="flex flex-none items-center gap-1">
           <button
             type="button"
-            aria-label="Previous month"
-            onClick={() => setCursor((c) => new Date(c.getFullYear(), c.getMonth() - 1, 1))}
+            aria-label={`Previous ${UNIT[view]}`}
+            onClick={() => setCursor((c) => shift(view, c, -1))}
             className="press grid size-10 place-items-center rounded-xl border border-line bg-surface text-ink-2 transition hover:bg-surface-2"
           >
             <Icon name="chevron_left" size={19} />
           </button>
-          <span className="min-w-[150px] px-2 text-center text-[14.5px] font-bold">
-            {monthLabel}
-          </span>
           <button
             type="button"
-            aria-label="Next month"
-            onClick={() => setCursor((c) => new Date(c.getFullYear(), c.getMonth() + 1, 1))}
+            aria-label={`Next ${UNIT[view]}`}
+            onClick={() => setCursor((c) => shift(view, c, 1))}
             className="press grid size-10 place-items-center rounded-xl border border-line bg-surface text-ink-2 transition hover:bg-surface-2"
           >
             <Icon name="chevron_right" size={19} />
           </button>
         </div>
-
-        <Button variant="secondary" size="sm" onClick={() => setCursor(monthStart(new Date()))}>
-          Today
-        </Button>
-
+        <h2
+          aria-live="polite"
+          className="min-w-0 px-1 font-serif text-[20px] leading-tight font-semibold"
+        >
+          {viewTitle(view, win, cursor)}
+        </h2>
         <span className="flex-1" />
-
-        {/* One entry per kind on the grid, in the colour the grid uses. */}
-        <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-[12.5px] text-ink-3">
-          {(Object.keys(CHIP) as ChipKind[]).map((kind) => (
-            <Legend key={kind} colour={CHIP[kind].palette().brand} label={CHIP[kind].label} />
-          ))}
-          <Legend colour="var(--color-ink-5)" label="Busy — details private" />
-          <span className="flex items-center gap-1.5">
-            <Icon name="repeat" size={14} /> Recurring
-          </span>
-        </div>
+        <ViewSwitcher value={view} onChange={setView} />
       </Toolbar>
+
+      <CalendarLegend teammates={shown} />
+
+      {failed.length > 0 ? (
+        <p role="status" className="text-[12.5px] text-danger-ink">
+          Could not load the calendar of {failed.map((t) => t.name ?? t.email).join(', ')}.
+        </p>
+      ) : null}
 
       {range.isPending ? (
         <Skeleton h={620} radius={18} className="shimmer" />
@@ -258,91 +357,21 @@ export default function Calendar() {
             Try again
           </Button>
         </Card>
+      ) : view === 'agenda' ? (
+        <AgendaView events={display} onOpen={open} />
       ) : (
         <Reveal>
           <Card padded={false} className="overflow-hidden">
-            {/* Seven columns cannot be squeezed into a phone: at 390px a day
-                cell is under 40px of usable width, which is narrower than the
-                time on the chip inside it. So the month keeps its real width
-                and the grid scrolls sideways, the same bargain the wide tables
-                in the admin panel make. `min-w-0` on the wrapper keeps the
-                card from being stretched by it. */}
-            <div className="min-w-0 overflow-x-auto">
-              <div className="min-w-[700px]">
-                <div className="grid grid-cols-7 border-b border-line bg-surface-5">
-                  {WEEKDAYS.map((d) => (
-                    <div
-                      key={d}
-                      className="px-2 py-2.5 text-center text-[11.5px] font-bold tracking-[0.06em] text-ink-4 uppercase"
-                    >
-                      {d}
-                    </div>
-                  ))}
-                </div>
-
-                <div className="grid grid-cols-7">
-                  {cells.map((day) => {
-                    const inMonth = day.getMonth() === cursor.getMonth();
-                    const isToday = sameLocalDay(today.toISOString(), day);
-                    const dayEvents = events.filter((e) => sameLocalDay(e.startAt, day));
-
-                    return (
-                      <div
-                        key={day.toISOString()}
-                        className={`min-h-[104px] border-r border-b border-line p-1.5 last:border-r-0 ${
-                          inMonth ? '' : 'bg-surface-5'
-                        }`}
-                      >
-                        <span
-                          className={`ml-1 inline-grid size-6 place-items-center rounded-full text-[12px] tabular ${
-                            isToday
-                              ? 'bg-ink font-bold text-white'
-                              : inMonth
-                                ? 'font-medium text-ink-3'
-                                : 'text-ink-5'
-                          }`}
-                        >
-                          {day.getDate()}
-                        </span>
-
-                        <div className="mt-1 flex flex-col gap-1">
-                          {dayEvents.slice(0, 3).map((event, n) => (
-                            <EventChip
-                              key={`${event.id}-${n}`}
-                              event={event}
-                              // A project meeting is changed in its project's log,
-                              // so opening it goes there rather than to the editor.
-                              // What came from another section is changed there:
-                              // a team meeting in its project's log, a deadline in
-                              // Deadlines — opened searching for it by name.
-                              onOpen={() =>
-                                event.redacted
-                                  ? undefined
-                                  : event.project
-                                    ? navigate(`/projects/${event.project.id}/meetings`)
-                                    : event.deadline
-                                      ? navigate('/deadlines', { state: { search: event.title } })
-                                      : setEditing(event)
-                              }
-                            />
-                          ))}
-                          {dayEvents.length > 3 ? (
-                            <span className="px-1 text-[10.5px] font-semibold text-ink-4">
-                              +{dayEvents.length - 3} more
-                            </span>
-                          ) : null}
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
-            </div>
+            {view === 'month' ? (
+              <MonthView days={win.days} cursor={cursor} events={display} onOpen={open} />
+            ) : (
+              <TimeGridView days={win.days} events={display} onOpen={open} />
+            )}
           </Card>
         </Reveal>
       )}
 
-      {!range.isPending && !range.isError && events.length === 0 ? (
+      {view === 'month' && !range.isPending && !range.isError && display.length === 0 ? (
         <EmptyState
           icon="calendar_month"
           title="Nothing scheduled this month"
@@ -436,10 +465,11 @@ export default function Calendar() {
           </FieldRow>
           <FieldRow>
             <Select
-              label="Visible to people with calendar access"
+              label="What teammates who can see your calendar see"
               name="visibility"
               defaultValue={editing?.visibility ?? 'PRIVATE'}
-              options={VISIBILITIES}
+              options={visibilityOptions(editing?.visibility)}
+              hint="Anything that includes them — they are an attendee, or it is a meeting with them — they see in full."
             />
             <Select
               label="Repeats"
@@ -473,6 +503,49 @@ export default function Calendar() {
         what={deleting?.title ?? ''}
         busy={remove.isPending}
       />
+
+      <Modal
+        open={viewing !== null}
+        onClose={() => setViewing(null)}
+        title={viewing ? (viewing.redacted ? 'Busy' : viewing.title) : ''}
+        {...(viewing?.teammate
+          ? { description: `On ${viewing.teammate.name ?? viewing.teammate.email}'s calendar` }
+          : {})}
+        size="sm"
+      >
+        {viewing ? (
+          <div className="flex flex-col gap-2.5 text-[13.5px] text-ink-2">
+            <p className="flex items-start gap-2">
+              <Icon name="schedule" size={17} className="mt-px flex-none text-ink-4" />
+              {viewing.isAllDay
+                ? `${longDate(viewing.start)} · All day`
+                : viewing.start.getTime() === viewing.end.getTime()
+                  ? dateTime(viewing.start)
+                  : `${dateTime(viewing.start)} – ${timeOnly(viewing.end)}`}
+            </p>
+            {!viewing.redacted && viewing.location ? (
+              <p className="flex items-start gap-2">
+                <Icon name="place" size={17} className="mt-px flex-none text-ink-4" />
+                {viewing.location}
+              </p>
+            ) : null}
+            {viewing.redacted ? (
+              <p className="leading-relaxed text-ink-3">
+                The details are private. You can see that this time is taken because the calendar is
+                shared with you, but the event does not include you.
+              </p>
+            ) : viewing.description ? (
+              <p className="leading-relaxed whitespace-pre-line text-ink-3">
+                {viewing.description}
+              </p>
+            ) : null}
+          </div>
+        ) : null}
+      </Modal>
+
+      {teamOpen ? (
+        <TeamDialog onClose={() => setTeamOpen(false)} shown={team} onToggle={toggleTeammate} />
+      ) : null}
     </AppShell>
   );
 }
@@ -489,103 +562,6 @@ function defaultEnd(): Date {
   const d = defaultStart();
   d.setHours(d.getHours() + 1);
   return d;
-}
-
-function Legend({ colour, label }: { colour: string; label: string }) {
-  return (
-    <span className="flex items-center gap-1.5">
-      <span className="size-2.5 rounded-full" style={{ background: colour }} />
-      {label}
-    </span>
-  );
-}
-
-/**
- * What kind of thing a chip is, and how it is drawn.
- *
- * Four kinds share the grid and each wears the colour of the section it came
- * from, so the calendar reads as a view over the workspace rather than a
- * section of its own: a deadline is red because Deadlines is red, a team
- * meeting amber because Projects is. The legend above the grid lists the
- * same four in the same colours.
- */
-type ChipKind = 'event' | 'deadline' | 'team' | 'meeting';
-
-function chipKind(event: CalendarEvent): ChipKind {
-  if (event.deadline) return 'deadline';
-  if (event.project) return 'team';
-  if (event.meetingRequestId) return 'meeting';
-  return 'event';
-}
-
-const CHIP: Record<
-  ChipKind,
-  {
-    label: string;
-    icon: string | null;
-    palette: () => { tint: string; deep: string; brand: string };
-  }
-> = {
-  event: {
-    label: 'Event',
-    icon: null,
-    palette: () => ({
-      tint: 'var(--color-brand-tint)',
-      deep: 'var(--color-brand-deep)',
-      brand: 'var(--color-brand)',
-    }),
-  },
-  deadline: { label: 'Deadline', icon: 'flag', palette: () => paletteFor('/deadlines')! },
-  team: { label: 'Team meeting', icon: 'groups', palette: () => paletteFor('/projects')! },
-  meeting: { label: 'Meeting', icon: 'handshake', palette: () => paletteFor('/meetings')! },
-};
-
-function EventChip({ event, onOpen }: { event: CalendarEvent; onOpen: () => void }) {
-  if (event.redacted) {
-    return (
-      <span
-        className="flex items-center gap-1 rounded-md px-1.5 py-1 text-[11px] font-medium text-ink-5 italic"
-        style={{
-          background: 'var(--color-surface-2)',
-          backgroundImage:
-            'repeating-linear-gradient(45deg, rgb(11 15 25 / 0.05) 0 5px, transparent 5px 10px)',
-        }}
-      >
-        <Icon name="lock" size={11} />
-        Busy
-      </span>
-    );
-  }
-
-  const kind = chipKind(event);
-  const { icon, palette } = CHIP[kind];
-  const colours = palette();
-  const done = event.deadline?.status === 'COMPLETED';
-
-  const title = event.project
-    ? `${event.project.name} · ${event.title}`
-    : event.deadline
-      ? `Deadline · ${event.title}${done ? ' (completed)' : ''}`
-      : event.title;
-
-  return (
-    <button
-      type="button"
-      onClick={onOpen}
-      title={title}
-      className={`press flex w-full items-center gap-1 truncate rounded-md px-1.5 py-1 text-left text-[11px] font-medium transition hover:brightness-95 ${
-        done ? 'line-through opacity-60' : ''
-      }`}
-      style={{ background: colours.tint, color: colours.deep }}
-    >
-      {icon ? <Icon name={icon} size={11} className="flex-none" /> : null}
-      {!event.isAllDay ? (
-        <span className="flex-none font-mono text-[10px]">{timeOnly(event.startAt)}</span>
-      ) : null}
-      <span className="min-w-0 flex-1 truncate">{event.title}</span>
-      {event.recurrence !== 'NONE' ? <Icon name="repeat" size={11} className="flex-none" /> : null}
-    </button>
-  );
 }
 
 /* ── Meetings ─────────────────────────────────────────────────────────────── */

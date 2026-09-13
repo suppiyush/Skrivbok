@@ -1,20 +1,22 @@
 /**
  * Reading other people's calendars.
  *
- * Every function here follows the same two steps, in this order:
+ * Every function here follows the same steps, in this order:
  *
  *   1. Ask `accessLevelFor` whether the caller may look at all. No grant → 403.
- *   2. Pass every occurrence through `projectForViewer`, which decides what of
+ *   2. Work out which occurrences involve the caller.
+ *   3. Pass every occurrence through `projectForViewer`, which decides what of
  *      it may be seen.
  *
  * Nothing in this file constructs a response from a raw event row. That is the
  * property worth preserving: a new column on `CalendarEvent` cannot leak here,
  * because the shared shape is built field by field in `visibility.ts`.
  */
+import type { CalendarAccessLevel } from '@prisma/client';
 import { prisma } from '../../db/prisma.js';
 import { ForbiddenError } from '../../utils/errors.js';
 import { expandOccurrences } from './recurrence.js';
-import type { EventOccurrence } from './events.service.js';
+import { projectMeetingsInRange, type EventOccurrence } from './events.service.js';
 import { accessLevelFor, resolveUserByEmail } from './access.service.js';
 import {
   projectForViewer,
@@ -23,23 +25,32 @@ import {
   type SharedOccurrence,
 } from './visibility.js';
 
-/** Load and expand one person's occurrences across a window. */
+/**
+ * Load and expand one person's occurrences across a window.
+ *
+ * Their project meetings are included: a meeting in a project's log takes the
+ * time as surely as an event on the calendar, and leaving it out would show
+ * them free when they are not.
+ */
 async function occurrencesFor(ownerId: string, from: Date, to: Date): Promise<EventOccurrence[]> {
-  const rows = await prisma.calendarEvent.findMany({
-    where: {
-      userId: ownerId,
-      OR: [
-        { recurrence: 'NONE', startAt: { lte: to }, endAt: { gte: from } },
-        {
-          recurrence: { not: 'NONE' },
-          startAt: { lte: to },
-          OR: [{ recurrenceEndAt: null }, { recurrenceEndAt: { gte: from } }],
-        },
-      ],
-    },
-  });
+  const [rows, meetings] = await Promise.all([
+    prisma.calendarEvent.findMany({
+      where: {
+        userId: ownerId,
+        OR: [
+          { recurrence: 'NONE', startAt: { lte: to }, endAt: { gte: from } },
+          {
+            recurrence: { not: 'NONE' },
+            startAt: { lte: to },
+            OR: [{ recurrenceEndAt: null }, { recurrenceEndAt: { gte: from } }],
+          },
+        ],
+      },
+    }),
+    projectMeetingsInRange(ownerId, { from, to }),
+  ]);
 
-  return rows.flatMap((row) =>
+  const events = rows.flatMap((row) =>
     expandOccurrences(row, from, to).map((o) => ({
       ...row,
       startAt: o.startAt,
@@ -48,6 +59,65 @@ async function occurrencesFor(ownerId: string, from: Date, to: Date): Promise<Ev
       isRecurrence: o.isRecurrence,
     })),
   );
+
+  return [...events, ...meetings];
+}
+
+/**
+ * Which of these occurrences is the viewer part of?
+ *
+ * Two ways in, both read from what the owner's own rows already say:
+ *
+ *   - Their address is among the attendees. A meeting request accepted between
+ *     the two of them puts it there on both sides, and a project meeting lists
+ *     every attendee's address.
+ *   - It is a group meet they were asked to or organised, and have not turned
+ *     down. Only the organiser's copy lists everyone, so an attendee's copy is
+ *     matched through the requests that share its group id.
+ */
+async function involvementOf(
+  viewerId: string,
+  occurrences: EventOccurrence[],
+): Promise<(occurrence: EventOccurrence) => boolean> {
+  const viewer = await prisma.user.findUnique({
+    where: { id: viewerId },
+    select: { email: true },
+  });
+  const email = viewer?.email.toLowerCase();
+
+  const groupIds = [
+    ...new Set(occurrences.flatMap((o) => (o.meetingGroupId ? [o.meetingGroupId] : []))),
+  ];
+
+  const groups = new Set<string>();
+  if (groupIds.length > 0) {
+    const requests = await prisma.meetingRequest.findMany({
+      where: {
+        groupId: { in: groupIds },
+        status: { in: ['PENDING', 'ACCEPTED'] },
+        OR: [{ senderId: viewerId }, { receiverId: viewerId }],
+      },
+      select: { groupId: true },
+    });
+    for (const request of requests) if (request.groupId) groups.add(request.groupId);
+  }
+
+  return (occurrence) =>
+    (email !== undefined && occurrence.attendees.some((a) => a.toLowerCase() === email)) ||
+    (occurrence.meetingGroupId !== null && groups.has(occurrence.meetingGroupId));
+}
+
+/** Steps 2 and 3 above, for one owner's occurrences. */
+async function projectAll(
+  viewerId: string,
+  level: CalendarAccessLevel,
+  occurrences: EventOccurrence[],
+): Promise<SharedOccurrence[]> {
+  const involves = await involvementOf(viewerId, occurrences);
+  return occurrences
+    .map((o) => projectForViewer(o, level, involves(o)))
+    .filter((e): e is SharedOccurrence => e !== null)
+    .sort((a, b) => a.startAt.getTime() - b.startAt.getTime());
 }
 
 export interface SharedCalendar {
@@ -76,15 +146,7 @@ export async function sharedCalendar(
     throw new ForbiddenError('You do not have access to that calendar');
   }
 
-  const occurrences = await occurrencesFor(owner.id, from, to);
-
-  const events = occurrences
-    .map((o) => projectForViewer(o, level))
-    // `null` means the viewer may not know the event exists — PRIVATE events
-    // vanish rather than appearing as an unexplained gap.
-    .filter((e): e is SharedOccurrence => e !== null)
-    .sort((a, b) => a.startAt.getTime() - b.startAt.getTime());
-
+  const events = await projectAll(viewerId, level, await occurrencesFor(owner.id, from, to));
   return { owner, level, events };
 }
 
@@ -179,17 +241,15 @@ export async function combined(viewerId: string, from: Date, to: Date): Promise<
   );
 
   const shared = await Promise.all(
-    grants.map(async (grant) => {
-      const occurrences = await occurrencesFor(grant.owner.id, from, to);
-      return {
-        owner: grant.owner,
-        level: grant.level,
-        events: occurrences
-          .map((o) => projectForViewer(o, grant.level))
-          .filter((e): e is SharedOccurrence => e !== null)
-          .sort((a, b) => a.startAt.getTime() - b.startAt.getTime()),
-      };
-    }),
+    grants.map(async (grant) => ({
+      owner: grant.owner,
+      level: grant.level,
+      events: await projectAll(
+        viewerId,
+        grant.level,
+        await occurrencesFor(grant.owner.id, from, to),
+      ),
+    })),
   );
 
   return { own, shared };
