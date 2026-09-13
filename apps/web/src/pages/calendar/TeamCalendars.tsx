@@ -136,6 +136,12 @@ export function TeamDialog({
     >
       <div className="flex flex-col gap-6">
         <Group title="Calendars you can see">
+          {canSee.length > 0 ? (
+            <p className="-mt-1 mb-2 text-[12.5px] leading-relaxed text-ink-3">
+              A shown calendar is laid over yours in its colour. You can also switch people on and
+              off from the row above the calendar.
+            </p>
+          ) : null}
           {held.isPending ? (
             <Quiet>Loading…</Quiet>
           ) : canSee.length === 0 ? (
@@ -150,23 +156,21 @@ export function TeamDialog({
                     key={grant.id}
                     className="flex flex-wrap items-center gap-3 rounded-xl border border-line px-3 py-2.5"
                   >
-                    <label className="flex min-w-0 flex-1 cursor-pointer items-center gap-3">
-                      <input
-                        type="checkbox"
-                        checked={on}
-                        onChange={() => onToggle(grant.owner.email)}
-                        aria-label={`Show ${name}'s calendar`}
-                        className="size-4 flex-none"
-                        style={{ accentColor: teamColour(i) }}
-                      />
-                      <span
-                        aria-hidden="true"
-                        className="size-3 flex-none rounded-full"
-                        style={{ background: teamColour(i) }}
-                      />
-                      <Person name={grant.owner.name} email={grant.owner.email} />
-                    </label>
+                    <span
+                      aria-hidden="true"
+                      className="size-3 flex-none rounded-full"
+                      style={{ background: teamColour(i) }}
+                    />
+                    <Person name={grant.owner.name} email={grant.owner.email} />
                     <Pill>{LEVEL_LABEL[grant.level]}</Pill>
+                    <ShowToggle
+                      on={on}
+                      colour={teamColour(i)}
+                      label={`Show ${name}'s calendar on mine`}
+                      onClick={() => onToggle(grant.owner.email)}
+                    >
+                      {on ? 'Shown on my calendar' : 'Show on my calendar'}
+                    </ShowToggle>
                     <button
                       type="button"
                       aria-label={`Stop seeing ${name}'s calendar`}
@@ -383,5 +387,95 @@ export function TeamDialog({
         </Group>
       </div>
     </Modal>
+  );
+}
+
+/**
+ * On or off, with words: a bare checkbox beside a name did not say what it
+ * switched, and the calendar it changes is hidden behind the dialog.
+ */
+function ShowToggle({
+  on,
+  colour,
+  label,
+  onClick,
+  children,
+}: {
+  on: boolean;
+  colour: string;
+  label: string;
+  onClick: () => void;
+  children: ReactNode;
+}) {
+  return (
+    <button
+      type="button"
+      aria-pressed={on}
+      aria-label={label}
+      onClick={onClick}
+      className={`press flex h-8 flex-none items-center gap-1.5 rounded-full border px-3 text-[12.5px] font-semibold transition ${
+        on ? 'text-ink' : 'border-line-2 bg-surface text-ink-3 hover:bg-surface-2 hover:text-ink'
+      }`}
+      style={
+        on
+          ? {
+              borderColor: colour,
+              background: `color-mix(in srgb, ${colour} 12%, var(--color-surface))`,
+            }
+          : {}
+      }
+    >
+      <Icon
+        name={on ? 'visibility' : 'visibility_off'}
+        size={15}
+        className="flex-none"
+        style={on ? { color: colour } : {}}
+      />
+      {children}
+    </button>
+  );
+}
+
+/**
+ * Every calendar shared with the user, as a row of switches over their own.
+ *
+ * The dialog is where access is asked for and given; this is where it is used,
+ * without a dialog in the way of seeing what changed.
+ */
+export function TeammateChips({
+  teammates,
+  shown,
+  onToggle,
+}: {
+  teammates: { email: string; name: string | null; colour: string }[];
+  shown: string[];
+  onToggle: (email: string) => void;
+}) {
+  if (teammates.length === 0) return null;
+
+  return (
+    <div className="flex flex-wrap items-center gap-2">
+      <span className="text-[12.5px] font-semibold text-ink-3">Teammates' calendars</span>
+      {teammates.map((teammate) => {
+        const on = shown.includes(teammate.email);
+        const name = teammate.name ?? teammate.email;
+        return (
+          <ShowToggle
+            key={teammate.email}
+            on={on}
+            colour={teammate.colour}
+            label={`${on ? 'Hide' : 'Show'} ${name}'s calendar`}
+            onClick={() => onToggle(teammate.email)}
+          >
+            <span
+              aria-hidden="true"
+              className="size-2.5 flex-none rounded-full"
+              style={{ background: teammate.colour }}
+            />
+            {name}
+          </ShowToggle>
+        );
+      })}
+    </div>
   );
 }

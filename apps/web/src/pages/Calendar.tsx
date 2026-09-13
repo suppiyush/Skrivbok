@@ -57,7 +57,7 @@ import {
   type DisplayEvent,
   type Teammate,
 } from './calendar/model';
-import { TeamButton, TeamDialog } from './calendar/TeamCalendars';
+import { TeamButton, TeamDialog, TeammateChips } from './calendar/TeamCalendars';
 import {
   AgendaView,
   CalendarLegend,
@@ -338,6 +338,8 @@ export default function Calendar() {
         <span className="flex-1" />
         <ViewSwitcher value={view} onChange={setView} />
       </Toolbar>
+
+      <TeammateChips teammates={teammates} shown={team} onToggle={toggleTeammate} />
 
       <CalendarLegend teammates={shown} />
 
