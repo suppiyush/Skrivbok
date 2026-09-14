@@ -1,10 +1,18 @@
 /**
- * The words of the five public documents.
+ * The words of the public policy pages.
  *
- * Supplied by the client (design/TermsAndConditions.tsx and its siblings) and
- * transcribed here as written; only the markup is ours. Straight quotes are
- * set as typographic ones, links go through the router, and addresses are
- * mail links. The page around them is `Legal.tsx`.
+ * Written from what Skrivbok actually does — how sign-in works, what is
+ * stored, which services receive what, how payments and PRO periods work —
+ * because a payment provider reviews these pages against the product, and a
+ * policy that describes a different product (AI tools, credits, automatic
+ * renewal) is a reason to be turned down.
+ *
+ * Facts only the business can supply — its legal name as registered with the
+ * payment provider, address, phone, support inbox and the city whose courts
+ * hear disputes — live in `BUSINESS` below. Until each is filled in, the pages
+ * show a highlighted "[to be filled]" marker in its place rather than a guess.
+ *
+ * The page around this is `Legal.tsx`.
  */
 import { useState, type FormEvent, type ReactNode } from 'react';
 import { Link } from 'react-router-dom';
@@ -12,6 +20,36 @@ import { Button } from '../../components/ui/Button';
 import { Field } from '../../components/ui/Field';
 import { Select, Textarea } from '../../components/ui/Form';
 import { Icon } from '../../components/ui/Icon';
+
+/* ── The business ─────────────────────────────────────────────────────────── */
+
+/**
+ * Fill these in exactly as they appear on the Razorpay account (KYC). A
+ * reviewer compares them; a mismatch between the site and the application is
+ * one of the commonest reasons for rejection.
+ */
+const BUSINESS = {
+  /** The name on the KYC: the proprietor's name, or the registered company/LLP. */
+  legalName: null as string | null,
+  /** The operating address, in full, with PIN code. */
+  address: null as string | null,
+  /** A phone number customers can reach. */
+  phone: null as string | null,
+  /** An inbox someone reads. Used on every page and by the contact form. */
+  email: null as string | null,
+  /** The city and state whose courts hear disputes, e.g. "Jaipur, Rajasthan". */
+  jurisdiction: null as string | null,
+  /** The Grievance Officer's name, required under Indian IT and data protection rules. */
+  grievanceOfficer: null as string | null,
+};
+
+/** PRO prices, as charged at checkout (server defaults: PRICE_MONTHLY_PAISE / PRICE_YEARLY_PAISE). */
+const PRICES = { monthly: '₹499', yearly: '₹4,999' };
+
+/** The free plan's caps (server defaults: FREE_LIMIT_*). */
+const FREE_LIMIT = 5;
+
+const UPDATED = 'Last updated: 14 September 2026';
 
 /* ── Type ─────────────────────────────────────────────────────────────────── */
 
@@ -45,10 +83,6 @@ function B({ children }: { children: ReactNode }) {
   return <strong className="font-semibold text-ink">{children}</strong>;
 }
 
-function Closing({ children }: { children: ReactNode }) {
-  return <p className="mt-8 text-[15px] leading-[1.8] text-ink-4 italic">{children}</p>;
-}
-
 function To({ to, children }: { to: string; children: ReactNode }) {
   return (
     <Link to={to} className="font-semibold text-brand-ink underline underline-offset-2">
@@ -57,14 +91,48 @@ function To({ to, children }: { to: string; children: ReactNode }) {
   );
 }
 
-function Mail({ address }: { address: string }) {
+/** A business fact, or a marker that it is still missing. */
+function Fill({ value, what }: { value: string | null; what: string }) {
+  if (value) return <>{value}</>;
   return (
+    <mark
+      className="rounded px-1 font-semibold not-italic"
+      style={{ background: '#fff3bf', color: '#7a4d00' }}
+    >
+      [to be filled: {what}]
+    </mark>
+  );
+}
+
+function Operator() {
+  return <Fill value={BUSINESS.legalName} what="legal business name" />;
+}
+
+function SupportEmail() {
+  return BUSINESS.email ? (
     <a
-      href={`mailto:${address}`}
+      href={`mailto:${BUSINESS.email}`}
       className="font-semibold text-brand-ink underline underline-offset-2"
     >
-      {address}
+      {BUSINESS.email}
     </a>
+  ) : (
+    <Fill value={null} what="support email" />
+  );
+}
+
+/** The same contact block at the foot of every document. */
+function ContactBlock() {
+  return (
+    <P>
+      <B>Operator:</B> <Operator />
+      <br />
+      <B>Email:</B> <SupportEmail />
+      <br />
+      <B>Phone:</B> <Fill value={BUSINESS.phone} what="phone number" />
+      <br />
+      <B>Address:</B> <Fill value={BUSINESS.address} what="operating address" />
+    </P>
   );
 }
 
@@ -74,155 +142,164 @@ function Terms() {
   return (
     <>
       <P>
-        Welcome to Skrivbok. By accessing or using this website, you agree to comply with and be
-        bound by the following Terms &amp; Conditions. If you do not agree with any part of these
-        terms, please do not use this website.
-      </P>
-      <P>
-        Skrivbok reserves the right to modify, update, or change these Terms &amp; Conditions at any
-        time without prior notice. Continued use of the website following any changes constitutes
-        acceptance of those changes.
-      </P>
-      <P>Any rights not expressly granted herein are reserved.</P>
-
-      <H2>Use of Website</H2>
-      <P>
-        You may access and use this website solely for lawful purposes and in accordance with these
-        Terms &amp; Conditions. You agree not to misuse the website, interfere with its operation,
-        or attempt unauthorized access to any part of the platform, servers, or connected networks.
-      </P>
-      <P>
-        There are inherent risks associated with the use of internet-based services and downloadable
-        content. Skrivbok advises users to ensure proper security measures, including virus
-        protection and data backups. You are solely responsible for protecting your devices,
-        systems, and data while using this website.
+        These Terms and Conditions (“Terms”) are an agreement between you and <Operator />, who
+        operates Skrivbok (“Skrivbok”, “we”, “us”). They apply to the Skrivbok website and web
+        application and every feature in it (the “Service”). By signing in to or using the Service
+        you agree to these Terms. If you do not agree, do not use the Service.
       </P>
 
-      <H2>Intellectual Property</H2>
+      <H2>1. Who can use Skrivbok</H2>
       <P>
-        All content available on this website, including but not limited to text, graphics, logos,
-        icons, images, videos, software, designs, layouts, and trademarks (collectively, “Content”),
-        is owned by or licensed to Skrivbok and is protected under applicable copyright, trademark,
-        and intellectual property laws.
-      </P>
-      <P>
-        Except as expressly permitted, you may not copy, reproduce, distribute, modify, publish,
-        transmit, display, sell, or exploit any Content without prior written permission from
-        Skrivbok.
+        You must be at least 18 years old, or the age of majority where you live, to create an
+        account. If you use Skrivbok on behalf of an institution or organisation, you confirm that
+        you are allowed to accept these Terms for it.
       </P>
 
-      <H2>Images, Logos &amp; Trademarks</H2>
+      <H2>2. The Service</H2>
       <P>
-        All logos, page headers, graphics, icons, and service names displayed on this website are
-        trademarks, service marks, or trade dress of Skrivbok or its licensors.
-      </P>
-      <P>
-        Unauthorized use, copying, imitation, or distribution of any trademarks or branding
-        materials is strictly prohibited and may violate applicable laws.
-      </P>
-
-      <H2>User Content</H2>
-      <P>
-        Users may submit or upload content to the website where applicable. You agree not to upload
-        unlawful, defamatory, harmful, infringing, or misleading material. By submitting any
-        content, you grant Skrivbok a non-exclusive, worldwide, royalty-free license to modify such
-        content for operating and improving the platform.
+        Skrivbok is an online workspace for academic and research work. It lets you keep projects
+        and invite teammates to them, record ideas, notes and voice notes, write a journal, track
+        deadlines with reminders, keep a literature library, plan future work and career goals,
+        manage a calendar and meetings with teammates, and build a profile and résumé. Skrivbok does
+        not generate content with artificial intelligence.
       </P>
 
-      <H2>Indemnity</H2>
-      <P>
-        You agree to defend, indemnify, and hold harmless Skrivbok, its affiliates, partners,
-        employees, directors, and agents from and against any claims, liabilities, damages, losses,
-        expenses, or costs, including legal fees, arising from:
-      </P>
+      <H2>3. Your account</H2>
       <List
         items={[
-          'Your use of the website,',
-          'Your violation of these Terms,',
-          'Your infringement of any third-party rights,',
-          'Any content submitted by you.',
+          'You sign in with your Google account. You are responsible for keeping that account secure; anyone who can sign in to it can use your Skrivbok account.',
+          'Keep the information in your account accurate, and use one account per person.',
+          'You are responsible for what happens under your account. Tell us promptly if you believe it has been used without your permission.',
         ]}
       />
 
-      <H2>Feedback</H2>
+      <H2>4. Plans, prices and payment</H2>
       <P>
-        Any suggestions, comments, ideas, feedback, or recommendations submitted to Skrivbok
-        regarding the website or services shall be considered non-confidential and non-proprietary.
+        Skrivbok has a <B>Free</B> plan and a paid <B>PRO</B> plan. The Free plan allows up to{' '}
+        {FREE_LIMIT} projects, {FREE_LIMIT} career goals and {FREE_LIMIT} literature entries; PRO
+        removes those limits. Ideas, notes, journal entries, deadlines and calendar events are
+        unlimited on both.
       </P>
       <P>
-        Skrivbok shall be free to use, reproduce, modify, publish, or distribute such feedback
-        without restriction or compensation to the user.
+        PRO is sold as a prepaid period: <B>{PRICES.monthly} for one month</B> or{' '}
+        <B>{PRICES.yearly} for one year</B>, in Indian Rupees. The price you pay is the one shown at
+        checkout.
       </P>
-
-      <H2>Third-Party Links</H2>
+      <List
+        items={[
+          'Payments are processed by Razorpay. We never receive or store your card, UPI or bank account details.',
+          'PRO starts as soon as your payment is confirmed and runs until the end date shown on your plan page.',
+          <>
+            <B>PRO does not renew automatically and you are never charged again without acting.</B>{' '}
+            We remind you before your period ends. Paying again extends PRO from your current end
+            date.
+          </>,
+          'When a PRO period ends, your account returns to the Free plan. Everything you created is kept and remains readable; you cannot add new items beyond the Free limits until you are within them or buy PRO again.',
+        ]}
+      />
       <P>
-        This website may contain links to third-party websites or services for user convenience.
-        Skrivbok does not control or endorse such third-party websites and is not responsible for
-        their content, policies, or practices.
-      </P>
-      <P>Users access third-party websites at their own risk.</P>
-
-      <H2>Disclaimer of Warranties</H2>
-      <P>
-        All services and information provided on this website are offered on an “as is” and “as
-        available” basis without warranties of any kind, whether express or implied.
-      </P>
-      <P>
-        Skrivbok does not guarantee uninterrupted access, accuracy, reliability, or error-free
-        operation of the website or services.
-      </P>
-
-      <H2>Limitation of Liability</H2>
-      <P>
-        To the maximum extent permitted by law, Skrivbok shall not be liable for any indirect,
-        incidental, consequential, special, or punitive damages arising from the use of or inability
-        to use the website or services.
+        Refunds are covered by our <To to="/refund-policy">Refund and Cancellation Policy</To>, and
+        how PRO is delivered by our <To to="/shipping-policy">Shipping and Delivery Policy</To>.
       </P>
 
-      <H2>Copyright Policy</H2>
+      <H2>5. Your content</H2>
       <P>
-        All materials on this website are protected by applicable copyright laws. Unauthorized
-        copying, reproduction, or redistribution of any material from this website is prohibited
-        without prior written consent from Skrivbok.
+        Everything you put into Skrivbok — projects, notes, recordings, entries, files and profile
+        details (“Your Content”) — remains yours. You give us permission to store, process and
+        display Your Content only as needed to run the Service for you, including showing it to the
+        people you choose to share it with.
       </P>
-      <P>You may not remove, alter, or obscure any copyright, trademark, or proprietary notices.</P>
-
-      <H2>Privacy</H2>
+      <List
+        items={[
+          'Members you add to a project can see that project and its meetings, according to the role you give them.',
+          'A teammate you allow to see your calendar sees when you are busy; they see the details only of events that include them, or of events you mark Public if you allow that.',
+          'A review you submit is published on our website with your name and photo only after we approve it.',
+        ]}
+      />
       <P>
-        Your use of the website is also governed by our Privacy Policy available on{' '}
-        <To to="/privacy-policy">Skrivbok Privacy Policy</To>.
-      </P>
-
-      <H2>Termination</H2>
-      <P>
-        Skrivbok reserves the right to suspend or terminate user access to the website at any time
-        without prior notice if any violation of these Terms &amp; Conditions is detected.
-      </P>
-
-      <H2>Governing Law</H2>
-      <P>
-        These Terms &amp; Conditions shall be governed and interpreted in accordance with the
-        applicable laws of India, without regard to conflict of law principles.
-      </P>
-      <P>
-        Any disputes arising in connection with these Terms shall be subject to the exclusive
-        jurisdiction of the competent courts in Jammu and Kashmir, India.
+        You are responsible for Your Content and for having the right to upload it. Do not add
+        anything unlawful, infringing, defamatory, or that invades someone’s privacy.
       </P>
 
-      <H2>Contact Information</H2>
+      <H2>6. Acceptable use</H2>
+      <P>You agree not to:</P>
+      <List
+        items={[
+          'break the law or infringe anyone’s rights using the Service;',
+          'try to access accounts, data or systems that are not yours, or to bypass limits or security measures;',
+          'interfere with or overload the Service, or use bots or scrapers against it;',
+          'copy, resell or reverse engineer the Service, or use it to build a competing product;',
+          'invite people or send meeting requests to harass or spam them.',
+        ]}
+      />
+
+      <H2>7. Our intellectual property</H2>
       <P>
-        For questions, support, or legal concerns regarding these Terms &amp; Conditions, please
-        contact:
+        The Service, including its software, design, text, graphics and the Skrivbok name and logo,
+        belongs to us or our licensors. These Terms do not give you any right to use them except to
+        use the Service as intended.
       </P>
+
+      <H2>8. Third-party services</H2>
       <P>
-        <B>Website:</B> <To to="/">Skrivbok.com</To>
-        <br />
-        <B>Email:</B> <Mail address="support.skrivbok@gmail.com" />
+        Skrivbok relies on third parties to work: Google for sign-in, Razorpay for payments, and
+        providers for email delivery, file storage and hosting. Their own terms apply to your use of
+        their services. We are not responsible for services we do not operate.
       </P>
-      <Closing>
-        By using this website, you acknowledge that you have read, understood, and agreed to these
-        Terms &amp; Conditions.
-      </Closing>
+
+      <H2>9. Changes to the Service</H2>
+      <P>
+        We may add, change or remove features. If a change materially reduces what a paid PRO period
+        includes, we will tell you in advance and, if you ask, refund the unused part of that
+        period.
+      </P>
+
+      <H2>10. Suspension and termination</H2>
+      <P>
+        You can stop using Skrivbok at any time, and ask us to delete your account by writing to us
+        (see our <To to="/privacy-policy">Privacy Policy</To>). We may suspend or close an account
+        that breaches these Terms or puts the Service or other users at risk. Where we close an
+        account without a breach on your part, we refund the unused part of any PRO period.
+      </P>
+
+      <H2>11. Disclaimer</H2>
+      <P>
+        We work to keep Skrivbok available and your data safe, but the Service is provided “as is”
+        and “as available”. To the extent the law allows, we do not promise that it will be
+        uninterrupted or error-free, and you should keep your own copies of anything important.
+      </P>
+
+      <H2>12. Limitation of liability</H2>
+      <P>
+        To the extent the law allows, we are not liable for indirect, incidental or consequential
+        losses, or for loss of data, profits or opportunities. Our total liability to you for any
+        claim is limited to the amount you paid us in the 12 months before the claim arose. Nothing
+        in these Terms limits liability that cannot be limited by law.
+      </P>
+
+      <H2>13. Indemnity</H2>
+      <P>
+        You agree to compensate us for claims and costs arising from Your Content or from your
+        breach of these Terms.
+      </P>
+
+      <H2>14. Governing law and disputes</H2>
+      <P>
+        These Terms are governed by the laws of India. Disputes will first be raised with us so we
+        can try to resolve them; failing that, they are subject to the exclusive jurisdiction of the
+        courts at <Fill value={BUSINESS.jurisdiction} what="city and state" />.
+      </P>
+
+      <H2>15. Changes to these Terms</H2>
+      <P>
+        We may update these Terms. The date at the top shows when they last changed. For material
+        changes we will let signed-in users know by email or in the app before they take effect.
+        Continuing to use the Service after that means you accept the updated Terms.
+      </P>
+
+      <H2>16. Contact</H2>
+      <P>Questions about these Terms:</P>
+      <ContactBlock />
     </>
   );
 }
@@ -233,298 +310,295 @@ function Privacy() {
   return (
     <>
       <P>
-        <B>IMPORTANT: THIS IS A LICENSE, NOT A SALE</B>
-      </P>
-      <P>
-        This Skrivbok License Agreement is between the end user (hereinafter referred to as You or
-        Licensee), and Skrivbok.
-      </P>
-      <P>
-        <B>IMPORTANT:</B> Skrivbok’s PRIVACY POLICY EXPLAINS HOW WE COLLECT, TREAT YOUR PERSONAL
-        DATA AND PROTECT YOUR PRIVACY WHEN YOU USE OUR SERVICES. BY USING OUR SERVICES, YOU AGREE TO
-        BE BOUND BY THE PRIVACY POLICY OR PRIVACY NOTICE PUBLISHED BY SKRIVBOK ON ITS WEBSITE. BY
-        DOWNLOADING, ACCESSING, INSTALLING OR USING THE SERVICE, YOU ALSO AGREE TO BE BOUND BY THE
-        FOLLOWING TERMS AND CONDITIONS OF THIS AGREEMENT.
-      </P>
-      <P>
-        Please read this agreement carefully before using this website. Top attention should be paid
-        to such clauses including but not limited to Article 3, 5, 14, 15, 16, 19. If you disagree
-        with or have any questions concerning this END USER LICENSE AGREEMENT (EULA), please contact
-        Skrivbok. Any installing, copying, accessing, or using the Licensed Software by you (the
-        “Licensee”) constitutes an acceptance of, and a promise to comply with, all the terms and
-        conditions of this EULA
+        This Privacy Policy explains what personal data Skrivbok collects, why, who it is shared
+        with, how long it is kept, and the choices you have. Skrivbok is operated by <Operator />{' '}
+        (“we”, “us”), which decides how your personal data is used and is responsible for it,
+        including as a Data Fiduciary under India’s Digital Personal Data Protection Act, 2023.
       </P>
 
-      <H2>Terms and Conditions:</H2>
-
-      <H2>1. Services</H2>
+      <H2>1. What we collect</H2>
+      <H3>When you sign in</H3>
       <P>
-        Skrivbok provides digital tools, AI-powered writing assistance, content creation services,
-        and related online features (“Services”). All services are provided subject to these Terms.
+        Skrivbok uses Google sign-in; there is no Skrivbok password. From Google we receive your{' '}
+        <B>name</B>, <B>email address</B> and your Google account identifier.
       </P>
-
-      <H2>2. License &amp; Permitted Use</H2>
-      <P>
-        Subject to compliance with these Terms, Skrivbok grants you a limited, non-exclusive,
-        non-transferable, revocable license to access and use the platform for personal or
-        authorized business purposes.
-      </P>
-      <P>You may not:</P>
+      <H3>What you add</H3>
       <List
         items={[
-          'Copy, distribute, resell, sublicense, or commercially exploit the platform without written permission.',
-          'Reverse engineer, decompile, modify, or attempt to extract source code.',
-          'Use the platform for illegal, harmful, fraudulent, or unauthorized purposes.',
-          'Share account credentials or provide unauthorized access to others.',
-          'Use automated systems, bots, or scraping tools without authorization.',
+          'The content you create: projects, ideas, notes, voice recordings, journal entries, deadlines, literature, future work, career goals, calendar events and meetings.',
+          'Profile and résumé details you choose to enter, such as your designation, institution, contact details, degrees, positions, courses, grants and awards, and a profile photo if you upload one.',
+          'Names and email addresses of the people you invite to projects or meetings, or ask to share calendars with.',
+          'Bug reports and reviews you send us.',
         ]}
       />
-      <P>All rights not expressly granted remain reserved by Skrivbok.</P>
-
-      <H2>3. User Accounts</H2>
-      <P>You may be required to create an account to access certain services.</P>
-      <P>You are responsible for:</P>
+      <H3>When you pay</H3>
+      <P>
+        The plan bought, amount, currency, payment status and the Razorpay order and payment
+        references. Card, UPI and bank details are entered with Razorpay and never reach us.
+      </P>
+      <H3>Automatically</H3>
       <List
         items={[
-          'Maintaining account confidentiality,',
-          'All activities under your account,',
-          'Providing accurate and current information.',
+          'The IP address and browser type recorded with each signed-in session, used to keep your account secure.',
+          'Your timezone, so reminders arrive at the right time.',
+          'Server logs of requests, kept for security and to fix faults.',
         ]}
       />
-      <P>Skrivbok reserves the right to suspend or terminate accounts that violate these Terms.</P>
 
-      <H2>4. User Content</H2>
-      <P>
-        You retain ownership of the content you create or upload using Skrivbok (“User Content”).
-      </P>
-      <P>
-        By using the platform, you grant Skrivbok a limited license to process, store, display, and
-        use your content solely for operating, improving, and providing the Services.
-      </P>
-      <P>You agree not to upload or generate content that:</P>
+      <H2>2. Cookies and local storage</H2>
+      <P>We use only what the Service needs to work:</P>
       <List
         items={[
-          'Violates laws or regulations,',
-          'Infringes intellectual property rights,',
-          'Contains harmful, abusive, defamatory, or illegal material,',
-          'Violates privacy or third-party rights.',
-        ]}
-      />
-      <P>You are solely responsible for your User Content.</P>
-
-      <H2>5. AI-Generated Content</H2>
-      <P>
-        Skrivbok may provide AI-generated outputs and suggestions. Due to the nature of artificial
-        intelligence, outputs may not always be accurate, unique, or suitable for every purpose.
-      </P>
-      <P>
-        Users are solely responsible for reviewing, verifying, and using generated content
-        appropriately.
-      </P>
-      <P>
-        Skrivbok does not guarantee the accuracy, legality, or reliability of AI-generated content.
-      </P>
-
-      <H2>6. Subscriptions &amp; Payments</H2>
-      <P>Certain features may require paid subscriptions or one-time purchases.</P>
-      <P>By purchasing a service, you agree to:</P>
-      <List
-        items={[
-          'Pay all applicable charges,',
-          'Authorize recurring billing where applicable,',
-          'Provide valid payment information.',
-        ]}
-      />
-      <P>Subscription plans automatically renew unless canceled before the renewal date.</P>
-
-      <H2>7. Refund Policy</H2>
-      <P>Refunds are governed by our Refund Policy available at:</P>
-      <P>
-        <To to="/refund-policy">Skrivbok Refund Policy</To>
-      </P>
-
-      <H2>8. Intellectual Property</H2>
-      <P>
-        All platform content, branding, software, designs, logos, graphics, and technology are owned
-        by or licensed to Skrivbok and protected by intellectual property laws.
-      </P>
-      <P>
-        You may not use Skrivbok trademarks, branding, or copyrighted material without prior written
-        permission.
-      </P>
-
-      <H2>9. Third-Party Services</H2>
-      <P>Skrivbok may integrate or link to third-party services, tools, or websites.</P>
-      <P>We are not responsible for:</P>
-      <List
-        items={[
-          'Third-party content,',
-          'Availability of third-party services,',
-          'External privacy practices or policies.',
-        ]}
-      />
-      <P>Use of third-party services is at your own risk.</P>
-
-      <H2>10. Privacy</H2>
-      <P>Your use of the platform is also governed by our Privacy Policy:</P>
-      <P>
-        <To to="/privacy-policy">Skrivbok Privacy Policy</To>
-      </P>
-
-      <H2>11. Disclaimer of Warranties</H2>
-      <P>The platform and services are provided on an “as is” and “as available” basis.</P>
-      <P>Skrivbok makes no warranties regarding:</P>
-      <List
-        items={[
-          'Accuracy or reliability,',
-          'Continuous availability,',
-          'Error-free operation,',
-          'Fitness for a particular purpose.',
-        ]}
-      />
-      <P>Use of the platform is at your own risk.</P>
-
-      <H2>12. Limitation of Liability</H2>
-      <P>
-        To the maximum extent permitted by law, Skrivbok shall not be liable for any indirect,
-        incidental, special, consequential, or punitive damages arising from:
-      </P>
-      <List
-        items={[
-          'Use or inability to use the platform,',
-          'AI-generated outputs,',
-          'Loss of data, profits, or business opportunities,',
-          'Unauthorized access or security breaches.',
+          <>
+            <B>skrivbok_sid</B> — keeps you signed in. It lasts 30 days and is renewed while you use
+            Skrivbok.
+          </>,
+          <>
+            <B>skrivbok_oauth_state</B> — protects the Google sign-in step. It lasts 10 minutes.
+          </>,
+          'Your browser’s local storage, for display preferences such as the calendar view you last chose.',
         ]}
       />
       <P>
-        Our total liability shall not exceed the amount paid by you for the applicable service in
-        the preceding 12 months.
+        We do not use advertising or analytics cookies, and we do not track you across other
+        websites.
       </P>
 
-      <H2>13. Termination</H2>
-      <P>
-        Skrivbok reserves the right to suspend or terminate access to the Services at any time if
-        you violate these Terms or misuse the platform.
-      </P>
-      <P>Upon termination, your right to access and use the Services will immediately cease.</P>
+      <H2>3. How we use your data</H2>
+      <List
+        items={[
+          'To provide the Service: store your work and show it to you and to the people you share it with.',
+          'To send the emails and notifications you expect: invitations, meeting requests, reminders, receipts and account notices. Reminder emails can be turned off in Settings.',
+          'To process payments and keep the records the law requires.',
+          'To keep accounts and the Service secure, prevent abuse, and fix problems.',
+          'To answer your support requests and reports.',
+        ]}
+      />
+      <P>We do not sell your personal data, and we do not use it for advertising.</P>
 
-      <H2>14. Governing Law</H2>
-      <P>These Terms shall be governed by and interpreted in accordance with the laws of India.</P>
+      <H2>4. Who we share it with</H2>
+      <H3>People you choose</H3>
       <P>
-        Any disputes arising from these Terms shall be subject to the exclusive jurisdiction of the
-        courts located in Rajasthan, India.
+        Teammates you add to a project see that project. A teammate you allow to see your calendar
+        sees your busy times, and the details only of events that include them (or of events you
+        mark Public, if you allow it). Approved reviews are shown publicly with your name and photo.
+      </P>
+      <H3>Service providers</H3>
+      <P>
+        These providers process data on our behalf, only to run the Service, under their own
+        security and privacy commitments:
+      </P>
+      <List
+        items={[
+          <>
+            <B>Google</B> — sign-in.
+          </>,
+          <>
+            <B>Razorpay</B> — payment processing.
+          </>,
+          <>
+            <B>Brevo</B> — sending email.
+          </>,
+          <>
+            <B>Cloudinary</B> — storing profile photos and voice notes.
+          </>,
+          <>
+            <B>Vercel</B> and <B>Neon</B> — hosting the application and its database.
+          </>,
+        ]}
+      />
+      <P>
+        Some of these providers store and process data on servers outside India. We may also
+        disclose data where the law requires it, or to protect the rights and safety of our users
+        and the Service.
       </P>
 
-      <H2>15. Changes to Terms</H2>
+      <H2>5. How long we keep it</H2>
+      <List
+        items={[
+          'Your account and content: for as long as your account exists.',
+          'Sign-in sessions: until they expire after 30 days without use, after which they are removed.',
+          'Records of reminders sent: 90 days.',
+          'Payment records: for as long as tax and accounting law requires, even after an account is deleted.',
+        ]}
+      />
       <P>
-        Skrivbok may update or modify these Terms at any time. Continued use of the platform after
-        changes become effective constitutes acceptance of the revised Terms.
+        When you ask us to delete your account, we delete it and your content within 30 days, except
+        records we must keep by law.
       </P>
 
-      <H2>16. Contact Us</H2>
-      <P>For support or legal inquiries:</P>
+      <H2>6. Your rights</H2>
+      <P>Subject to applicable law, you can:</P>
+      <List
+        items={[
+          'see and correct most of your data directly in Skrivbok, and ask us for a copy of it;',
+          'ask us to correct, complete or delete your personal data, or to delete your account;',
+          'withdraw consent, which may mean we can no longer provide the Service to you;',
+          'nominate another person to exercise your rights if you die or become incapacitated;',
+          'raise a grievance with our Grievance Officer, and, if it is not resolved, complain to the Data Protection Board of India.',
+        ]}
+      />
       <P>
-        <B>Website:</B> <To to="/">Skrivbok</To>
-        <br />
-        <B>Email:</B> <Mail address="support@skrivbok.com" />
+        To exercise any of these, email <SupportEmail /> from the address on your account. We reply
+        within 7 days and act on the request within 30 days.
       </P>
-      <Closing>
-        By using Skrivbok, you acknowledge that you have read, understood, and agreed to these Terms
-        and Conditions.
-      </Closing>
+
+      <H2>7. Security</H2>
+      <P>
+        All traffic to Skrivbok is encrypted with HTTPS, sign-in session tokens are stored only in
+        hashed form, and every request is checked against what your account is allowed to see. No
+        system is perfectly secure; if a breach affects your personal data, we will tell you and the
+        authorities as the law requires.
+      </P>
+
+      <H2>8. Children</H2>
+      <P>
+        Skrivbok is not meant for anyone under 18, and we do not knowingly collect personal data
+        from children. If you believe a child has given us personal data, contact us and we will
+        delete it.
+      </P>
+
+      <H2>9. Changes to this policy</H2>
+      <P>
+        We may update this policy. The date at the top shows when it last changed, and for material
+        changes we will let signed-in users know by email or in the app.
+      </P>
+
+      <H2>10. Contact and Grievance Officer</H2>
+      <P>
+        <B>Grievance Officer:</B> <Fill value={BUSINESS.grievanceOfficer} what="name" />
+      </P>
+      <ContactBlock />
     </>
   );
 }
 
-/* ── Refund Policy ────────────────────────────────────────────────────────── */
+/* ── Refund and Cancellation Policy ───────────────────────────────────────── */
 
 function Refund() {
   return (
     <>
       <P>
-        Thank you for using Skrivbok. We strive to provide services to all our users. Before
-        requesting a refund, please review the following refund policy carefully to determine
-        whether your purchase is eligible.
+        This policy explains how cancelling and refunds work for Skrivbok PRO. It is part of our{' '}
+        <To to="/terms">Terms and Conditions</To>.
       </P>
 
-      <H2>Non-Refundable Cases</H2>
-      <P>The following situations are generally not eligible for refunds:</P>
+      <H2>1. How PRO is billed</H2>
+      <P>
+        PRO is a one-time, prepaid purchase of a fixed period: {PRICES.monthly} for one month or{' '}
+        {PRICES.yearly} for one year. <B>It does not renew automatically</B>, so you are never
+        charged again unless you choose to pay again.
+      </P>
+
+      <H2>2. Cancellation</H2>
+      <P>
+        Because PRO does not renew, there is no subscription to cancel and nothing further will be
+        charged. If you no longer want PRO, simply do not buy another period. Your PRO access
+        continues until its end date, after which your account returns to the Free plan with all
+        your content kept.
+      </P>
+
+      <H2>3. When you can get a refund</H2>
+      <H3>Within 7 days of paying</H3>
+      <P>
+        If you are not satisfied, ask for a refund within <B>7 days of your payment</B> and we will
+        refund it in full. This applies once per account.
+      </P>
+      <H3>At any time</H3>
+      <P>We always refund:</P>
       <List
         items={[
-          'The subscription, license, credits, usage hours, tokens, or purchased digital resources have already been fully or partially used.',
-          'The refund request is submitted after 30 days from the original purchase date.',
-          'Dissatisfaction based solely on personal preference, change of mind, or unmet expectations regarding features or outcomes.',
-          'Unauthorized payments caused by credit card misuse, fraud, or third-party access. In such cases, users are advised to contact their payment provider or bank immediately.',
-          'Price differences due to regional pricing, promotional offers, discounts, taxes, exchange rates, or special campaigns.',
-          'Refund requests for partially used subscriptions.',
-          'Duplicate purchases caused by user error where services have already been accessed or used.',
-          'Technical issues caused by user devices, internet connectivity, unsupported systems, or failure to follow provided instructions.',
-          'Refund requests where the user refuses to cooperate with our support team for troubleshooting or resolution attempts.',
-          'Purchases made through third-party sellers, marketplaces, app stores, resellers, or external platforms. Refund requests for such purchases must be directed to the original seller or platform.',
-          'Any violation of our Terms & Conditions or misuse of the platform.',
-        ]}
-      />
-
-      <H2>General Refund Rules</H2>
-      <P>
-        Unless otherwise required by applicable law, all payments made to Skrivbok are generally
-        non-refundable once digital services, subscriptions, or content access have been activated
-        or used.
-      </P>
-      <P>
-        Refund eligibility is determined solely at the discretion of Skrivbok after reviewing the
-        request and purchase details.
-      </P>
-
-      <H2>Eligible Refund Cases</H2>
-      <P>Refunds may be considered in the following situations:</P>
-      <List
-        items={[
-          'You were charged multiple times for the same product or subscription.',
-          'You accidentally purchased the wrong product or plan and have not used the purchased service.',
-          'You were unable to access the purchased service due to a verified technical issue that could not be resolved within a reasonable timeframe.',
-          'You did not receive access credentials, confirmation email, or activation after purchase and our support team could not resolve the issue.',
-          'Billing errors or duplicate transactions occurred due to system malfunction.',
-          'The purchased service was not delivered as described due to a verified platform-side issue.',
-        ]}
-      />
-
-      <H2>Subscription Cancellation</H2>
-      <P>
-        Users may cancel recurring subscriptions at any time before the next billing cycle.
-        Cancellation prevents future charges but does not automatically guarantee a refund for
-        previous payments already processed.
-      </P>
-
-      <H2>Refund Process</H2>
-      <P>To request a refund, please contact our support team with:</P>
-      <List
-        items={[
-          'Your order number,',
-          'Purchase email address,',
-          'Payment details,',
-          'Reason for the refund request.',
+          'a duplicate charge for the same purchase;',
+          'a payment taken from your account for which PRO was not activated, if we cannot activate it within 2 business days of you telling us;',
+          'a charge for a different amount from the price shown at checkout.',
         ]}
       />
       <P>
-        Refund requests will be reviewed within a reasonable period. Approved refunds will generally
-        be processed using the original payment method.
+        We also refund the unused part of a PRO period if we close your account without a breach on
+        your part, or materially reduce what PRO includes during your period.
+      </P>
+      <H3>When refunds are not given</H3>
+      <P>
+        Outside the cases above, payments are not refunded, including for the unused part of a
+        period you have stopped using, or where an account was closed for breaching our Terms.
       </P>
 
-      <H2>License &amp; Access Termination</H2>
+      <H2>4. How to ask for a refund</H2>
       <P>
-        Once a refund is issued, access to the purchased subscription may be suspended or
-        permanently terminated. Continued use after refund approval is prohibited.
+        Email <SupportEmail /> from the address on your Skrivbok account, with:
+      </P>
+      <List
+        items={[
+          'the date and amount of the payment;',
+          'the Razorpay payment reference, shown in Payment history on your plan page;',
+          'the reason for the request.',
+        ]}
+      />
+
+      <H2>5. How refunds are paid</H2>
+      <P>
+        We reply within 2 business days. An approved refund is issued through Razorpay to the{' '}
+        <B>original payment method</B> within 5–7 business days of approval. Your bank or card
+        issuer may take a further 5–10 business days to show it.
+      </P>
+      <P>
+        When a payment is refunded, the PRO period it bought ends and your account returns to the
+        Free plan; your content is kept.
       </P>
 
-      <H2>Contact Us</H2>
-      <P>For refund requests or billing support, please contact:</P>
+      <H2>6. Failed payments</H2>
       <P>
-        <B>Website:</B> <To to="/">Skrivbok</To>
-        <br />
-        <B>Support Email:</B> <Mail address="support@skrivbok.com" />
+        If money leaves your account but the payment fails, it is normally returned automatically by
+        Razorpay or your bank within 5–7 business days. If it has not been, contact us with the
+        details above.
       </P>
+
+      <H2>7. Contact</H2>
+      <ContactBlock />
+    </>
+  );
+}
+
+/* ── Shipping and Delivery Policy ─────────────────────────────────────────── */
+
+function Shipping() {
+  return (
+    <>
+      <P>
+        Skrivbok is an online service. Nothing physical is sold or shipped, and there are no
+        shipping charges.
+      </P>
+
+      <H2>1. What is delivered</H2>
+      <P>
+        Buying PRO upgrades your Skrivbok account for the period you paid for ({PRICES.monthly} for
+        one month or {PRICES.yearly} for one year). It is delivered to the account you are signed in
+        to when you pay.
+      </P>
+
+      <H2>2. When it is delivered</H2>
+      <P>
+        PRO is activated <B>as soon as Razorpay confirms your payment</B> — normally within a few
+        minutes. You will see it on your plan page, and receive an in-app notification and an email
+        receipt with the period’s end date.
+      </P>
+
+      <H2>3. If it has not arrived</H2>
+      <P>
+        If your account does not show PRO within 24 hours of a successful payment, email{' '}
+        <SupportEmail /> with the Razorpay payment reference. If we cannot activate it within 2
+        business days, we refund the payment in full, as set out in our{' '}
+        <To to="/refund-policy">Refund and Cancellation Policy</To>.
+      </P>
+
+      <H2>4. Where the service is available</H2>
+      <P>
+        Skrivbok can be used anywhere with an internet connection, in a current web browser. Prices
+        are charged in Indian Rupees.
+      </P>
+
+      <H2>5. Contact</H2>
+      <ContactBlock />
     </>
   );
 }
@@ -534,129 +608,75 @@ function Refund() {
 function Eula() {
   return (
     <>
-      <H2>1. Agreement to Terms</H2>
       <P>
-        This End User License Agreement (“EULA”) is a legal agreement between you (“End User” or
-        “you”) and Skrivbok (“Company”, “we”, or “us”) for the use of the Skrivbok platform and all
-        related services, applications, and content (“Software”).
-      </P>
-      <P>
-        By installing, accessing, or using the Software, you acknowledge that you have read,
-        understood, and agree to be bound by the terms of this EULA. If you do not agree to these
-        terms, do not use the Software.
+        This End User License Agreement (“EULA”) sets out the licence under which you use the
+        Skrivbok software. It sits alongside our <To to="/terms">Terms and Conditions</To>, which
+        govern your use of the Service as a whole; if the two ever conflict, the Terms prevail.
       </P>
 
-      <H2>2. License Grant</H2>
+      <H2>1. Licence</H2>
       <P>
-        Subject to the terms of this EULA, Skrivbok grants you a limited, non-exclusive,
-        non-transferable, revocable license to:
+        <Operator /> grants you a personal, limited, non-exclusive, non-transferable, revocable
+        licence to access and use Skrivbok through a web browser, for your own academic, research
+        and professional work, within the features of your plan (Free or PRO).
       </P>
-      <List
-        items={[
-          'Access and use the Software for personal and professional productivity purposes',
-          'Store and manage your data within the Platform',
-          'Use the features available under your subscription tier (Free or PRO)',
-        ]}
-      />
 
-      <H2>3. License Restrictions</H2>
+      <H2>2. Restrictions</H2>
       <P>You may not:</P>
       <List
         items={[
-          'Copy, modify, or distribute the Software or any part thereof',
-          'Reverse engineer, decompile, or disassemble the Software',
-          'Rent, lease, lend, sell, or sublicense the Software',
-          'Use the Software to build a competing product or service',
-          'Remove or alter any proprietary notices, labels, or marks on the Software',
-          'Use automated systems (bots, scrapers) to access the Platform',
+          'copy, modify, distribute, sell, rent or sublicense the software;',
+          'reverse engineer, decompile or try to extract its source code, except where the law allows it;',
+          'remove or alter any copyright, trademark or other notices;',
+          'use automated means to access the software, or use it to build a competing product.',
         ]}
       />
 
-      <H2>4. User Content</H2>
-      <H3>4.1 Ownership</H3>
+      <H2>3. Ownership</H2>
       <P>
-        You retain full ownership of all content, data, documents, and materials you create, upload,
-        or store using the Software (“User Content”).
-      </P>
-      <H3>4.2 License to Skrivbok</H3>
-      <P>
-        By using the Software, you grant Skrivbok a limited, non-exclusive license to host, store,
-        and process your User Content solely for the purpose of providing and improving the service.
-      </P>
-      <H3>4.3 Responsibility</H3>
-      <P>
-        You are solely responsible for the legality, accuracy, and appropriateness of your User
-        Content. Skrivbok does not endorse or assume liability for any User Content.
+        The software is licensed, not sold. We and our licensors keep all rights in it. You keep all
+        rights in the content you create with it, as described in the Terms.
       </P>
 
-      <H2>5. Subscription Tiers</H2>
+      <H2>4. Updates</H2>
       <P>
-        Skrivbok offers both free and paid (PRO) tiers. Features and usage limits vary by tier. We
-        reserve the right to modify tier features, pricing, and availability with reasonable notice.
+        Skrivbok is a web application, so updates are applied for everyone automatically. This EULA
+        applies to each version.
       </P>
 
-      <H2>6. Updates and Modifications</H2>
+      <H2>5. Termination</H2>
       <P>
-        Skrivbok may update, modify, or enhance the Software from time to time. Such updates may be
-        applied automatically. We will make reasonable efforts to ensure backward compatibility, but
-        cannot guarantee that all features will remain unchanged.
+        This licence lasts until your account is closed. It ends automatically if you breach this
+        EULA or the Terms. When it ends you must stop using the software; you can ask for a copy of
+        your data before your account is deleted.
       </P>
 
-      <H2>7. Data Protection</H2>
+      <H2>6. Disclaimer and liability</H2>
       <P>
-        We take data protection seriously. Your data is stored securely and processed in accordance
-        with our Privacy Policy. We implement industry-standard security measures to protect your
-        User Content from unauthorized access.
+        The disclaimer and limitation of liability in the <To to="/terms">Terms and Conditions</To>{' '}
+        apply to the software.
       </P>
 
-      <H2>8. Disclaimer of Warranties</H2>
+      <H2>7. Governing law</H2>
       <P>
-        THE SOFTWARE IS PROVIDED “AS IS” WITHOUT WARRANTIES OF ANY KIND, EXPRESS OR IMPLIED,
-        INCLUDING BUT NOT LIMITED TO WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR
-        PURPOSE, AND NON-INFRINGEMENT. SKRIVBOK DOES NOT WARRANT THAT THE SOFTWARE WILL BE
-        ERROR-FREE OR UNINTERRUPTED.
+        This EULA is governed by the laws of India, and disputes are subject to the exclusive
+        jurisdiction of the courts at <Fill value={BUSINESS.jurisdiction} what="city and state" />.
       </P>
 
-      <H2>9. Limitation of Liability</H2>
-      <P>
-        IN NO EVENT SHALL SKRIVBOK BE LIABLE FOR ANY INDIRECT, INCIDENTAL, SPECIAL, CONSEQUENTIAL,
-        OR PUNITIVE DAMAGES, INCLUDING LOSS OF DATA, PROFITS, OR BUSINESS OPPORTUNITIES, ARISING
-        FROM THE USE OR INABILITY TO USE THE SOFTWARE.
-      </P>
-
-      <H2>10. Termination</H2>
-      <P>
-        This EULA is effective until terminated. Your rights under this license will terminate
-        automatically without notice if you fail to comply with any of its terms. Upon termination,
-        you must cease all use of the Software. We will provide a reasonable period for you to
-        export your data before account deletion.
-      </P>
-
-      <H2>11. Governing Law</H2>
-      <P>
-        This EULA shall be governed by the laws of India. Any disputes arising from this agreement
-        shall be resolved in the courts of competent jurisdiction in India.
-      </P>
-
-      <H2>12. Contact Information</H2>
-      <P>
-        For questions regarding this EULA, please reach out through our{' '}
-        <To to="/contact">Contact Us</To> page.
-      </P>
+      <H2>8. Contact</H2>
+      <ContactBlock />
     </>
   );
 }
 
 /* ── Contact Us ───────────────────────────────────────────────────────────── */
 
-const SUPPORT_EMAIL = 'support@skrivbok.com';
-
 const TOPICS = [
   { value: 'General Inquiry', label: 'General Inquiry' },
   { value: 'Technical Support', label: 'Technical Support' },
   { value: 'Billing & Refunds', label: 'Billing & Refunds' },
+  { value: 'Privacy & Data Requests', label: 'Privacy & Data Requests' },
   { value: 'Feedback & Suggestions', label: 'Feedback & Suggestions' },
-  { value: 'Partnership & Collaboration', label: 'Partnership & Collaboration' },
 ];
 
 function ContactItem({
@@ -686,23 +706,25 @@ function ContactItem({
  *
  * There is no public inbox on the server, so this does not pretend to send:
  * it opens the visitor's own email app with the message addressed and filled
- * in, and says so on the button's line. A form that showed "sent" and went
+ * in, and says so under the button. A form that showed "sent" and went
  * nowhere would lose people's messages without their knowing.
  */
 function ContactForm() {
   const [opened, setOpened] = useState(false);
+  const email = BUSINESS.email;
 
   function onSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    if (!email) return;
     const form = new FormData(event.currentTarget);
     const name = String(form.get('name') ?? '').trim();
-    const email = String(form.get('email') ?? '').trim();
+    const from = String(form.get('email') ?? '').trim();
     const topic = String(form.get('topic') ?? '').trim();
     const message = String(form.get('message') ?? '').trim();
 
     const subject = `${topic} — ${name}`;
-    const body = `${message}\n\n${name} <${email}>`;
-    window.location.href = `mailto:${SUPPORT_EMAIL}?subject=${encodeURIComponent(
+    const body = `${message}\n\n${name} <${from}>`;
+    window.location.href = `mailto:${email}?subject=${encodeURIComponent(
       subject,
     )}&body=${encodeURIComponent(body)}`;
     setOpened(true);
@@ -719,7 +741,7 @@ function ContactForm() {
           className="rounded-[10px] bg-mint-tint px-4 py-3 text-[13.5px] font-semibold text-[#2e7d55]"
         >
           Your email app should have opened with the message ready — send it from there. If nothing
-          opened, write to <Mail address={SUPPORT_EMAIL} /> directly.
+          opened, write to <SupportEmail /> directly.
         </p>
       ) : null}
       <Field label="Full Name" name="name" placeholder="Your name" required />
@@ -744,11 +766,11 @@ function ContactForm() {
         placeholder="Tell us how we can help..."
         required
       />
-      <Button type="submit" variant="brand" icon="send" className="w-full">
+      <Button type="submit" variant="brand" icon="send" className="w-full" disabled={!email}>
         Send Message
       </Button>
       <p className="-mt-1 text-center text-[12px] text-ink-4">
-        Opens your email app with the message addressed to {SUPPORT_EMAIL}.
+        Opens your email app with the message addressed to us.
       </p>
     </form>
   );
@@ -762,18 +784,26 @@ function Contact() {
           Get in Touch
         </h2>
         <p className="mt-3 text-[15px] leading-[1.8] text-ink-3">
-          Have a question about Skrivbok? Need help with your account? We’re here to help and
-          typically respond within 24 hours.
+          Questions about Skrivbok, help with your account, billing and refunds, or a request about
+          your personal data — write to us and we reply within 2 business days.
         </p>
         <div className="mt-8 flex flex-col gap-6">
           <ContactItem icon="mail" title="Email">
-            <Mail address={SUPPORT_EMAIL} />
+            <SupportEmail />
           </ContactItem>
-          <ContactItem icon="schedule" title="Response Time">
-            We aim to respond within 24 hours on business days
+          <ContactItem icon="call" title="Phone">
+            <Fill value={BUSINESS.phone} what="phone number" />
           </ContactItem>
-          <ContactItem icon="shield" title="Privacy">
-            Your information is kept confidential and used only to address your inquiry
+          <ContactItem icon="location_on" title="Address">
+            <Operator />
+            <br />
+            <Fill value={BUSINESS.address} what="operating address" />
+          </ContactItem>
+          <ContactItem icon="schedule" title="Response time">
+            Within 2 business days
+          </ContactItem>
+          <ContactItem icon="shield_person" title="Grievance Officer">
+            <Fill value={BUSINESS.grievanceOfficer} what="name" /> — reachable at the email above
           </ContactItem>
         </div>
       </div>
@@ -794,26 +824,11 @@ export interface LegalDoc {
 }
 
 export const LEGAL_DOCS = {
-  terms: {
-    title: 'Terms and Conditions',
-    subtitle: 'Last updated: May 12, 2026',
-    body: <Terms />,
-  },
-  privacy: {
-    title: 'Privacy Policy',
-    subtitle: 'Last updated: May 12, 2026',
-    body: <Privacy />,
-  },
-  eula: {
-    title: 'End User License Agreement',
-    subtitle: 'Last updated: May 12, 2026',
-    body: <Eula />,
-  },
-  refund: {
-    title: 'Refund Policy',
-    subtitle: 'Last updated: May 12, 2026',
-    body: <Refund />,
-  },
+  terms: { title: 'Terms and Conditions', subtitle: UPDATED, body: <Terms /> },
+  privacy: { title: 'Privacy Policy', subtitle: UPDATED, body: <Privacy /> },
+  refund: { title: 'Refund and Cancellation Policy', subtitle: UPDATED, body: <Refund /> },
+  shipping: { title: 'Shipping and Delivery Policy', subtitle: UPDATED, body: <Shipping /> },
+  eula: { title: 'End User License Agreement', subtitle: UPDATED, body: <Eula /> },
   contact: {
     title: 'Contact Us',
     subtitle:

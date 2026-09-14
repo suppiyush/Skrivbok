@@ -263,7 +263,8 @@ export function ArtPlaceholder({
 const FOOTER_LINKS = [
   { label: 'Terms and Conditions', to: '/terms' },
   { label: 'Privacy Policy', to: '/privacy-policy' },
-  { label: 'Refund Policy', to: '/refund-policy' },
+  { label: 'Refund and Cancellation', to: '/refund-policy' },
+  { label: 'Shipping and Delivery', to: '/shipping-policy' },
   { label: 'End User License Agreement', to: '/end-user-agreement' },
   { label: 'Contact us', to: '/contact' },
 ];

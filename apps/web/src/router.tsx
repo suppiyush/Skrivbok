@@ -97,6 +97,7 @@ export const router = createBrowserRouter([
   { path: '/privacy-policy', element: page(<Legal doc="privacy" />) },
   { path: '/end-user-agreement', element: page(<Legal doc="eula" />) },
   { path: '/refund-policy', element: page(<Legal doc="refund" />) },
+  { path: '/shipping-policy', element: page(<Legal doc="shipping" />) },
   { path: '/contact', element: page(<Legal doc="contact" />) },
 
   // ── Application ───────────────────────────────────────────────────────────
