@@ -261,10 +261,10 @@ export function ArtPlaceholder({
  * to any of them were in the small print under the sign-in form.
  */
 const FOOTER_LINKS = [
-  { label: 'Terms of Service', to: '/terms' },
+  { label: 'Terms and Conditions', to: '/terms' },
   { label: 'Privacy Policy', to: '/privacy-policy' },
   { label: 'Refund Policy', to: '/refund-policy' },
-  { label: 'End User Agreement', to: '/end-user-agreement' },
+  { label: 'End User License Agreement', to: '/end-user-agreement' },
   { label: 'Contact us', to: '/contact' },
 ];
 
