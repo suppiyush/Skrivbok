@@ -18,7 +18,6 @@ import { Pill } from '../../components/ui/Layout';
 import { Modal } from '../../components/ui/Modal';
 import { useToast } from '../../components/ui/Toast';
 import { ApiError, type CalendarAccessLevel } from '../../lib/api';
-import { initials } from '../../lib/format';
 import {
   useAccessActions,
   useAccessRequests,
@@ -26,7 +25,8 @@ import {
   useMeetContacts,
   useSharedWithOthers,
 } from '../../lib/queries';
-import { teamColour } from './model';
+import { PersonAvatar } from '../../components/ui/Person';
+import { personColour } from '../../lib/people';
 
 const LEVEL_LABEL: Record<CalendarAccessLevel, string> = {
   FREE_BUSY: 'Busy times',
@@ -71,9 +71,7 @@ function Quiet({ children }: { children: ReactNode }) {
 function Person({ name, email }: { name: string | null; email: string }) {
   return (
     <span className="flex min-w-0 flex-1 items-center gap-2.5">
-      <span className="grid size-8 flex-none place-items-center rounded-full bg-brand-avatar text-[11px] font-bold text-brand-avatar-ink">
-        {initials(name ?? email)}
-      </span>
+      <PersonAvatar name={name} email={email} />
       <span className="min-w-0">
         <span className="block truncate text-[13.5px] font-semibold text-ink">{name ?? email}</span>
         {name ? <span className="block truncate text-[12px] text-ink-3">{email}</span> : null}
@@ -148,7 +146,7 @@ export function TeamDialog({
             <Quiet>No one has shared their calendar with you yet.</Quiet>
           ) : (
             <ul className="flex flex-col gap-1.5">
-              {canSee.map((grant, i) => {
+              {canSee.map((grant) => {
                 const name = grant.owner.name ?? grant.owner.email;
                 const on = shown.includes(grant.owner.email);
                 return (
@@ -159,13 +157,13 @@ export function TeamDialog({
                     <span
                       aria-hidden="true"
                       className="size-3 flex-none rounded-full"
-                      style={{ background: teamColour(i) }}
+                      style={{ background: personColour(grant.owner.email).solid }}
                     />
                     <Person name={grant.owner.name} email={grant.owner.email} />
                     <Pill>{LEVEL_LABEL[grant.level]}</Pill>
                     <ShowToggle
                       on={on}
-                      colour={teamColour(i)}
+                      colour={personColour(grant.owner.email).solid}
                       label={`Show ${name}'s calendar on mine`}
                       onClick={() => onToggle(grant.owner.email)}
                     >

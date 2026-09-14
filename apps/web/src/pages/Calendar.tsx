@@ -23,6 +23,8 @@ import { EmptyState } from '../components/ui/EmptyState';
 import { Field } from '../components/ui/Field';
 import { FieldRow, Select, Textarea } from '../components/ui/Form';
 import { Icon } from '../components/ui/Icon';
+import { PersonChip } from '../components/ui/Person';
+import { personColour } from '../lib/people';
 import { Card, PageHeader, Pill, Toolbar } from '../components/ui/Layout';
 import { ConfirmDialog, Modal } from '../components/ui/Modal';
 import { Reveal } from '../components/ui/Motion';
@@ -50,7 +52,6 @@ import {
   mergeCalendars,
   shift,
   startOfDay,
-  teamColour,
   viewTitle,
   viewWindow,
   type CalendarView,
@@ -197,10 +198,10 @@ export default function Calendar() {
 
   const range = useEventRange(from, to);
   const held = useHeldCalendars();
-  const teammates: Teammate[] = (held.data?.grants ?? []).map((grant, i) => ({
+  const teammates: Teammate[] = (held.data?.grants ?? []).map((grant) => ({
     email: grant.owner.email,
     name: grant.owner.name,
-    colour: teamColour(i),
+    colour: personColour(grant.owner.email).solid,
   }));
   const shown = teammates.filter((t) => team.includes(t.email));
   const sharedQueries = useSharedCalendars(
@@ -857,12 +858,17 @@ function GroupMeetCard({
           {/* One line per person, with where they stand. */}
           <ul className="mt-3 flex flex-wrap gap-1.5">
             {requests.map((r) => (
-              <li
-                key={r.id}
-                className="flex h-7 items-center gap-1.5 rounded-full border border-line-2 bg-surface-2 pr-1.5 pl-2.5 text-[12px] font-semibold text-ink-2"
-              >
-                {r.receiver?.name ?? r.receiver?.email ?? 'Someone'}
-                <Pill tone={STATUS_TONE[r.status]}>{humanise(r.status)}</Pill>
+              <li key={r.id} className="max-w-full">
+                {r.receiver ? (
+                  <PersonChip name={r.receiver.name} email={r.receiver.email}>
+                    <Pill tone={STATUS_TONE[r.status]}>{humanise(r.status)}</Pill>
+                  </PersonChip>
+                ) : (
+                  <span className="flex h-7 items-center gap-1.5 rounded-full border border-line-2 bg-surface-2 pr-1.5 pl-2.5 text-[12px] font-semibold text-ink-2">
+                    Someone
+                    <Pill tone={STATUS_TONE[r.status]}>{humanise(r.status)}</Pill>
+                  </span>
+                )}
               </li>
             ))}
           </ul>

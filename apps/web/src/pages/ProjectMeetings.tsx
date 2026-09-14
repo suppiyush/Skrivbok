@@ -19,6 +19,8 @@ import { EmptyState } from '../components/ui/EmptyState';
 import { Field } from '../components/ui/Field';
 import { FieldRow, Textarea } from '../components/ui/Form';
 import { Icon } from '../components/ui/Icon';
+import { PersonAvatar, PersonChip } from '../components/ui/Person';
+import { personColour } from '../lib/people';
 import { PageHeader } from '../components/ui/Layout';
 import { ConfirmDialog, Modal } from '../components/ui/Modal';
 import { Skeleton, useSlowLoad } from '../components/ui/Skeleton';
@@ -30,7 +32,7 @@ import {
   type ProjectMeeting,
   type ProjectMember,
 } from '../lib/api';
-import { dateInputValue, dateTime, initials, timeInputValue } from '../lib/format';
+import { dateInputValue, dateTime, timeInputValue } from '../lib/format';
 import {
   projectHooks,
   useProjectMeetingActions,
@@ -105,9 +107,34 @@ export default function ProjectMeetingsPage() {
   // been held — the latest at the top, the past receding — and backwards for
   // what is coming, where the next one belongs at the top. So that half is
   // turned round.
+  // The people a meeting can be filtered by: everyone on the project, and
+  // anyone listed at a past meeting who has since left it, so an old meeting
+  // can still be found by who was there.
+  const people = useMemo(() => {
+    const byId = new Map<string, { id: string; name: string | null; email: string }>();
+    for (const m of members) byId.set(m.id, { id: m.id, name: m.name, email: m.email });
+    for (const meeting of meetings) {
+      for (const a of meeting.attendees) {
+        if (!byId.has(a.id)) byId.set(a.id, { id: a.id, name: a.name, email: a.email });
+      }
+    }
+    return [...byId.values()];
+  }, [members, meetings]);
+
+  /** Member ids. A meeting stays when any of them attended — "meetings with these people". */
+  const [withPeople, setWithPeople] = useState<string[]>([]);
+  const togglePerson = (personId: string) =>
+    setWithPeople((current) =>
+      current.includes(personId) ? current.filter((x) => x !== personId) : [...current, personId],
+    );
+  const visible =
+    withPeople.length === 0
+      ? meetings
+      : meetings.filter((m) => m.attendees.some((a) => withPeople.includes(a.id)));
+
   const now = Date.now();
-  const upcoming = meetings.filter((m) => new Date(m.heldAt).getTime() >= now).reverse();
-  const held = meetings.filter((m) => new Date(m.heldAt).getTime() < now);
+  const upcoming = visible.filter((m) => new Date(m.heldAt).getTime() >= now).reverse();
+  const held = visible.filter((m) => new Date(m.heldAt).getTime() < now);
 
   async function save(input: MeetingInput) {
     try {
@@ -210,6 +237,59 @@ export default function ProjectMeetingsPage() {
         </EmptyState>
       ) : (
         <div className="flex flex-col gap-6">
+          {people.length > 0 ? (
+            <div className="flex flex-wrap items-center gap-2" aria-label="Filter by who attended">
+              <span className="text-[12.5px] font-semibold text-ink-3">Meetings with</span>
+              {people.map((person) => {
+                const on = withPeople.includes(person.id);
+                const colour = personColour(person.email);
+                return (
+                  <button
+                    key={person.id}
+                    type="button"
+                    aria-pressed={on}
+                    title={person.email}
+                    onClick={() => togglePerson(person.id)}
+                    className={`press flex h-8 max-w-full items-center gap-1.5 rounded-full border pr-3 pl-1 text-[12.5px] font-semibold transition ${
+                      on
+                        ? ''
+                        : 'border-line-2 bg-surface text-ink-3 hover:bg-surface-2 hover:text-ink'
+                    }`}
+                    style={
+                      on
+                        ? { borderColor: colour.solid, background: colour.tint, color: colour.ink }
+                        : {}
+                    }
+                  >
+                    <PersonAvatar name={person.name} email={person.email} size={22} />
+                    <span className="min-w-0 truncate">{person.name ?? person.email}</span>
+                    {on ? <Icon name="check" size={15} className="flex-none" /> : null}
+                  </button>
+                );
+              })}
+              {withPeople.length > 0 ? (
+                <button
+                  type="button"
+                  onClick={() => setWithPeople([])}
+                  className="text-[12.5px] font-semibold text-brand-ink transition hover:underline"
+                >
+                  Clear
+                </button>
+              ) : null}
+            </div>
+          ) : null}
+
+          {visible.length === 0 ? (
+            <p className="rounded-[14px] border border-dashed border-line-2 px-5 py-8 text-center text-[13.5px] text-ink-3">
+              No meetings with{' '}
+              {people
+                .filter((person) => withPeople.includes(person.id))
+                .map((person) => person.name ?? person.email)
+                .join(' or ')}{' '}
+              yet.
+            </p>
+          ) : null}
+
           {upcoming.length > 0 ? (
             <Timeline
               heading="Coming up"
@@ -362,15 +442,8 @@ function MeetingEntry({
         {meeting.attendees.length > 0 ? (
           <ul className="mt-3 flex flex-wrap gap-1.5">
             {meeting.attendees.map((a) => (
-              <li
-                key={a.id}
-                title={a.email}
-                className="flex h-7 items-center gap-1.5 rounded-full border border-line-2 bg-surface-2 pr-2.5 pl-1 text-[12px] font-semibold text-ink-2"
-              >
-                <span className="grid size-5 place-items-center rounded-full bg-brand-tint text-[9.5px] font-bold text-brand-ink">
-                  {initials(a.name ?? a.email)}
-                </span>
-                {a.name ?? a.email}
+              <li key={a.id} className="max-w-full">
+                <PersonChip name={a.name} email={a.email} />
               </li>
             ))}
           </ul>
@@ -585,9 +658,7 @@ function MeetingDialog({
                         onChange={() => toggle(m.id)}
                         className="size-4 flex-none accent-[var(--color-brand)]"
                       />
-                      <span className="grid size-7 flex-none place-items-center rounded-full bg-brand-tint text-[10.5px] font-bold text-brand-ink">
-                        {initials(m.name ?? m.email)}
-                      </span>
+                      <PersonAvatar name={m.name} email={m.email} size={28} />
                       <span className="min-w-0 flex-1">
                         <span className="block truncate text-[13.5px] font-semibold text-ink">
                           {m.name ?? m.email}

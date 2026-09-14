@@ -16,13 +16,14 @@ import { EmptyState } from '../components/ui/EmptyState';
 import { Field } from '../components/ui/Field';
 import { Select, Textarea } from '../components/ui/Form';
 import { Icon } from '../components/ui/Icon';
+import { PersonAvatar } from '../components/ui/Person';
 import { Card, PageHeader, Pagination, Pill, SearchInput, Toolbar } from '../components/ui/Layout';
 import { ConfirmDialog, Modal } from '../components/ui/Modal';
 import { Reveal } from '../components/ui/Motion';
 import { Skeleton, useSlowLoad } from '../components/ui/Skeleton';
 import { useToast } from '../components/ui/Toast';
 import { ApiError, type Project } from '../lib/api';
-import { humanise, initials, relative } from '../lib/format';
+import { humanise, relative } from '../lib/format';
 import {
   projectHooks,
   useAcceptInvite,
@@ -609,9 +610,9 @@ function ProjectCard({
           onClick={onMembers}
           className="press flex items-center gap-1.5 text-[12.5px] font-semibold text-ink-2 transition hover:text-ink"
         >
-          <span className="grid size-6 place-items-center rounded-full bg-brand-avatar text-[10px] font-bold text-brand-avatar-ink">
-            {initials(project.owner?.name ?? project.owner?.email)}
-          </span>
+          {project.owner ? (
+            <PersonAvatar name={project.owner.name} email={project.owner.email} size={24} />
+          ) : null}
           {project.memberCount ?? 0} {project.memberCount === 1 ? 'member' : 'members'}
         </button>
 
@@ -751,9 +752,7 @@ function MembersDialog({ project, onClose }: { project: Project | null; onClose:
               key={member.id}
               className="flex items-center gap-3 rounded-xl border border-line px-3 py-2.5"
             >
-              <span className="grid size-8 flex-none place-items-center rounded-full bg-brand-avatar text-[11px] font-bold text-brand-avatar-ink">
-                {initials(member.name ?? member.email)}
-              </span>
+              <PersonAvatar name={member.name} email={member.email} />
               <span className="min-w-0 flex-1">
                 <span className="block truncate text-[13.5px] font-semibold">
                   {member.name ?? member.email}

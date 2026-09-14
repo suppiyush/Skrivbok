@@ -12,6 +12,7 @@
  */
 import { useMemo, useState } from 'react';
 import { Button } from '../components/ui/Button';
+import { PersonAvatar } from '../components/ui/Person';
 import { Field } from '../components/ui/Field';
 import { FieldRow, Select, Textarea } from '../components/ui/Form';
 import { Icon } from '../components/ui/Icon';
@@ -19,7 +20,7 @@ import { Modal } from '../components/ui/Modal';
 import { useToast } from '../components/ui/Toast';
 import { ApiError } from '../lib/api';
 import { useAuth } from '../lib/auth';
-import { dateInputValue, initials } from '../lib/format';
+import { dateInputValue } from '../lib/format';
 import { useMeetContacts, useMeetingActions } from '../lib/queries';
 
 /** Every zone the browser knows, so the list is correct rather than a guess. */
@@ -201,9 +202,7 @@ function RequestMeetDialog({ onClose }: { onClose: () => void }) {
                         onChange={() => toggle(p.id)}
                         className="size-4 flex-none accent-[var(--color-brand)]"
                       />
-                      <span className="grid size-7 flex-none place-items-center rounded-full bg-brand-tint text-[10.5px] font-bold text-brand-ink">
-                        {initials(p.name ?? p.email)}
-                      </span>
+                      <PersonAvatar name={p.name} email={p.email} size={28} />
                       <span className="min-w-0 flex-1">
                         <span className="block truncate text-[13.5px] font-semibold text-ink">
                           {p.name ?? p.email}

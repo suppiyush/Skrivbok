@@ -157,13 +157,6 @@ export interface Teammate {
   colour: string;
 }
 
-/** Distinct from each other and from the section colours the user's own events wear. */
-const TEAM_COLOURS = ['#2f6bfa', '#0e9f6e', '#9b51e0', '#c2410c', '#0891b2', '#be185d', '#4d7c0f'];
-
-export function teamColour(index: number): string {
-  return TEAM_COLOURS[index % TEAM_COLOURS.length] ?? '#2f6bfa';
-}
-
 export function shortName(teammate: Teammate): string {
   const base = teammate.name?.trim() || teammate.email.split('@')[0] || teammate.email;
   return base.split(' ')[0] || base;
