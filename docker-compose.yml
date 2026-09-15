@@ -1,11 +1,49 @@
-# Local development services.
+# Skrivbok with Docker, on one machine.
 #
-#   npm run db:up     start Postgres
-#   npm run db:down   stop and remove containers
-#   npm run db:logs   tail Postgres logs
+# Two ways to use it, sharing the same database:
+#
+#   Database only — for `npm run dev` (API) and `npm run dev:web` (web app):
+#     npm run db:up        start Postgres
+#     npm run db:down      stop and remove containers
+#     npm run db:logs      tail Postgres logs
+#
+#   The whole app in Docker — web, API, reminder worker and database:
+#     npm run docker:up    build and start everything → http://localhost:5173
+#     npm run docker:seed  give ADMIN_EMAIL the admin role
+#     npm run docker:logs  follow the app's logs
+#     npm run docker:down  stop the app containers (the database keeps running)
+#
+#   Run one way at a time: both use ports 4000 and 5173.
+#
+# Configuration comes from `.env` at the repo root — copy .env.dev.local (or
+# .env.dev.skrivbok) into it first. To use another file without copying:
+#
+#   SKRIVBOK_ENV_FILE=.env.dev.local docker compose --env-file .env.dev.local --profile app up -d --build
 #
 # Data persists in ./docker/postgres-data (gitignored). Delete that folder for a
 # clean slate.
+
+# What the API, the worker and the migration step have in common.
+x-server: &server
+  build:
+    context: .
+    dockerfile: apps/server/Dockerfile
+    # The build stage, not the slim runtime image: in development the logger
+    # needs pino-pretty, and migrating and seeding need the Prisma CLI and tsx —
+    # development packages the runtime image deliberately leaves out.
+    target: build
+  # No shared `image:` name. Three services build this same target, and Compose
+  # builds them in parallel; one tag for all three makes the second and third
+  # builds fail on "already exists". Unnamed, they share every cached layer and
+  # cost nothing extra to build.
+  env_file:
+    - ${SKRIVBOK_ENV_FILE:-.env}
+  environment:
+    # Inside Docker the database is the `postgres` service, not localhost. These
+    # override the env file's addresses, which point at localhost so that
+    # `npm run dev` works with the same file.
+    DATABASE_URL: postgresql://${POSTGRES_USER:-skrivbok}:${POSTGRES_PASSWORD:-change_me}@postgres:5432/${POSTGRES_DB:-skrivbok}?schema=public
+    DIRECT_URL: postgresql://${POSTGRES_USER:-skrivbok}:${POSTGRES_PASSWORD:-change_me}@postgres:5432/${POSTGRES_DB:-skrivbok}?schema=public
 
 services:
   postgres:
@@ -13,9 +51,10 @@ services:
     container_name: skrivbok-postgres
     restart: unless-stopped
     environment:
-      POSTGRES_USER: skrivbok
-      POSTGRES_PASSWORD: change_me
-      POSTGRES_DB: skrivbok
+      # Only read the first time the database is created in ./docker/postgres-data.
+      POSTGRES_USER: ${POSTGRES_USER:-skrivbok}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-change_me}
+      POSTGRES_DB: ${POSTGRES_DB:-skrivbok}
       # Deterministic collation so ORDER BY behaves identically everywhere.
       POSTGRES_INITDB_ARGS: '--encoding=UTF8 --locale=C'
     ports:
@@ -23,10 +62,63 @@ services:
     volumes:
       - ./docker/postgres-data:/var/lib/postgresql/data
     healthcheck:
-      test: ['CMD-SHELL', 'pg_isready -U skrivbok -d skrivbok']
+      test: ['CMD-SHELL', 'pg_isready -U ${POSTGRES_USER:-skrivbok} -d ${POSTGRES_DB:-skrivbok}']
       interval: 5s
       timeout: 5s
       retries: 10
+
+  # Applies database migrations, then exits. The API and worker wait for it.
+  migrate:
+    <<: *server
+    profiles: ['app']
+    restart: 'no'
+    command: ['npx', 'prisma', 'migrate', 'deploy', '--schema', 'apps/server/prisma/schema.prisma']
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  api:
+    <<: *server
+    container_name: skrivbok-api
+    profiles: ['app']
+    restart: unless-stopped
+    command: ['node', 'apps/server/dist/server.js']
+    # Published as well as reached through the web container: Google sign-in
+    # returns the browser to http://localhost:4000/api/v1/auth/google/callback.
+    ports:
+      - '4000:4000'
+    depends_on:
+      postgres:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+
+  # Reminders, daily agenda and meeting nudges, every five minutes.
+  worker:
+    <<: *server
+    container_name: skrivbok-worker
+    profiles: ['app']
+    restart: unless-stopped
+    command: ['node', 'apps/server/dist/jobs/worker.js']
+    depends_on:
+      postgres:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+
+  # The built web app, with /api forwarded to the api service.
+  web:
+    build:
+      context: .
+      dockerfile: apps/web/Dockerfile
+    image: skrivbok-web
+    container_name: skrivbok-web
+    profiles: ['app']
+    restart: unless-stopped
+    ports:
+      - '5173:80'
+    depends_on:
+      - api
 
   # Optional DB browser at http://localhost:8080 — start with:
   #   docker compose --profile tools up -d adminer

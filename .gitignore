@@ -75,3 +75,6 @@ temp/
 /uploads/
 *.local
 docker/postgres-data/
+
+# Vercel CLI link (project and team ids for this folder)
+.vercel
