@@ -7,17 +7,72 @@
  * is picked out in blue over a hand-drawn underline.
  */
 import { useEffect, useState, type ReactNode } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { Icon } from '../ui/Icon';
 import { Button } from '../ui/Button';
 import { useAuth } from '../../lib/auth';
 
+/**
+ * The header's links. Sections of the landing page are addressed as `/#id`
+ * rather than a bare `#id`: a bare hash only exists on the landing page, so on
+ * /pricing or a policy page it changed the address and did nothing else.
+ */
 const NAV = [
-  { label: 'Features', href: '#features' },
-  { label: 'Why Skrivbok', href: '#why' },
-  { label: 'FAQ', href: '#faq' },
-  { label: 'Pricing', href: '/pricing' },
+  { label: 'Features', to: '/#features' },
+  { label: 'Why Skrivbok', to: '/#why' },
+  { label: 'FAQ', to: '/#faq' },
+  { label: 'Pricing', to: '/pricing' },
 ];
+
+function scrollBehaviour(): ScrollBehavior {
+  return window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth';
+}
+
+/**
+ * A header link that works from every page.
+ *
+ * On the landing page a section link scrolls straight to the section. From
+ * any other page it goes to the landing page with the section in the address,
+ * and the landing page scrolls to it once it has rendered. Ordinary links
+ * (Pricing) are left to the router.
+ */
+function NavLink({
+  to,
+  className,
+  onNavigate,
+  children,
+}: {
+  to: string;
+  className: string;
+  onNavigate?: () => void;
+  children: ReactNode;
+}) {
+  const { pathname } = useLocation();
+  const navigate = useNavigate();
+  const section = to.startsWith('/#') ? to.slice(2) : null;
+
+  return (
+    <Link
+      to={to}
+      className={className}
+      onClick={(event) => {
+        onNavigate?.();
+        if (!section) return;
+        event.preventDefault();
+        if (pathname === '/') {
+          document
+            .getElementById(section)
+            ?.scrollIntoView({ behavior: scrollBehaviour(), block: 'start' });
+          window.history.replaceState(window.history.state, '', `/#${section}`);
+        } else {
+          navigate(`/#${section}`);
+        }
+      }}
+    >
+      {children}
+    </Link>
+  );
+}
 
 export function Logo({ size = 32 }: { size?: number }) {
   return (
@@ -140,13 +195,13 @@ export function MarketingNav({
 
         <nav className="mx-auto hidden items-center gap-8 lg:flex" aria-label="Primary">
           {NAV.map((n) => (
-            <a
-              key={n.href}
-              href={n.href}
+            <NavLink
+              key={n.to}
+              to={n.to}
               className="text-[14.5px] font-semibold text-ink-2 transition hover:text-ink"
             >
               {n.label}
-            </a>
+            </NavLink>
           ))}
         </nav>
 
@@ -209,14 +264,14 @@ export function MarketingNav({
           aria-label="Primary, mobile"
         >
           {NAV.map((n) => (
-            <a
-              key={n.href}
-              href={n.href}
-              onClick={() => setMenuOpen(false)}
+            <NavLink
+              key={n.to}
+              to={n.to}
+              onNavigate={() => setMenuOpen(false)}
               className="block rounded-xl px-3 py-3 text-[15px] font-semibold text-ink-2 hover:bg-surface-2"
             >
               {n.label}
-            </a>
+            </NavLink>
           ))}
         </nav>
       ) : null}

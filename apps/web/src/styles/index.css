@@ -118,6 +118,9 @@
 
   html {
     scroll-behavior: smooth;
+    /* The marketing header is sticky and 72px tall; without this, a section
+       scrolled to by a link lands with its heading under the header. */
+    scroll-padding-top: 84px;
   }
 
   @media (prefers-reduced-motion: reduce) {

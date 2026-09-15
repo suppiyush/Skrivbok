@@ -11,7 +11,7 @@
  * personal analytics, because the backend does none of those.
  */
 import { useEffect, useRef, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useLocation } from 'react-router-dom';
 import { Button } from '../components/ui/Button';
 import { Icon } from '../components/ui/Icon';
 import { usePublishedReviews } from '../lib/queries';
@@ -211,6 +211,27 @@ export default function Landing() {
   // either link back to a page RedirectIfAuthed doesn't cover reads as if
   // the session never took.
   const { user } = useAuth();
+
+  // Arriving at /#faq (or #features, #why) from another page. The browser's own
+  // jump to the hash happens before this page has rendered its sections, so it
+  // finds nothing; the scroll is made here instead, on the next frame — and
+  // once more a moment later, because the reviews load above the FAQ and move
+  // it down when they arrive.
+  const { hash } = useLocation();
+  useEffect(() => {
+    if (!hash) return;
+    const id = decodeURIComponent(hash.slice(1));
+    const reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    const go = (behavior: ScrollBehavior) =>
+      document.getElementById(id)?.scrollIntoView({ behavior, block: 'start' });
+
+    const frame = requestAnimationFrame(() => go('auto'));
+    const settle = window.setTimeout(() => go(reduced ? 'auto' : 'smooth'), 400);
+    return () => {
+      cancelAnimationFrame(frame);
+      window.clearTimeout(settle);
+    };
+  }, [hash]);
 
   return (
     <div className="min-h-screen bg-canvas-alt">
