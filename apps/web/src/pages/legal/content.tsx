@@ -38,7 +38,7 @@ const BUSINESS = {
   /** A phone number customers can reach. */
   phone: null as string | null,
   /** An inbox someone reads. Used on every page and by the contact form. */
-  email: null as string | null,
+  email: 'support@skrivbok.com' as string | null,
   /** The city and state whose courts hear disputes, e.g. "Jaipur, Rajasthan". */
   jurisdiction: null as string | null,
   /** The Grievance Officer's name, required under Indian IT and data protection rules. */
