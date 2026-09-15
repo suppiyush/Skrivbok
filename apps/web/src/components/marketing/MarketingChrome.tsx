@@ -16,6 +16,7 @@ const NAV = [
   { label: 'Features', href: '#features' },
   { label: 'Why Skrivbok', href: '#why' },
   { label: 'FAQ', href: '#faq' },
+  { label: 'Pricing', href: '/pricing' },
 ];
 
 export function Logo({ size = 32 }: { size?: number }) {
@@ -261,6 +262,7 @@ export function ArtPlaceholder({
  * to any of them were in the small print under the sign-in form.
  */
 const FOOTER_LINKS = [
+  { label: 'Pricing', to: '/pricing' },
   { label: 'Terms and Conditions', to: '/terms' },
   { label: 'Privacy Policy', to: '/privacy-policy' },
   { label: 'Refund and Cancellation', to: '/refund-policy' },

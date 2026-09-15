@@ -39,3 +39,8 @@ billingRouter.post(
 export const billingWebhookRouter: Router = Router();
 
 billingWebhookRouter.post('/razorpay', controller.webhook);
+
+/** The price list, for visitors who have not signed in — the pricing page. */
+export const publicPlansRouter: Router = Router();
+
+publicPlansRouter.get('/plans', controller.plans);

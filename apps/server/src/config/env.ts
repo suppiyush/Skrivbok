@@ -276,6 +276,16 @@ export const env = {
       } as const)
     : ({ enabled: false } as const),
 
+  /**
+   * What PRO costs, known whether or not payments are switched on. Prices are
+   * public, and the pricing, plan and policy pages must show them before the
+   * payment provider's keys exist — which is when the provider reviews them.
+   */
+  pricing: {
+    currency: raw.BILLING_CURRENCY,
+    prices: { monthly: raw.PRICE_MONTHLY_PAISE, yearly: raw.PRICE_YEARLY_PAISE },
+  },
+
   freeLimits: {
     projects: raw.FREE_LIMIT_PROJECTS,
     careerGoals: raw.FREE_LIMIT_CAREER_GOALS,

@@ -177,7 +177,9 @@ export function Upgrade() {
                   </span>
                 </p>
                 <p className="mt-2 text-[13px] text-ink-3">
-                  {price ? `${rupees(price.amountPaise)} billed ${cycle.toLowerCase()}` : ''}
+                  {price
+                    ? `${rupees(price.amountPaise)} for one ${cycle === 'YEARLY' ? 'year' : 'month'} · pay again to continue`
+                    : ''}
                 </p>
                 <PlanFeatures
                   items={[

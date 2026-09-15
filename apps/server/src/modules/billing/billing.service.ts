@@ -17,6 +17,7 @@ import type { BillingPlan, Payment, Prisma } from '@prisma/client';
 import { prisma } from '../../db/prisma.js';
 import { sendPaymentFailed, sendReceipt } from '../../emails/index.js';
 import { notify, notifyAdmins } from '../notifications/notify.js';
+import { env } from '../../config/env.js';
 import { createLogger } from '../../config/logger.js';
 import type { Pagination } from '../../middleware/validate.js';
 import { BadRequestError, ForbiddenError, NotFoundError } from '../../utils/errors.js';
@@ -31,32 +32,43 @@ function extend(from: Date, plan: BillingPlan): Date {
 }
 
 export function priceFor(plan: BillingPlan): number {
-  const config = billingConfig();
-  return plan === 'MONTHLY' ? config.prices.monthly : config.prices.yearly;
+  const { prices } = env.pricing;
+  return plan === 'MONTHLY' ? prices.monthly : prices.yearly;
 }
 
-/** The public price list, so the client never invents an amount. */
+/**
+ * The price list, so the client never invents an amount.
+ *
+ * Read from `env.pricing` rather than the payment configuration, so it answers
+ * whether or not payments are switched on: the pricing page and the plan page
+ * show the price before the provider's keys are set. The Free limits come with
+ * it, so a page describing both plans has one source for both.
+ */
 export function plans(): {
   currency: string;
-  plans: { id: BillingPlan; amountPaise: number; amountDisplay: string }[];
+  plans: { id: BillingPlan; months: number; amountPaise: number; amountDisplay: string }[];
+  freeLimits: { projects: number; careerGoals: number; literature: number };
 } {
-  const config = billingConfig();
-  const format = (paise: number): string => `${config.currency} ${(paise / 100).toFixed(2)}`;
+  const { currency, prices } = env.pricing;
+  const format = (paise: number): string => `${currency} ${(paise / 100).toFixed(2)}`;
 
   return {
-    currency: config.currency,
+    currency,
     plans: [
       {
         id: 'MONTHLY',
-        amountPaise: config.prices.monthly,
-        amountDisplay: format(config.prices.monthly),
+        months: 1,
+        amountPaise: prices.monthly,
+        amountDisplay: format(prices.monthly),
       },
       {
         id: 'YEARLY',
-        amountPaise: config.prices.yearly,
-        amountDisplay: format(config.prices.yearly),
+        months: 12,
+        amountPaise: prices.yearly,
+        amountDisplay: format(prices.yearly),
       },
     ],
+    freeLimits: { ...env.freeLimits },
   };
 }
 

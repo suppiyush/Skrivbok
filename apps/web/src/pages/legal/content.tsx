@@ -20,6 +20,8 @@ import { Button } from '../../components/ui/Button';
 import { Field } from '../../components/ui/Field';
 import { Select, Textarea } from '../../components/ui/Form';
 import { Icon } from '../../components/ui/Icon';
+import { rupees } from '../../lib/format';
+import { usePublicPlans } from '../../lib/queries';
 
 /* ── The business ─────────────────────────────────────────────────────────── */
 
@@ -43,11 +45,29 @@ const BUSINESS = {
   grievanceOfficer: null as string | null,
 };
 
-/** PRO prices, as charged at checkout (server defaults: PRICE_MONTHLY_PAISE / PRICE_YEARLY_PAISE). */
-const PRICES = { monthly: '₹499', yearly: '₹4,999' };
+/**
+ * What PRO costs and what Free allows, from the server — the same numbers the
+ * pricing page, the plan page and checkout use, so a policy can never quote a
+ * price that is not the one charged.
+ */
+function usePricing() {
+  const { data } = usePublicPlans();
+  const price = (id: 'MONTHLY' | 'YEARLY') => {
+    const plan = data?.plans.find((p) => p.id === id);
+    return plan ? rupees(plan.amountPaise) : '…';
+  };
+  const limit = (n: number | undefined) =>
+    n === undefined ? '…' : n < 0 ? 'unlimited' : String(n);
 
-/** The free plan's caps (server defaults: FREE_LIMIT_*). */
-const FREE_LIMIT = 5;
+  return {
+    prices: { monthly: price('MONTHLY'), yearly: price('YEARLY') },
+    limits: {
+      projects: limit(data?.freeLimits.projects),
+      careerGoals: limit(data?.freeLimits.careerGoals),
+      literature: limit(data?.freeLimits.literature),
+    },
+  };
+}
 
 const UPDATED = 'Last updated: 14 September 2026';
 
@@ -139,6 +159,7 @@ function ContactBlock() {
 /* ── Terms and Conditions ─────────────────────────────────────────────────── */
 
 function Terms() {
+  const { prices, limits } = usePricing();
   return (
     <>
       <P>
@@ -176,13 +197,13 @@ function Terms() {
       <H2>4. Plans, prices and payment</H2>
       <P>
         Skrivbok has a <B>Free</B> plan and a paid <B>PRO</B> plan. The Free plan allows up to{' '}
-        {FREE_LIMIT} projects, {FREE_LIMIT} career goals and {FREE_LIMIT} literature entries; PRO
-        removes those limits. Ideas, notes, journal entries, deadlines and calendar events are
-        unlimited on both.
+        {limits.projects} projects, {limits.careerGoals} career goals and {limits.literature}{' '}
+        literature entries; PRO removes those limits. Ideas, notes, journal entries, deadlines and
+        calendar events are unlimited on both.
       </P>
       <P>
-        PRO is sold as a prepaid period: <B>{PRICES.monthly} for one month</B> or{' '}
-        <B>{PRICES.yearly} for one year</B>, in Indian Rupees. The price you pay is the one shown at
+        PRO is sold as a prepaid period: <B>{prices.monthly} for one month</B> or{' '}
+        <B>{prices.yearly} for one year</B>, in Indian Rupees. The price you pay is the one shown at
         checkout.
       </P>
       <List
@@ -476,6 +497,7 @@ function Privacy() {
 /* ── Refund and Cancellation Policy ───────────────────────────────────────── */
 
 function Refund() {
+  const { prices } = usePricing();
   return (
     <>
       <P>
@@ -485,8 +507,8 @@ function Refund() {
 
       <H2>1. How PRO is billed</H2>
       <P>
-        PRO is a one-time, prepaid purchase of a fixed period: {PRICES.monthly} for one month or{' '}
-        {PRICES.yearly} for one year. <B>It does not renew automatically</B>, so you are never
+        PRO is a one-time, prepaid purchase of a fixed period: {prices.monthly} for one month or{' '}
+        {prices.yearly} for one year. <B>It does not renew automatically</B>, so you are never
         charged again unless you choose to pay again.
       </P>
 
@@ -562,6 +584,7 @@ function Refund() {
 /* ── Shipping and Delivery Policy ─────────────────────────────────────────── */
 
 function Shipping() {
+  const { prices } = usePricing();
   return (
     <>
       <P>
@@ -571,8 +594,8 @@ function Shipping() {
 
       <H2>1. What is delivered</H2>
       <P>
-        Buying PRO upgrades your Skrivbok account for the period you paid for ({PRICES.monthly} for
-        one month or {PRICES.yearly} for one year). It is delivered to the account you are signed in
+        Buying PRO upgrades your Skrivbok account for the period you paid for ({prices.monthly} for
+        one month or {prices.yearly} for one year). It is delivered to the account you are signed in
         to when you pay.
       </P>
 

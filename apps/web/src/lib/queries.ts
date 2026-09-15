@@ -34,6 +34,7 @@ import {
   notifications,
   profile,
   projects,
+  publicPlans,
   reports,
   reviews,
   uploadAvatar,
@@ -232,6 +233,10 @@ export const useSubscription = () =>
 
 export const usePlans = () =>
   useQuery({ queryKey: [...keys.billing, 'plans'], queryFn: billing.plans, staleTime: 600_000 });
+
+/** The same price list, for pages a visitor sees before signing in. */
+export const usePublicPlans = () =>
+  useQuery({ queryKey: ['public', 'plans'], queryFn: publicPlans, staleTime: 600_000 });
 
 export const usePayments = (query: Record<string, unknown> = {}) =>
   useQuery({

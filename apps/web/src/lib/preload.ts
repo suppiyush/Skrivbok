@@ -24,6 +24,7 @@ export const chunks = {
   admin: () => import('../pages/Admin'),
   calendar: () => import('../pages/Calendar'),
   legal: () => import('../pages/Legal'),
+  pricing: () => import('../pages/Pricing'),
   projects: () => import('../pages/Projects'),
   projectDetail: () => import('../pages/ProjectDetail'),
   projectMeetings: () => import('../pages/ProjectMeetings'),
@@ -52,6 +53,7 @@ const BY_PATH: Record<string, () => Promise<unknown>> = {
   '/privacy-policy': chunks.legal,
   '/end-user-agreement': chunks.legal,
   '/refund-policy': chunks.legal,
+  '/pricing': chunks.pricing,
   '/contact': chunks.legal,
 };
 

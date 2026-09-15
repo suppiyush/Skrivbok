@@ -12,7 +12,11 @@
 import { Router } from 'express';
 import { authRouter } from '../modules/auth/index.js';
 import { adminRouter, publicStatsRouter } from '../modules/admin/index.js';
-import { billingRouter, billingWebhookRouter } from '../modules/billing/index.js';
+import {
+  billingRouter,
+  billingWebhookRouter,
+  publicPlansRouter,
+} from '../modules/billing/index.js';
 import { calendarRouter } from '../modules/calendar/index.js';
 import { careerGoalsRouter } from '../modules/career-goals/index.js';
 import { deadlinesRouter } from '../modules/deadlines/index.js';
@@ -62,6 +66,7 @@ apiRouter.use('/internal', internalRouter);
 // are the only things the marketing site reads.
 apiRouter.use('/public', publicReviewsRouter);
 apiRouter.use('/public', publicStatsRouter);
+apiRouter.use('/public', publicPlansRouter);
 
 // Added as each part lands:
 //

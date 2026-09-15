@@ -22,6 +22,7 @@ import { CareerGoals, Deadlines, FutureWork, Ideas, Literature, Notes } from './
 // The loaders come from `lib/preload` so that a link can start fetching one of
 // these chunks before the route that needs it is rendered.
 const Legal = lazy(chunks.legal);
+const Pricing = lazy(chunks.pricing);
 const Projects = lazy(chunks.projects);
 const ProjectDetail = lazy(chunks.projectDetail);
 const ProjectMeetings = lazy(chunks.projectMeetings);
@@ -98,6 +99,7 @@ export const router = createBrowserRouter([
   { path: '/end-user-agreement', element: page(<Legal doc="eula" />) },
   { path: '/refund-policy', element: page(<Legal doc="refund" />) },
   { path: '/shipping-policy', element: page(<Legal doc="shipping" />) },
+  { path: '/pricing', element: page(<Pricing />) },
   { path: '/contact', element: page(<Legal doc="contact" />) },
 
   // ── Application ───────────────────────────────────────────────────────────

@@ -1020,11 +1020,7 @@ export const reviews = {
 };
 
 export const billing = {
-  plans: () =>
-    api.get<{
-      currency: string;
-      plans: { id: 'MONTHLY' | 'YEARLY'; amountPaise: number; amountDisplay: string }[];
-    }>('/billing/plans'),
+  plans: () => api.get<PricingInfo>('/billing/plans'),
   subscription: () =>
     api.get<{
       plan: 'FREE' | 'PRO';
@@ -1165,3 +1161,14 @@ export type AdminReport = Report & {
 /** Coarse public counters for the marketing page. */
 export const publicStats = () =>
   api.get<{ users: number; projects: number; ideas: number; careerGoals: number }>('/public/stats');
+
+/** What each plan costs and what Free allows. The same list signed in or out. */
+export interface PricingInfo {
+  currency: string;
+  plans: { id: 'MONTHLY' | 'YEARLY'; months: number; amountPaise: number; amountDisplay: string }[];
+  /** A count per capped resource, or -1 for unlimited. */
+  freeLimits: { projects: number; careerGoals: number; literature: number };
+}
+
+/** For pages a visitor sees before signing in: the pricing page and the policies. */
+export const publicPlans = () => api.get<PricingInfo>('/public/plans');
