@@ -3,7 +3,8 @@
 A space to write, organize and grow. Complete rebuild of the original Skrivbok
 codebase on a typed, modular stack.
 
-> **Status:** Backend complete — all 13 parts. Frontend next. See [Build plan](#build-plan).
+> **Status:** Complete — API, web app, reminder worker and a production Docker
+> stack. Payments switch on once Razorpay keys are configured.
 
 ## Stack
 
@@ -12,10 +13,12 @@ codebase on a typed, modular stack.
 | Runtime    | Node 24 (LTS 22+), ESM, TypeScript 5.9 strict                   |
 | API        | Express 5                                                       |
 | Database   | PostgreSQL 17 + Prisma ORM (versioned migrations)               |
-| Validation | Zod 4 — one schema per request, shared with the frontend later  |
+| Validation | Zod 4 — one schema per request                                  |
 | Auth       | Opaque session tokens in `httpOnly` cookies, hashed in Postgres |
 | Logging    | pino (JSON in prod, pretty in dev, secrets redacted)            |
-| Web        | React 19 + Vite + Tailwind 4 + shadcn/ui _(Phase 2)_            |
+| Web        | React 19 + Vite + Tailwind 4, React Router, TanStack Query      |
+| Services   | Google sign-in, Brevo email, Cloudinary uploads, Razorpay       |
+| Deployment | Docker Compose — Caddy (HTTPS), nginx, API, worker, Postgres    |
 | Tooling    | npm workspaces, ESLint 9 flat config, Prettier, Vitest          |
 
 ## Layout
@@ -23,23 +26,39 @@ codebase on a typed, modular stack.
 ```
 skrivbok/
 ├── apps/
-│   └── api/                    Backend service
+│   ├── server/                 The API and the reminder worker
+│   │   ├── src/
+│   │   │   ├── config/         env.ts (Zod-validated), logger.ts
+│   │   │   ├── db/             prisma.ts (client singleton), seed.ts
+│   │   │   ├── middleware/     auth guards, validate, errors, rate limits
+│   │   │   ├── routes/         the /api/v1 router index
+│   │   │   ├── modules/        one folder per feature — see modules/README.md
+│   │   │   ├── jobs/           reminder worker + cleanup
+│   │   │   ├── emails/         templates + mail transport (Brevo API or SMTP)
+│   │   │   ├── scripts/        admin helpers: list users, promote an admin
+│   │   │   ├── types/          Express request augmentation
+│   │   │   ├── utils/          errors, CSV export and shared helpers
+│   │   │   ├── app.ts          Express assembly (no listen)
+│   │   │   └── server.ts       Entry point + graceful shutdown
+│   │   ├── prisma/             schema.prisma + migrations
+│   │   ├── tests/              unit + integration (Vitest)
+│   │   └── Dockerfile          API / worker image
+│   └── web/                    The React app
 │       ├── src/
-│       │   ├── config/         env.ts (Zod-validated), logger.ts
-│       │   ├── db/             prisma.ts (client singleton), seed.ts
-│       │   ├── middleware/     auth guards, validate, errors, rate limits
-│       │   ├── routes/         the /api/v1 router index
-│       │   ├── modules/        one folder per feature — see modules/README.md
-│       │   ├── jobs/           reminder worker + cleanup
-│       │   ├── emails/         templates + mail transport (Brevo API or SMTP)
-│       │   ├── types/          Express request augmentation
-│       │   ├── utils/          errors.ts and shared helpers
-│       │   ├── app.ts          Express assembly (no listen)
-│       │   └── server.ts       Entry point + graceful shutdown
-│       └── prisma/             schema.prisma + migrations
-├── packages/
-│   └── shared/                 Types + Zod schemas shared with the web app
-├── docker-compose.yml          Local Postgres (+ optional Adminer)
+│       │   ├── pages/          one file (or folder) per screen, incl. legal/
+│       │   ├── components/     layout, marketing and UI building blocks
+│       │   ├── lib/            API client, auth, queries, formatting
+│       │   ├── router.tsx      routes
+│       │   └── main.tsx        entry point
+│       ├── public/assets/      static images
+│       ├── nginx.conf          serves the build, forwards /api in Docker
+│       └── Dockerfile          build + nginx image
+├── docker/
+│   └── Caddyfile               HTTPS and routing for production
+├── docker-compose.yml          Development: Postgres, or the whole app
+├── docker-compose.prod.yml     Production: Caddy, web, API, worker, Postgres
+├── docs/                       API reference and design briefs
+├── design/                     Design references (not used at runtime)
 ├── .env.example                Every variable, documented
 └── tsconfig.base.json          Strict options — apps extend, never loosen
 ```
@@ -58,10 +77,17 @@ openssl rand -base64 48
 # 3. Start Postgres
 npm run db:up
 
-# 4. Run the API
-npm run dev            # http://localhost:4000
-curl http://localhost:4000/health
+# 4. Run the API and the web app, in two terminals
+npm run dev            # API  → http://localhost:4000
+npm run dev:web        # app  → http://localhost:5173
 ```
+
+Open http://localhost:5173. Sign-in is Google only, so `GOOGLE_CLIENT_ID` and
+`GOOGLE_CLIENT_SECRET` must be set, and the Google client must list
+`http://localhost:5173` as an origin and
+`http://localhost:4000/api/v1/auth/google/callback` as a redirect URI.
+
+To run everything in Docker instead: `npm run docker:up`, then the same address.
 
 The API refuses to start on invalid configuration — it prints exactly which
 variables are wrong and exits, rather than failing later inside a request.
@@ -71,15 +97,18 @@ variables are wrong and exits, rather than failing later inside a request.
 | Command                 | What it does                                 |
 | ----------------------- | -------------------------------------------- |
 | `npm run dev`           | API with hot reload (tsx watch)              |
+| `npm run dev:web`       | Web app with hot reload (Vite)               |
 | `npm run build`         | Type-check and compile to `apps/server/dist` |
 | `npm start`             | Run the compiled build                       |
 | `npm run typecheck`     | Type-check every workspace, no emit          |
 | `npm run lint`          | ESLint across the repo                       |
 | `npm run format`        | Prettier write                               |
 | `npm run db:up/down`    | Start / stop local Postgres                  |
-| `npm test`              | 85 tests — unit + integration                |
+| `npm test`              | Unit + integration tests                     |
 | `npm run test:coverage` | Coverage report                              |
 | `npm run worker`        | Reminder worker (separate process)           |
+| `npm run docker:up`     | The whole app in Docker, for development     |
+| `npm run prod:up`       | The production stack (see Deployment)        |
 
 ## Running the worker
 
@@ -90,9 +119,10 @@ npm run dev      # API
 npm run worker   # reminders, in a second terminal
 ```
 
-Set `ENABLE_REMINDER_WORKER=false` on API instances in production. The legacy
-server ran its cron inside every API process, so scaling to two instances would
-have doubled every reminder email.
+Only the worker ever schedules reminders — the API never does, however many
+copies of it run. (The legacy server ran its cron inside every API process, so
+two instances doubled every email.) Run exactly one worker.
+`ENABLE_REMINDER_WORKER=false` stops it from starting at all.
 
 ## Testing
 
@@ -109,15 +139,21 @@ to run if the connection string does not point at `skrivbok_test`.
 
 ## Deployment
 
+Production is one server running `docker-compose.prod.yml`: Caddy in front
+(HTTPS, with certificates obtained and renewed automatically), then the web
+app, the API, the reminder worker and PostgreSQL. Only ports 80 and 443 are
+exposed.
+
 ```bash
-docker build -f apps/server/Dockerfile -t skrivbok-api .
-docker run --env-file .env -p 4000:4000 skrivbok-api
+cp <your production env file> .env    # the name must be exactly .env
+npm run prod:up                       # build, migrate, start
+npm run prod:seed                     # once: give ADMIN_EMAIL the admin role
 ```
 
-Multi-stage build, non-root user, healthcheck wired to `/health/ready`, and
-`node` as PID 1 so SIGTERM reaches the graceful-shutdown handler.
-
-Run `npx prisma migrate deploy` before starting a new version.
+The domain's DNS must point at the server before the first start, or the
+certificate cannot be issued. Migrations run automatically on every deploy,
+before the API starts. `npm run prod:logs` follows the logs; the same commands
+work without Node as `docker compose -f docker-compose.prod.yml …`.
 
 ## Documentation
 
