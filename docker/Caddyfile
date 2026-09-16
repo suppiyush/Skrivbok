@@ -1,0 +1,61 @@
+# Skrivbok's front door, used by docker-compose.prod.yml.
+#
+# Caddy gets a certificate for the domain from Let's Encrypt the first time it
+# starts and renews it on its own; there is nothing to run on a schedule. For
+# that to work the domain's A record must already point at this server, and
+# ports 80 and 443 must be open — the certificate is issued over them.
+#
+# SITE_DOMAIN and ACME_EMAIL come from the environment, set in the Compose file
+# from `.env`.
+{
+	email {$ACME_EMAIL}
+}
+
+# www goes to the bare domain, permanently. The app is configured for one
+# address — WEB_URL, CORS_ORIGINS, the Google callback and the session cookie
+# all name the bare domain — so serving www as well would be a second origin
+# that sign-in and the cookie do not cover.
+www.{$SITE_DOMAIN} {
+	redir https://{$SITE_DOMAIN}{uri} permanent
+}
+
+{$SITE_DOMAIN} {
+	encode zstd gzip
+
+	# The API is reached directly, not through the web container, although nginx
+	# there can also forward it. One proxy in front of Express is what the server
+	# expects: it trusts exactly one hop when reading the client's address
+	# (`trust proxy` in app.ts), and rate limiting counts requests per address.
+	# A second hop would make every request appear to come from nginx, and one
+	# person hitting a limit would lock out everybody.
+	handle /api/* {
+		reverse_proxy api:4000
+	}
+
+	handle /health* {
+		reverse_proxy api:4000
+	}
+
+	# Everything else is the built React app, served by nginx.
+	handle {
+		reverse_proxy web:80
+	}
+
+	header {
+		# Tell browsers to use HTTPS for this domain for a year. Only meaningful
+		# once the certificate works; browsers that have seen this header will
+		# refuse plain HTTP until it expires.
+		Strict-Transport-Security "max-age=31536000"
+		X-Content-Type-Options "nosniff"
+		X-Frame-Options "SAMEORIGIN"
+		Referrer-Policy "strict-origin-when-cross-origin"
+		-Server
+	}
+
+	log {
+		output file /data/access.log {
+			roll_size 10MiB
+			roll_keep 5
+		}
+	}
+}

@@ -1,0 +1,149 @@
+# ==============================================================================
+#  Skrivbok in production, on one server (a Hostinger VPS or any Linux host).
+# ==============================================================================
+#
+#   cp .env.production.skrivbok .env      configuration, read from `.env`
+#   npm run prod:up                       build and start everything
+#   npm run prod:seed                     once, to make ADMIN_EMAIL an admin
+#   npm run prod:logs                     follow the logs
+#   npm run prod:down                     stop everything
+#
+# Caddy is the only thing the internet can reach. It gets and renews the
+# certificate for the domain by itself and forwards:
+#
+#   /api/*, /health*  →  api    (the Express server)
+#   everything else   →  web    (nginx, serving the built React app)
+#
+# Postgres is published on 127.0.0.1 only, so it is reachable from the server
+# itself — over an SSH tunnel, say — but never from the internet.
+#
+# This is a complete file, used on its own, not a layer on top of
+# docker-compose.yml. Compose merges published ports by appending them, so an
+# override cannot take a port away; keeping the two files separate is the only
+# way the production stack can be certain about what it exposes. The sibling
+# file, docker-compose.yml, is the development one — a change to the services
+# here usually wants the same change there.
+#
+# Data lives in ./docker/postgres-data. The certificates live in
+# ./docker/caddy-data; keep it between deployments or Let's Encrypt will be
+# asked for a new certificate every time, and it rate-limits that.
+# ==============================================================================
+
+name: skrivbok
+
+# The API, the reminder worker and the migration step share this.
+x-server-base: &server-base
+  restart: unless-stopped
+  env_file:
+    - ${SKRIVBOK_ENV_FILE:-.env}
+  environment:
+    # Inside Docker the database is the `postgres` service. These override the
+    # env file's addresses so one file works both in Docker and out of it.
+    #
+    # `:?` rather than a default: Compose reads these three from `.env` itself
+    # (interpolation never looks inside `env_file:`), and a default would let
+    # the stack start with a password nobody chose. Missing, it stops and says so.
+    DATABASE_URL: postgresql://${POSTGRES_USER:?set POSTGRES_USER in .env}:${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}@postgres:5432/${POSTGRES_DB:?set POSTGRES_DB in .env}?schema=public
+    DIRECT_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}?schema=public
+  depends_on:
+    postgres:
+      condition: service_healthy
+
+# The slim runtime image: compiled output and production dependencies only.
+x-server: &server
+  <<: *server-base
+  build:
+    context: .
+    dockerfile: apps/server/Dockerfile
+    target: runtime
+
+services:
+  postgres:
+    image: postgres:17-alpine
+    restart: unless-stopped
+    environment:
+      # Read only when the database is first created in ./docker/postgres-data.
+      POSTGRES_USER: ${POSTGRES_USER:?set POSTGRES_USER in .env}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
+      POSTGRES_DB: ${POSTGRES_DB:?set POSTGRES_DB in .env}
+      # Deterministic collation so ORDER BY behaves identically everywhere.
+      POSTGRES_INITDB_ARGS: '--encoding=UTF8 --locale=C'
+    ports:
+      # Loopback only. Without the address Docker would publish it to the world,
+      # and Docker's rules sit in front of ufw, so the firewall would not stop it.
+      - '127.0.0.1:5432:5432'
+    volumes:
+      - ./docker/postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}']
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  # Applies migrations, then exits. The API and the worker wait for it to finish,
+  # so a deployment can never serve requests against an out-of-date schema.
+  #
+  # The build stage, not the runtime one: migrating needs the Prisma CLI, and
+  # seeding needs tsx — tools the runtime image deliberately leaves out.
+  migrate:
+    <<: *server-base
+    build:
+      context: .
+      dockerfile: apps/server/Dockerfile
+      target: build
+    restart: 'no'
+    command: ['npx', 'prisma', 'migrate', 'deploy', '--schema', 'apps/server/prisma/schema.prisma']
+
+  api:
+    <<: *server
+    command: ['node', 'apps/server/dist/server.js']
+    # No published port: Caddy reaches it over the Compose network.
+    depends_on:
+      postgres:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+
+  # Reminders, daily agenda and meeting nudges, every five minutes.
+  worker:
+    <<: *server
+    command: ['node', 'apps/server/dist/jobs/worker.js']
+    # The image's health check asks the API for /health/ready. The worker runs
+    # the same image but serves no HTTP, so that probe can only ever fail and
+    # would report a perfectly healthy worker as unhealthy.
+    healthcheck:
+      disable: true
+    depends_on:
+      postgres:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+
+  # The built web app on nginx. Caddy serves it to the world; nothing is published.
+  web:
+    build:
+      context: .
+      dockerfile: apps/web/Dockerfile
+    restart: unless-stopped
+    depends_on:
+      - api
+
+  # The public face: HTTPS, certificates, and redirecting www to the bare domain.
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    ports:
+      - '80:80'
+      - '443:443'
+      - '443:443/udp' # HTTP/3
+    environment:
+      SITE_DOMAIN: ${SITE_DOMAIN:-skrivbok.com}
+      # Let's Encrypt emails this address if a renewal ever starts failing.
+      ACME_EMAIL: ${SUPPORT_EMAIL:?set SUPPORT_EMAIL in .env}
+    volumes:
+      - ./docker/Caddyfile:/etc/caddy/Caddyfile:ro
+      - ./docker/caddy-data:/data # certificates — keep this between deployments
+      - ./docker/caddy-config:/config
+    depends_on:
+      - web
+      - api

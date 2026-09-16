@@ -75,6 +75,14 @@ temp/
 /uploads/
 *.local
 docker/postgres-data/
+docker/caddy-data/
+docker/caddy-config/
+
+# Handover documents. They describe the deployment and name the accounts it
+# runs on, so they are passed to whoever takes the project over rather than
+# published with the code.
+docs/handover.md
+docs/deploy-vps.md
 
 # Vercel CLI link (project and team ids for this folder)
 .vercel
