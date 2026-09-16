@@ -32,17 +32,18 @@ import { usePublicPlans } from '../../lib/queries';
  */
 const BUSINESS = {
   /** The name on the KYC: the proprietor's name, or the registered company/LLP. */
-  legalName: null as string | null,
+  legalName: 'Nishant Gupta' as string | null,
   /** The operating address, in full, with PIN code. */
-  address: null as string | null,
+  address: 'Near Shaheedi Chowk, Ward No. 1, College Road, Kathua, Jammu & Kashmir 184101' as
+    string | null,
   /** A phone number customers can reach. */
-  phone: null as string | null,
+  phone: '+91 94192 75354' as string | null,
   /** An inbox someone reads. Used on every page and by the contact form. */
   email: 'support@skrivbok.com' as string | null,
   /** The city and state whose courts hear disputes, e.g. "Jaipur, Rajasthan". */
-  jurisdiction: null as string | null,
+  jurisdiction: 'Kathua, Jammu & Kashmir' as string | null,
   /** The Grievance Officer's name, required under Indian IT and data protection rules. */
-  grievanceOfficer: null as string | null,
+  grievanceOfficer: 'Nishant Gupta' as string | null,
 };
 
 /**
