@@ -328,17 +328,17 @@ function Hero() {
       </div>
 
       <div className="animate-fade-up mt-14" style={{ animationDelay: '260ms' }}>
-        {/* The real dashboard, at the image's own 1910×917 proportions rather
+        {/* The real dashboard, at the image's own 1527×910 proportions rather
             than a rounded 16/9, so nothing is letterboxed or cropped. Width and
             height are given so the page does not jump as it loads, and it is
             fetched eagerly: it is the first thing below the fold-line copy. */}
         <img
           src="/assets/dashboard.png"
-          width={1910}
-          height={917}
+          width={1527}
+          height={910}
           loading="eager"
           fetchPriority="high"
-          alt="The Skrivbok dashboard: a sidebar of sections with this week's deadlines and events, beside cards for projects, ideas, notes, deadlines, future work, literature, journal, meetings and career goals."
+          alt="The Skrivbok dashboard: a sidebar listing the sections with this week's deadlines, today's events and goal progress, beside cards for projects, ideas, notes, deadlines, future work, literature, journal, meetings and career goals."
           className="mx-auto w-full max-w-[980px] rounded-[20px] border border-line shadow-[0_20px_60px_-20px_rgb(0_0_0/0.25)]"
         />
       </div>
